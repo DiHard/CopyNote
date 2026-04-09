@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"copynote/internal/clipboard"
 	"copynote/internal/model"
 	"copynote/internal/storage"
 )
@@ -30,6 +31,8 @@ type Service struct {
 	store model.Store
 	// now is overridable for deterministic tests.
 	now func() time.Time
+	// writeText is overridable for tests; defaults to clipboard.WriteText.
+	writeText func(string) error
 }
 
 // New loads the store from path and returns a ready-to-use Service.
@@ -40,9 +43,10 @@ func New(path string) (*Service, error) {
 		return nil, fmt.Errorf("load store: %w", err)
 	}
 	return &Service{
-		path:  path,
-		store: s,
-		now:   func() time.Time { return time.Now().UTC() },
+		path:      path,
+		store:     s,
+		now:       func() time.Time { return time.Now().UTC() },
+		writeText: clipboard.WriteText,
 	}, nil
 }
 
@@ -106,6 +110,23 @@ func (s *Service) Update(id, label, value string) (model.Entry, error) {
 		return model.Entry{}, err
 	}
 	return s.store.Entries[idx], nil
+}
+
+// Copy writes the entry's value to the system clipboard. The store
+// is not modified — copying is a read-only operation.
+func (s *Service) Copy(id string) (model.Entry, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	idx := s.findLocked(id)
+	if idx < 0 {
+		return model.Entry{}, ErrNotFound
+	}
+	entry := s.store.Entries[idx]
+	if err := s.writeText(entry.Value); err != nil {
+		return model.Entry{}, fmt.Errorf("clipboard: %w", err)
+	}
+	return entry, nil
 }
 
 // Delete removes an entry and re-packs the order values of the

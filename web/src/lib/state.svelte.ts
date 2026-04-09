@@ -68,6 +68,10 @@ export async function deleteEntry(id: string): Promise<void> {
   state.entries = await api.list();
 }
 
+export async function copyEntry(id: string): Promise<void> {
+  await api.copy(id);
+}
+
 export function openCreate(): void {
   state.modal = { kind: "create" };
 }

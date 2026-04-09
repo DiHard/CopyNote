@@ -112,6 +112,7 @@ func main() {
 	mustBind("create", svc.Create)
 	mustBind("update", svc.Update)
 	mustBind("remove", svc.Delete) // "delete" is a JS operator, use "remove"
+	mustBind("copy", svc.Copy)
 
 	w.Navigate(url)
 	w.Run()

@@ -1,32 +1,71 @@
 <script lang="ts">
   import type { Entry } from "../types";
-  import { openEdit, openDelete } from "../state.svelte";
+  import { openEdit, openDelete, copyEntry } from "../state.svelte";
+  import { onDestroy } from "svelte";
 
   let { entry }: { entry: Entry } = $props();
+
+  type CopyState = "idle" | "copied" | "failed";
+  let copyState = $state<CopyState>("idle");
+  let timer: number | null = null;
+
+  function flash(state: CopyState) {
+    if (timer !== null) clearTimeout(timer);
+    copyState = state;
+    timer = window.setTimeout(() => {
+      copyState = "idle";
+      timer = null;
+    }, 900);
+  }
+
+  async function onCopy() {
+    try {
+      await copyEntry(entry.id);
+      flash("copied");
+    } catch {
+      flash("failed");
+    }
+  }
+
+  onDestroy(() => {
+    if (timer !== null) clearTimeout(timer);
+  });
 </script>
 
 <div
-  class="group relative flex items-start gap-2 rounded-lg border border-slate-700/50 bg-slate-800/40 px-3 py-2.5 transition hover:border-slate-600 hover:bg-slate-800/70"
+  class="group relative flex items-stretch gap-1 rounded-lg border border-slate-700/50 bg-slate-800/40 transition hover:border-slate-600 hover:bg-slate-800/70"
 >
-  <div class="min-w-0 flex-1">
-    <div class="truncate text-sm font-semibold text-slate-100">
-      {entry.label}
+  <!-- Card body becomes the main interactive button. -->
+  <button
+    type="button"
+    onclick={onCopy}
+    title="Click to copy"
+    class="flex min-w-0 flex-1 cursor-pointer items-start px-3 py-2.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 rounded-l-lg"
+  >
+    <div class="min-w-0 flex-1">
+      <div class="truncate text-sm font-semibold text-slate-100">
+        {entry.label}
+      </div>
+      {#if entry.value}
+        <div class="truncate text-xs text-slate-400">{entry.value}</div>
+      {:else}
+        <div class="truncate text-xs italic text-slate-600">(empty)</div>
+      {/if}
     </div>
-    {#if entry.value}
-      <div class="truncate text-xs text-slate-400">{entry.value}</div>
-    {:else}
-      <div class="truncate text-xs italic text-slate-600">(empty)</div>
-    {/if}
-  </div>
+  </button>
 
-  <!-- Hover actions -->
+  <!-- Hover actions, siblings of the card button so we don't nest buttons. -->
   <div
-    class="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
+    class="flex shrink-0 items-center gap-1 px-2 opacity-0 transition-opacity group-hover:opacity-100 {copyState !==
+    'idle'
+      ? 'pointer-events-none opacity-0'
+      : ''}"
   >
     <button
       type="button"
       title="Edit"
       aria-label="Edit"
+      tabindex={-1}
       onclick={() => openEdit(entry)}
       class="rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-slate-100"
     >
@@ -52,6 +91,7 @@
       type="button"
       title="Delete"
       aria-label="Delete"
+      tabindex={-1}
       onclick={() => openDelete(entry)}
       class="rounded p-1 text-slate-400 hover:bg-rose-500/20 hover:text-rose-300"
     >
@@ -72,5 +112,28 @@
         ></path>
       </svg>
     </button>
+  </div>
+
+  <!-- Copy feedback badge, absolutely positioned. -->
+  <div
+    class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 transition-all duration-200 {copyState ===
+    'idle'
+      ? 'translate-x-1 opacity-0'
+      : 'opacity-100'}"
+    aria-live="polite"
+  >
+    {#if copyState === "copied"}
+      <span
+        class="rounded-md bg-emerald-500/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white shadow-sm"
+      >
+        Copied
+      </span>
+    {:else if copyState === "failed"}
+      <span
+        class="rounded-md bg-rose-500/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white shadow-sm"
+      >
+        Failed
+      </span>
+    {/if}
   </div>
 </div>

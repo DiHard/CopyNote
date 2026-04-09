@@ -10,6 +10,7 @@ declare global {
     create: (label: string, value: string) => Promise<Entry>;
     update: (id: string, label: string, value: string) => Promise<Entry>;
     remove: (id: string) => Promise<null>;
+    copy: (id: string) => Promise<Entry>;
   }
 }
 
@@ -20,4 +21,5 @@ export const api = {
   update: (id: string, label: string, value: string): Promise<Entry> =>
     window.update(id, label, value),
   remove: (id: string): Promise<null> => window.remove(id),
+  copy: (id: string): Promise<Entry> => window.copy(id),
 };

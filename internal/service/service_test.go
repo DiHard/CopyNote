@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -10,7 +11,8 @@ import (
 )
 
 // newTestService returns a service backed by a temp file with a
-// deterministic clock.
+// deterministic clock and a no-op clipboard. Tests that need to assert
+// on clipboard interaction replace s.writeText with a closure of their own.
 func newTestService(t *testing.T) (*Service, string, *time.Time) {
 	t.Helper()
 	dir := t.TempDir()
@@ -21,6 +23,7 @@ func newTestService(t *testing.T) (*Service, string, *time.Time) {
 	}
 	clock := time.Date(2026, 4, 9, 10, 0, 0, 0, time.UTC)
 	s.now = func() time.Time { return clock }
+	s.writeText = func(string) error { return nil }
 	return s, path, &clock
 }
 
@@ -195,6 +198,100 @@ func TestService_PersistsEachMutation(t *testing.T) {
 	reload, _ = storage.Load(path)
 	if len(reload.Entries) != 0 {
 		t.Errorf("after Delete, disk state wrong: %#v", reload.Entries)
+	}
+}
+
+func TestCopy_FetchesValueAndCallsWriteText(t *testing.T) {
+	s, _, _ := newTestService(t)
+
+	created, err := s.Create("Email", "me@example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var captured string
+	calls := 0
+	s.writeText = func(v string) error {
+		calls++
+		captured = v
+		return nil
+	}
+
+	got, err := s.Copy(created.ID)
+	if err != nil {
+		t.Fatalf("Copy: %v", err)
+	}
+	if calls != 1 {
+		t.Errorf("want 1 writeText call, got %d", calls)
+	}
+	if captured != "me@example.com" {
+		t.Errorf("want value 'me@example.com', got %q", captured)
+	}
+	if got.ID != created.ID {
+		t.Errorf("want returned entry id %q, got %q", created.ID, got.ID)
+	}
+}
+
+func TestCopy_NotFound(t *testing.T) {
+	s, _, _ := newTestService(t)
+	if _, err := s.Copy("nope"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("want ErrNotFound, got %v", err)
+	}
+}
+
+func TestCopy_PassesUpClipboardError(t *testing.T) {
+	s, _, _ := newTestService(t)
+	created, _ := s.Create("X", "v")
+	boom := errors.New("clipboard busy")
+	s.writeText = func(string) error { return boom }
+
+	_, err := s.Copy(created.ID)
+	if err == nil {
+		t.Fatal("want error, got nil")
+	}
+	if !errors.Is(err, boom) {
+		t.Errorf("want wrapped boom, got %v", err)
+	}
+}
+
+func TestCopy_DoesNotMutateStore(t *testing.T) {
+	s, path, _ := newTestService(t)
+	created, _ := s.Create("X", "v")
+
+	statBefore, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updatedBefore := s.store.Entries[0].UpdatedAt
+	// Sleep just enough that any persist would change ModTime detectably.
+	time.Sleep(20 * time.Millisecond)
+
+	if _, err := s.Copy(created.ID); err != nil {
+		t.Fatal(err)
+	}
+	statAfter, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !statAfter.ModTime().Equal(statBefore.ModTime()) {
+		t.Errorf("Copy unexpectedly persisted to disk: before=%v after=%v", statBefore.ModTime(), statAfter.ModTime())
+	}
+	if !s.store.Entries[0].UpdatedAt.Equal(updatedBefore) {
+		t.Errorf("Copy unexpectedly mutated UpdatedAt")
+	}
+}
+
+func TestCopy_EmptyValueIsAllowed(t *testing.T) {
+	s, _, _ := newTestService(t)
+	created, _ := s.Create("Empty", "")
+	got := ""
+	called := false
+	s.writeText = func(v string) error { called = true; got = v; return nil }
+
+	if _, err := s.Copy(created.ID); err != nil {
+		t.Fatalf("Copy: %v", err)
+	}
+	if !called || got != "" {
+		t.Errorf("want writeText called with empty string, got called=%v val=%q", called, got)
 	}
 }
 
