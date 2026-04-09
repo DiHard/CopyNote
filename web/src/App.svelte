@@ -1,35 +1,29 @@
 <script lang="ts">
-  let pingResult = $state<string>("(not called yet)");
-  let loading = $state(false);
+  import { onMount } from "svelte";
+  import { state, refresh } from "./lib/state.svelte";
+  import Header from "./lib/components/Header.svelte";
+  import SearchBar from "./lib/components/SearchBar.svelte";
+  import EntryList from "./lib/components/EntryList.svelte";
+  import EntryModal from "./lib/components/EntryModal.svelte";
+  import ConfirmModal from "./lib/components/ConfirmModal.svelte";
 
-  async function callPing() {
-    loading = true;
-    try {
-      // @ts-expect-error - injected by Go via webview.Bind
-      const res: string = await window.ping("from svelte");
-      pingResult = res;
-    } catch (e) {
-      pingResult = `error: ${e}`;
-    } finally {
-      loading = false;
-    }
-  }
+  onMount(() => {
+    void refresh();
+  });
 </script>
 
-<main class="flex h-full flex-col items-center justify-center gap-6 bg-gradient-to-br from-slate-900 to-slate-800 text-white">
-  <h1 class="text-3xl font-bold tracking-tight">CopyNote</h1>
-  <p class="text-sm text-slate-400">Scaffold step 0 — bridge test</p>
-
-  <button
-    type="button"
-    onclick={callPing}
-    disabled={loading}
-    class="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white shadow transition hover:bg-indigo-400 disabled:opacity-50"
-  >
-    {loading ? "calling..." : "Call Go ping()"}
-  </button>
-
-  <div class="rounded-md bg-slate-700/50 px-3 py-2 font-mono text-xs text-slate-200">
-    {pingResult}
-  </div>
+<main
+  class="flex h-full flex-col bg-gradient-to-br from-slate-900 to-slate-800 text-slate-100"
+>
+  <Header />
+  <SearchBar />
+  <EntryList />
 </main>
+
+{#if state.modal?.kind === "create"}
+  <EntryModal />
+{:else if state.modal?.kind === "edit"}
+  <EntryModal entry={state.modal.entry} />
+{:else if state.modal?.kind === "delete"}
+  <ConfirmModal entry={state.modal.entry} />
+{/if}

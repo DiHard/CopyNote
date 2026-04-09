@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	"github.com/jchv/go-webview2"
+
+	"copynote/internal/service"
 )
 
 // Single-file frontend produced by Vite + vite-plugin-singlefile.
@@ -52,6 +54,18 @@ func main() {
 		}
 	}
 
+	// Actual user data (entries) lives in %APPDATA%\CopyNote\data.json.
+	// Per SPEC §5.6 and Windows convention for roaming user data.
+	appDataRoaming := os.Getenv("APPDATA")
+	if appDataRoaming == "" {
+		log.Fatal("APPDATA env var is not set")
+	}
+	dataFile := filepath.Join(appDataRoaming, "CopyNote", "data.json")
+	svc, err := service.New(dataFile)
+	if err != nil {
+		log.Fatalf("service init: %v", err)
+	}
+
 	// WebView2 picks up this env var before spawning msedgewebview2.exe.
 	os.Setenv("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", strings.Join(browserArgs, " "))
 
@@ -87,12 +101,17 @@ func main() {
 	}
 	defer w.Destroy()
 
-	// Bridge: simple ping to validate Go ↔ JS bridge works.
-	if err := w.Bind("ping", func(msg string) string {
-		return "pong: " + msg
-	}); err != nil {
-		log.Fatalf("bind ping: %v", err)
+	// Bridge: expose CRUD operations to the Svelte frontend.
+	// Errors returned from these functions become rejected promises in JS.
+	mustBind := func(name string, fn any) {
+		if err := w.Bind(name, fn); err != nil {
+			log.Fatalf("bind %s: %v", name, err)
+		}
 	}
+	mustBind("list", svc.List)
+	mustBind("create", svc.Create)
+	mustBind("update", svc.Update)
+	mustBind("remove", svc.Delete) // "delete" is a JS operator, use "remove"
 
 	w.Navigate(url)
 	w.Run()
