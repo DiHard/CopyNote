@@ -1,0 +1,24 @@
+# Go
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+vendor/
+
+# Node / Vite
+node_modules/
+web/.vite/
+*.log
+# NOTE: web/dist/ IS committed — it's embedded into the Go binary via //go:embed.
+# This lets `go build` work without requiring a Node toolchain at build time.
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.syso
+/build/
