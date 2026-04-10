@@ -71,6 +71,10 @@ type Tray struct {
 	// nil.
 	OnToggle func()
 
+	// OnSettings is invoked from the tray thread when the user picks
+	// Settings from the popup menu.
+	OnSettings func()
+
 	// OnQuit is invoked from the tray thread when the user picks Quit
 	// from the popup menu. After OnQuit returns, the tray's message
 	// loop is shut down via PostQuitMessage.
@@ -90,8 +94,9 @@ const trayCallbackMsg = winutil.WM_APP + 1
 
 // Menu command IDs.
 const (
-	menuIDOpen = 1001
-	menuIDQuit = 1002
+	menuIDOpen     = 1001
+	menuIDSettings = 1002
+	menuIDQuit     = 1003
 )
 
 // Win32 constants used in this file.
@@ -454,6 +459,7 @@ func showTrayPopup(t *Tray) {
 	_, _, _ = procGetCursorPos.Call(uintptr(unsafe.Pointer(&pt)))
 	items := []popupItem{
 		{id: menuIDOpen, label: "Open CopyNote"},
+		{id: menuIDSettings, label: "Settings"},
 		{id: menuIDQuit, label: "Quit"},
 	}
 	showCustomPopup(items, pt.x, pt.y, func(id uint32) {
@@ -461,6 +467,10 @@ func showTrayPopup(t *Tray) {
 		case menuIDOpen:
 			if t.OnShow != nil {
 				t.OnShow()
+			}
+		case menuIDSettings:
+			if t.OnSettings != nil {
+				t.OnSettings()
 			}
 		case menuIDQuit:
 			if t.OnQuit != nil {

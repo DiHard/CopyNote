@@ -36,7 +36,7 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div
-  class="fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+  class="fixed inset-0 z-40 flex items-center justify-center bg-overlay p-4"
   role="dialog"
   aria-modal="true"
   tabindex="-1"
@@ -45,22 +45,22 @@
   }}
 >
   <div
-    class="w-full max-w-sm rounded-xl border border-slate-700/60 bg-slate-900 p-4 shadow-2xl"
+    class="w-full max-w-sm rounded-xl border border-outline bg-surface-alt p-4 shadow-2xl"
   >
-    <h2 class="mb-1 text-base font-semibold text-slate-100">Delete entry?</h2>
-    <p class="mb-4 text-sm text-slate-400">
+    <h2 class="mb-1 text-base font-semibold text-on-surface">Delete entry?</h2>
+    <p class="mb-4 text-sm text-on-surface-dim">
       "{entry.label}" will be permanently removed.
     </p>
 
     {#if error}
-      <div class="mb-3 text-xs text-rose-400">{error}</div>
+      <div class="mb-3 text-xs text-danger">{error}</div>
     {/if}
 
     <div class="flex justify-end gap-2">
       <button
         type="button"
         onclick={closeModal}
-        class="rounded-md border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-700"
+        class="rounded-md border border-outline bg-surface px-3 py-1.5 text-sm text-on-surface hover:bg-surface-hover"
       >
         Cancel
       </button>
@@ -68,7 +68,7 @@
         type="button"
         disabled={busy}
         onclick={confirm}
-        class="rounded-md bg-rose-500 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition hover:bg-rose-400 disabled:cursor-not-allowed disabled:opacity-50"
+        class="rounded-md bg-danger px-3 py-1.5 text-sm font-medium text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
       >
         Delete
       </button>

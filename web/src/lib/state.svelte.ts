@@ -1,4 +1,4 @@
-import type { Entry, ModalState } from "./types";
+import type { Entry, ModalState, UserSettings, ViewMode } from "./types";
 import { api } from "./api";
 
 // Single source of truth for the UI. All mutations go through the
@@ -10,12 +10,16 @@ export const state = $state<{
   modal: ModalState;
   loading: boolean;
   loadError: string | null;
+  view: ViewMode;
+  settings: UserSettings;
 }>({
   entries: [],
   query: "",
   modal: null,
   loading: false,
   loadError: null,
+  view: "main",
+  settings: { autorun: false, theme: "system" },
 });
 
 /**
@@ -83,4 +87,73 @@ export function openDelete(entry: Entry): void {
 }
 export function closeModal(): void {
   state.modal = null;
+}
+
+// ── View navigation ──────────────────────────────────────────────
+
+export function openSettings(): void {
+  state.modal = null;
+  state.view = "settings";
+}
+
+export function closeSettings(): void {
+  state.view = "main";
+}
+
+// ── Settings ─────────────────────────────────────────────────────
+
+export async function loadSettings(): Promise<void> {
+  try {
+    state.settings = await api.getSettings();
+  } catch {
+    // Silently fall back to defaults; settings UI will still render.
+  }
+  applyTheme(state.settings.theme);
+}
+
+export async function saveSettings(
+  patch: Partial<UserSettings>,
+): Promise<void> {
+  const merged = { ...state.settings, ...patch };
+  await api.saveSettings(merged);
+  state.settings = merged;
+  if ("theme" in patch) {
+    applyTheme(merged.theme);
+  }
+}
+
+/**
+ * Apply the theme to the document by toggling the `dark` class on
+ * `<html>`. When set to "system", we follow the OS preference via
+ * matchMedia. A listener is installed once to react to live OS
+ * changes (e.g., Windows switching to/from dark mode while the app
+ * is running).
+ */
+let systemDarkMQ: MediaQueryList | null = null;
+let mqListener: ((e: MediaQueryListEvent) => void) | null = null;
+
+function applyTheme(mode: string): void {
+  // Clean up previous system listener if switching away from "system".
+  if (mqListener && systemDarkMQ) {
+    systemDarkMQ.removeEventListener("change", mqListener);
+    mqListener = null;
+  }
+
+  if (mode === "dark") {
+    document.documentElement.classList.add("dark");
+  } else if (mode === "light") {
+    document.documentElement.classList.remove("dark");
+  } else {
+    // "system" — follow OS preference.
+    if (!systemDarkMQ) {
+      systemDarkMQ = window.matchMedia("(prefers-color-scheme: dark)");
+    }
+    setFromMedia(systemDarkMQ.matches);
+    mqListener = (e) => setFromMedia(e.matches);
+    systemDarkMQ.addEventListener("change", mqListener);
+  }
+}
+
+function setFromMedia(isDark: boolean): void {
+  document.documentElement.classList.toggle("dark", isDark);
 }

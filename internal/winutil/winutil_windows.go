@@ -21,14 +21,26 @@ const (
 	SW_RESTORE = 9
 )
 
-// SetWindowLongPtr index for the WindowProc.
-const GWLP_WNDPROC = -4
+// SetWindowLongPtr / GetWindowLongPtr index constants.
+const (
+	GWL_STYLE    = -16
+	GWLP_WNDPROC = -4
+)
+
+// Window style bits.
+const (
+	WS_CAPTION    = 0x00C00000 // WS_BORDER | WS_DLGFRAME (title bar + border)
+	WS_EX_LAYERED = 0x00080000
+	GWL_EXSTYLE   = -20
+	LWA_ALPHA     = 0x00000002
+)
 
 // Window messages we react to or forward.
 const (
 	WM_DESTROY       = 0x0002
 	WM_CLOSE         = 0x0010
 	WM_QUIT          = 0x0012
+	WM_NCCALCSIZE    = 0x0083
 	WM_SETTINGCHANGE = 0x001A
 	WM_ACTIVATEAPP   = 0x001C
 	WM_COMMAND       = 0x0111
@@ -51,18 +63,36 @@ var (
 	procIsWindowVisible        = moduser32.NewProc("IsWindowVisible")
 	procPostMessageW           = moduser32.NewProc("PostMessageW")
 	procRegisterWindowMessageW = moduser32.NewProc("RegisterWindowMessageW")
-	procSetWindowLongPtrW      = moduser32.NewProc("SetWindowLongPtrW")
+	procGetWindowLongPtrW           = moduser32.NewProc("GetWindowLongPtrW")
+	procSetWindowLongPtrW           = moduser32.NewProc("SetWindowLongPtrW")
+	procSetLayeredWindowAttributes  = moduser32.NewProc("SetLayeredWindowAttributes")
 	procCallWindowProcW        = moduser32.NewProc("CallWindowProcW")
 	procSystemParametersInfoW  = moduser32.NewProc("SystemParametersInfoW")
 	procGetWindowRect          = moduser32.NewProc("GetWindowRect")
 	procSetWindowPos           = moduser32.NewProc("SetWindowPos")
-	procDwmGetWindowAttribute  = moddwmapi.NewProc("DwmGetWindowAttribute")
+	procDwmGetWindowAttribute      = moddwmapi.NewProc("DwmGetWindowAttribute")
+	procDwmSetWindowAttribute      = moddwmapi.NewProc("DwmSetWindowAttribute")
+	procDwmExtendFrameIntoClientArea = moddwmapi.NewProc("DwmExtendFrameIntoClientArea")
 )
 
 // DWM window attributes.
 const (
-	DWMWA_EXTENDED_FRAME_BOUNDS = 9
+	DWMWA_EXTENDED_FRAME_BOUNDS    = 9
+	DWMWA_WINDOW_CORNER_PREFERENCE = 33
+	DWMWA_SYSTEMBACKDROP_TYPE      = 38
 )
+
+// DWM system backdrop types (Win11 22H2+).
+const (
+	DWMSBT_MAINWINDOW      = 2 // Mica
+	DWMSBT_TRANSIENTWINDOW = 3 // Mica Alt (slightly more opaque)
+	DWMSBT_TABBEDWINDOW    = 4 // Tabbed Mica
+)
+
+// MARGINS for DwmExtendFrameIntoClientArea.
+type Margins struct {
+	Left, Right, Top, Bottom int32
+}
 
 // Rect mirrors Windows RECT (LONGs).
 type Rect struct {
@@ -76,9 +106,11 @@ const (
 
 // SetWindowPos flags we use.
 const (
-	SWP_NOSIZE     = 0x0001
-	SWP_NOZORDER   = 0x0004
-	SWP_NOACTIVATE = 0x0010
+	SWP_NOSIZE       = 0x0001
+	SWP_NOMOVE       = 0x0002
+	SWP_NOZORDER     = 0x0004
+	SWP_NOACTIVATE   = 0x0010
+	SWP_FRAMECHANGED = 0x0020
 )
 
 // ShowWindow → BOOL ShowWindow(HWND, int).
@@ -130,6 +162,12 @@ func RegisterWindowMessage(name string) (uint32, error) {
 // SetWindowLongPtr installs a new value at the given index of the
 // window's reserved memory and returns the previous value. Used to
 // subclass a window by replacing its WndProc.
+// GetWindowLongPtr retrieves window style or extra data.
+func GetWindowLongPtr(hwnd uintptr, index int32) uintptr {
+	r, _, _ := procGetWindowLongPtrW.Call(hwnd, uintptr(int(index)))
+	return r
+}
+
 func SetWindowLongPtr(hwnd uintptr, index int32, newValue uintptr) uintptr {
 	r, _, _ := procSetWindowLongPtrW.Call(hwnd, uintptr(int(index)), newValue)
 	return r
@@ -248,4 +286,54 @@ func GetExtendedFrameBounds(hwnd uintptr) (Rect, bool) {
 	)
 	// DwmGetWindowAttribute returns S_OK (0) on success.
 	return rc, r == 0
+}
+
+// SetWindowAlpha makes the window uniformly semi-transparent via
+// the WS_EX_LAYERED extended style + SetLayeredWindowAttributes.
+// alpha ranges from 0 (invisible) to 255 (fully opaque).
+func SetWindowAlpha(hwnd uintptr, alpha byte) {
+	exStyle := GetWindowLongPtr(hwnd, GWL_EXSTYLE)
+	SetWindowLongPtr(hwnd, GWL_EXSTYLE, exStyle|WS_EX_LAYERED)
+	_, _, _ = procSetLayeredWindowAttributes.Call(
+		hwnd,
+		0,
+		uintptr(alpha),
+		uintptr(LWA_ALPHA),
+	)
+}
+
+// DwmSetSystemBackdrop sets the DWM system backdrop type on a
+// window (Win11 22H2+). Use DWMSBT_MAINWINDOW for Mica,
+// DWMSBT_TRANSIENTWINDOW for Mica Alt, etc.
+// Silently fails on older Windows versions.
+func DwmSetSystemBackdrop(hwnd uintptr, backdropType uint32) {
+	var bt uint32 = backdropType
+	_, _, _ = procDwmSetWindowAttribute.Call(
+		hwnd,
+		uintptr(DWMWA_SYSTEMBACKDROP_TYPE),
+		uintptr(unsafe.Pointer(&bt)),
+		unsafe.Sizeof(bt),
+	)
+}
+
+// DwmExtendFrameIntoClientArea extends the DWM frame into the
+// client area. Pass Margins{-1,-1,-1,-1} to extend into the
+// entire window — required for Mica backdrop to show through.
+func DwmExtendFrameIntoClientArea(hwnd uintptr, margins Margins) {
+	_, _, _ = procDwmExtendFrameIntoClientArea.Call(
+		hwnd,
+		uintptr(unsafe.Pointer(&margins)),
+	)
+}
+
+// DwmSetWindowCornerPreference sets rounded-corner preference
+// on Win11. Value 2 = DWMWCP_ROUND.
+func DwmSetWindowCornerPreference(hwnd uintptr, pref uint32) {
+	var p uint32 = pref
+	_, _, _ = procDwmSetWindowAttribute.Call(
+		hwnd,
+		uintptr(DWMWA_WINDOW_CORNER_PREFERENCE),
+		uintptr(unsafe.Pointer(&p)),
+		unsafe.Sizeof(p),
+	)
 }

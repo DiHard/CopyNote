@@ -386,6 +386,13 @@ func (w *webview) Window() unsafe.Pointer {
 	return unsafe.Pointer(w.hwnd)
 }
 
+func (w *webview) GetChromium() *edge.Chromium {
+	if c, ok := w.browser.(*edge.Chromium); ok {
+		return c
+	}
+	return nil
+}
+
 func (w *webview) Navigate(url string) {
 	w.browser.Navigate(url)
 }

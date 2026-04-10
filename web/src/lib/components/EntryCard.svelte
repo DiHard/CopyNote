@@ -33,28 +33,26 @@
 </script>
 
 <div
-  class="group relative flex items-stretch gap-1 rounded-lg border border-slate-700/50 bg-slate-800/40 transition hover:border-slate-600 hover:bg-slate-800/70"
+  class="group relative flex items-stretch gap-1 rounded-lg border border-outline bg-surface-alt transition hover:border-outline-strong hover:bg-card-hover"
 >
-  <!-- Card body becomes the main interactive button. -->
   <button
     type="button"
     onclick={onCopy}
     title="Click to copy"
-    class="flex min-w-0 flex-1 cursor-pointer items-start px-3 py-2.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 rounded-l-lg"
+    class="flex min-w-0 flex-1 cursor-pointer items-start px-3 py-2.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-l-lg"
   >
     <div class="min-w-0 flex-1">
-      <div class="truncate text-sm font-semibold text-slate-100">
+      <div class="truncate text-sm font-semibold text-on-surface">
         {entry.label}
       </div>
       {#if entry.value}
-        <div class="truncate text-xs text-slate-400">{entry.value}</div>
+        <div class="truncate text-xs text-on-surface-dim">{entry.value}</div>
       {:else}
-        <div class="truncate text-xs italic text-slate-600">(empty)</div>
+        <div class="truncate text-xs italic text-on-surface-faint">(empty)</div>
       {/if}
     </div>
   </button>
 
-  <!-- Hover actions, siblings of the card button so we don't nest buttons. -->
   <div
     class="flex shrink-0 items-center gap-1 px-2 opacity-0 transition-opacity group-hover:opacity-100 {copyState !==
     'idle'
@@ -67,7 +65,7 @@
       aria-label="Edit"
       tabindex={-1}
       onclick={() => openEdit(entry)}
-      class="rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-slate-100"
+      class="rounded p-1 text-on-surface-dim hover:bg-surface-hover hover:text-on-surface"
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -93,7 +91,7 @@
       aria-label="Delete"
       tabindex={-1}
       onclick={() => openDelete(entry)}
-      class="rounded p-1 text-slate-400 hover:bg-rose-500/20 hover:text-rose-300"
+      class="rounded p-1 text-on-surface-dim hover:bg-danger-dim hover:text-danger"
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -114,7 +112,6 @@
     </button>
   </div>
 
-  <!-- Copy feedback badge, absolutely positioned. -->
   <div
     class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 transition-all duration-200 {copyState ===
     'idle'
@@ -124,13 +121,13 @@
   >
     {#if copyState === "copied"}
       <span
-        class="rounded-md bg-emerald-500/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white shadow-sm"
+        class="rounded-md bg-success px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white shadow-sm"
       >
         Copied
       </span>
     {:else if copyState === "failed"}
       <span
-        class="rounded-md bg-rose-500/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white shadow-sm"
+        class="rounded-md bg-danger px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white shadow-sm"
       >
         Failed
       </span>

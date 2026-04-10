@@ -162,10 +162,9 @@ func main() {
 	}
 	defer w.Destroy()
 
-	// 7. Bind CRUD bridge methods. The window hwnd is captured below;
-	//    no bound function needs it, so ordering with subclass install
-	//    is free.
 	hwnd := uintptr(w.Window())
+
+	// 7. Bind CRUD bridge methods.
 	mustBind := func(name string, fn any) {
 		if err := w.Bind(name, fn); err != nil {
 			log.Fatalf("bind %s: %v", name, err)
@@ -181,17 +180,28 @@ func main() {
 			winutil.ShowWindow(hwnd, winutil.SW_HIDE)
 		})
 	})
+	mustBind("getSettings", svc.GetSettings)
+	mustBind("saveSettings", svc.SaveSettings)
+	mustBind("resizeWindow", func(contentHeight int) {
+		w.Dispatch(func() {
+			resizeToContent(hwnd, contentHeight)
+		})
+	})
 
 	// 8. Tray. Runs on a dedicated OS-locked goroutine; communicates
-	//    with the webview UI thread via w.Dispatch. Constructed
-	//    before the subclass install so the subclass WndProc can
-	//    hold a pointer to it for theme-change notifications.
+	//    with the webview UI thread via w.Dispatch.
 	trayCtrl := &tray.Tray{
 		OnShow: func() {
 			w.Dispatch(func() { showAndFocus(hwnd) })
 		},
 		OnToggle: func() {
 			w.Dispatch(func() { toggleVisibility(hwnd) })
+		},
+		OnSettings: func() {
+			w.Dispatch(func() {
+				showAndFocus(hwnd)
+				w.Eval(`window.__openSettings && window.__openSettings()`)
+			})
 		},
 		OnQuit: func() {
 			quitting.Store(true)
@@ -208,11 +218,23 @@ func main() {
 		}
 	}()
 
-	// 9. Subclass the webview window: hide-on-close, auto-hide on
-	//    cross-process focus loss, WM_SETTINGCHANGE → tray.ReloadIcon.
-	//    Then anchor it to the tray corner and hide — the app lives
-	//    in the tray by default and the user opens it via left click.
+	// 9. Subclass FIRST — installs WM_NCCALCSIZE handler that
+	//    eliminates the non-client frame strip. Must be in place
+	//    BEFORE SWP_FRAMECHANGED triggers WM_NCCALCSIZE.
 	installSubclass(hwnd, trayCtrl)
+
+	// 10. Frameless window: strip title bar, trigger frame
+	//     recalculation (now handled by our WM_NCCALCSIZE),
+	//     then apply layered transparency + DWM rounded corners.
+	style := winutil.GetWindowLongPtr(hwnd, winutil.GWL_STYLE)
+	style &^= winutil.WS_CAPTION
+	winutil.SetWindowLongPtr(hwnd, winutil.GWL_STYLE, style)
+	winutil.SetWindowPos(hwnd, 0, 0, 0, 0, 0,
+		winutil.SWP_FRAMECHANGED|winutil.SWP_NOMOVE|winutil.SWP_NOSIZE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE)
+	winutil.SetWindowAlpha(hwnd, 242)
+	winutil.DwmSetWindowCornerPreference(hwnd, 2) // DWMWCP_ROUND
+
+	// 11. Anchor to tray corner and start hidden.
 	anchorToTrayCorner(hwnd)
 	winutil.ShowWindow(hwnd, winutil.SW_HIDE)
 
@@ -223,6 +245,35 @@ func main() {
 	// 11. Cleanup: tear down tray and wait for its goroutine to exit.
 	trayCtrl.Stop()
 	<-trayDone
+}
+
+// windowWidth is the fixed width of the CopyNote window.
+const windowWidth = 420
+
+// minWindowHeight is the minimum window height (header + some padding).
+const minWindowHeight = 80
+
+// resizeToContent adjusts the window height to fit contentHeight
+// pixels reported by the frontend, clamped to [minWindowHeight,
+// workAreaHeight - 2*margin]. The window is re-anchored to the
+// bottom-right tray corner after resizing.
+func resizeToContent(hwnd uintptr, contentHeight int) {
+	wa, ok := winutil.GetWorkArea()
+	if !ok {
+		return
+	}
+	maxH := int(wa.Bottom-wa.Top) - 2*trayCornerMargin
+	h := contentHeight
+	if h < minWindowHeight {
+		h = minWindowHeight
+	}
+	if h > maxH {
+		h = maxH
+	}
+
+	winutil.SetWindowPos(hwnd, 0, 0, 0, int32(windowWidth), int32(h),
+		winutil.SWP_NOMOVE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE)
+	anchorToTrayCorner(hwnd)
 }
 
 // installSubclass installs a subclass WndProc on hwnd that intercepts
@@ -243,6 +294,13 @@ func installSubclass(hwnd uintptr, tr *tray.Tray) {
 			return winutil.CallWindowProc(origWndProc, h, msg, wParam, lParam)
 		}
 		switch msg {
+		case winutil.WM_NCCALCSIZE:
+			// Returning 0 when wParam!=0 tells Windows the entire
+			// window rect is client area — removes the thin residual
+			// DWM frame/border that remains after stripping WS_CAPTION.
+			if wParam != 0 {
+				return 0
+			}
 		case winutil.WM_CLOSE:
 			winutil.ShowWindow(h, winutil.SW_HIDE)
 			return 0

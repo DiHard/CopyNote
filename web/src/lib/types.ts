@@ -12,3 +12,12 @@ export type ModalState =
   | { kind: "create" }
   | { kind: "edit"; entry: Entry }
   | { kind: "delete"; entry: Entry };
+
+/** Matches Go model.Settings JSON shape. */
+export interface UserSettings {
+  autorun: boolean;
+  theme: "light" | "dark" | "system";
+}
+
+/** Which top-level view is active. */
+export type ViewMode = "main" | "settings";

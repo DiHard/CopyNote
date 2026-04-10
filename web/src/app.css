@@ -1,10 +1,91 @@
 @import "tailwindcss";
 
+/*
+ * Windows 11 system-inspired color palette.
+ * Light values in :root, dark values in .dark.
+ * Tailwind 4 picks up --color-* as usable utilities:
+ *   bg-surface, text-on-surface, border-outline, etc.
+ */
+
+@theme {
+  --color-surface: var(--t-surface);
+  --color-surface-alt: var(--t-surface-alt);
+  --color-surface-hover: var(--t-surface-hover);
+  --color-card: var(--t-card);
+  --color-card-hover: var(--t-card-hover);
+  --color-on-surface: var(--t-on-surface);
+  --color-on-surface-dim: var(--t-on-surface-dim);
+  --color-on-surface-faint: var(--t-on-surface-faint);
+  --color-outline: var(--t-outline);
+  --color-outline-strong: var(--t-outline-strong);
+  --color-accent: var(--t-accent);
+  --color-accent-hover: var(--t-accent-hover);
+  --color-accent-text: var(--t-accent-text);
+  --color-danger: var(--t-danger);
+  --color-danger-dim: var(--t-danger-dim);
+  --color-success: var(--t-success);
+  --color-overlay: var(--t-overlay);
+  --color-input: var(--t-input);
+  --color-input-border: var(--t-input-border);
+  --color-input-focus: var(--t-input-focus);
+}
+
+/* ── Light (default, matches Windows 11 light Calendar widget) ── */
+:root {
+  --t-surface: #f3f3f3;
+  --t-surface-alt: #ffffff;
+  --t-surface-hover: #e8e8e8;
+  --t-card: #ffffff;
+  --t-card-hover: #f0f0f0;
+  --t-on-surface: #1a1a1a;
+  --t-on-surface-dim: #616161;
+  --t-on-surface-faint: #999999;
+  --t-outline: #e5e5e5;
+  --t-outline-strong: #d1d1d1;
+  --t-accent: #0078d4;
+  --t-accent-hover: #106ebe;
+  --t-accent-text: #ffffff;
+  --t-danger: #d13438;
+  --t-danger-dim: #fde7e7;
+  --t-success: #107c10;
+  --t-overlay: rgba(0, 0, 0, 0.3);
+  --t-input: #ffffff;
+  --t-input-border: #d1d1d1;
+  --t-input-focus: #0078d4;
+}
+
+/* ── Dark (matches Windows 11 dark Calendar widget) ── */
+.dark {
+  --t-surface: #202020;
+  --t-surface-alt: #2d2d2d;
+  --t-surface-hover: #383838;
+  --t-card: #2d2d2d;
+  --t-card-hover: #383838;
+  --t-on-surface: #ffffff;
+  --t-on-surface-dim: #9e9e9e;
+  --t-on-surface-faint: #6b6b6b;
+  --t-outline: #3d3d3d;
+  --t-outline-strong: #4d4d4d;
+  --t-accent: #60cdff;
+  --t-accent-hover: #4cc2ff;
+  --t-accent-text: #003e6e;
+  --t-danger: #ff6b6b;
+  --t-danger-dim: #3d1f1f;
+  --t-success: #6ccb5f;
+  --t-overlay: rgba(0, 0, 0, 0.5);
+  --t-input: #383838;
+  --t-input-border: #4d4d4d;
+  --t-input-focus: #60cdff;
+}
+
 html,
 body,
 #app {
-  height: 100%;
+  /* Do NOT set height:100% — let the content dictate the height
+     so the Go-side resizeWindow binding can shrink-wrap the window
+     to the actual DOM scrollHeight. */
   margin: 0;
+  background: transparent !important;
   font-family:
     "Segoe UI",
     system-ui,

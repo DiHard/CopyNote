@@ -42,6 +42,11 @@ type Chromium struct {
 	WebResourceRequestedCallback func(request *ICoreWebView2WebResourceRequest, args *ICoreWebView2WebResourceRequestedEventArgs)
 	NavigationCompletedCallback  func(sender *ICoreWebView2, args *ICoreWebView2NavigationCompletedEventArgs)
 	AcceleratorKeyCallback       func(uint) bool
+	// OnControllerReady is called once when the WebView2 controller
+	// has been created and is ready for use. Set this before calling
+	// Embed()/Run() to hook into controller-level APIs (e.g.,
+	// PutDefaultBackgroundColor for transparency).
+	OnControllerReady func()
 }
 
 func NewChromium() *Chromium {
@@ -221,10 +226,23 @@ func (e *Chromium) CreateCoreWebView2ControllerCompleted(res uintptr, controller
 
 	_ = e.controller.AddAcceleratorKeyPressed(e.acceleratorKeyPressed, &token)
 
+	// Make the WebView2 background fully transparent so that DWM
+	// Mica/Acrylic backdrop can show through the web content.
+	// This is the only reliable place to call it — the controller
+	// has just been created and is guaranteed to be valid.
+	if ctrl2 := e.controller.GetICoreWebView2Controller2(); ctrl2 != nil {
+		_ = ctrl2.PutDefaultBackgroundColor(COREWEBVIEW2_COLOR{A: 0, R: 0, G: 0, B: 0})
+	}
+
 	atomic.StoreUintptr(&e.inited, 1)
 
 	if e.focusOnInit {
 		e.Focus()
+	}
+
+	if e.OnControllerReady != nil {
+		e.OnControllerReady()
+		e.OnControllerReady = nil // one-shot
 	}
 
 	return 0

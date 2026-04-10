@@ -1,6 +1,10 @@
 package webview2
 
-import "unsafe"
+import (
+	"unsafe"
+
+	"github.com/jchv/go-webview2/pkg/edge"
+)
 
 // This is copied from webview/webview.
 // The documentation is included for convenience.
@@ -81,4 +85,9 @@ type WebView interface {
 	// f must be a function
 	// f must return either value and error or just error
 	Bind(name string, f interface{}) error
+
+	// GetChromium returns the underlying edge.Chromium instance, giving
+	// access to controller-level APIs (e.g., PutDefaultBackgroundColor).
+	// Returns nil if the webview has not been initialized.
+	GetChromium() *edge.Chromium
 }

@@ -2,11 +2,11 @@
   import { state } from "../state.svelte";
 </script>
 
-<div class="border-b border-slate-700/40 bg-slate-900/40 px-4 py-2">
+<div class="border-b border-outline px-4 py-2">
   <div class="relative">
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
+      class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-on-surface-dim"
       width="14"
       height="14"
       viewBox="0 0 24 24"
@@ -23,7 +23,7 @@
       type="text"
       bind:value={state.query}
       placeholder="Search…"
-      class="w-full rounded-md border border-slate-700/70 bg-slate-800/70 py-1.5 pl-8 pr-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-indigo-400 focus:outline-none"
+      class="w-full rounded-md border border-input-border bg-input py-1.5 pl-8 pr-3 text-sm text-on-surface placeholder:text-on-surface-faint focus:border-input-focus focus:outline-none"
     />
   </div>
 </div>
