@@ -24,6 +24,38 @@ import (
 	"copynote/internal/winutil"
 )
 
+// currentIconID tracks which RT_GROUP_ICON ID is active on the tray
+// so ReloadIcon can skip work when the theme hasn't actually changed.
+// Scoped to the tray package because only one Tray runs per process.
+var currentIconID uintptr
+
+// loadTrayIcon reads the system theme and returns an hIcon of the
+// appropriate variant (dark stroke on light taskbar, light stroke on
+// dark taskbar). Falls back to the stock application icon if neither
+// embedded resource can be loaded.
+func loadTrayIcon(hInstance uintptr) uintptr {
+	var resourceID uintptr = iconResourceDark
+	if !winutil.IsSystemLightTheme() {
+		resourceID = iconResourceLight
+	}
+	cx, _, _ := procGetSystemMetrics.Call(uintptr(smCxSmIcon))
+	cy, _, _ := procGetSystemMetrics.Call(uintptr(smCySmIcon))
+	hIcon, _, _ := procLoadImageW.Call(
+		hInstance,
+		resourceID,
+		uintptr(imageIcon),
+		cx, cy,
+		uintptr(lrDefaultColor|lrSharedIcon),
+	)
+	if hIcon == 0 {
+		hIcon, _, _ = procLoadIconW.Call(0, uintptr(idiApplication))
+		currentIconID = 0
+		return hIcon
+	}
+	currentIconID = resourceID
+	return hIcon
+}
+
 // Tray is a one-shot tray-icon controller. Construct it, set the
 // callbacks, then call Run() from a goroutine that has called
 // runtime.LockOSThread().
@@ -68,6 +100,7 @@ const (
 
 	// Shell_NotifyIcon actions and flags
 	nimAdd    = 0x00000000
+	nimModify = 0x00000001
 	nimDelete = 0x00000002
 	nifMessage = 0x00000001
 	nifIcon    = 0x00000002
@@ -75,6 +108,30 @@ const (
 
 	// LoadIcon stock identifier (IDI_APPLICATION).
 	idiApplication = 32512
+
+	// LoadImage parameters for loading RT_ICON resources from the
+	// running exe's embedded resources.
+	imageIcon      = 1
+	lrDefaultColor = 0x00000000
+	lrSharedIcon   = 0x00008000
+
+	// RT_GROUP_ICON resource IDs assigned by rsrc when it packed the
+	// two .ico files into resource_windows_amd64.syso, in order:
+	//   icon-dark.ico  → id 1 (dark stroke, used on LIGHT taskbar)
+	//   icon-light.ico → id 9 (light stroke, used on DARK taskbar)
+	// The gap (1 → 9) comes from rsrc allocating a per-image id for
+	// each of the 7 sizes in the first ico before moving on.
+	iconResourceDark  = 1
+	iconResourceLight = 9
+
+	// GetSystemMetrics — small icon dimensions (16 px at 100 % DPI).
+	smCxSmIcon = 49
+	smCySmIcon = 50
+
+	// Custom tray-internal message asking the wndproc to reload the
+	// tray icon (used when the system theme changes). WM_APP + 2
+	// because + 1 is already taken by trayCallbackMsg.
+	msgReloadIcon = 0x8000 + 2 // WM_APP + 2
 
 	// CreateWindowEx hwndParent special value: HWND_MESSAGE creates a
 	// message-only window not visible on the desktop.
@@ -150,6 +207,7 @@ var (
 	procPostQuitMessage  = moduser32.NewProc("PostQuitMessage")
 	procPostMessageW     = moduser32.NewProc("PostMessageW")
 	procLoadIconW        = moduser32.NewProc("LoadIconW")
+	procLoadImageW       = moduser32.NewProc("LoadImageW")
 	procGetCursorPos     = moduser32.NewProc("GetCursorPos")
 
 	procShellNotifyIconW = modshell32.NewProc("Shell_NotifyIconW")
@@ -261,8 +319,11 @@ func (t *Tray) setup() error {
 	}
 	t.showMsgID = id
 
-	// Stock application icon — TODO stage D: replace with embedded ICO.
-	hIcon, _, _ := procLoadIconW.Call(0, uintptr(idiApplication))
+	// Tray icon: pick the dark-stroke or light-stroke variant based
+	// on the system's current taskbar theme. See loadTrayIcon for
+	// details; this initial call caches which resource ID is active
+	// so later theme swaps can compare cheaply.
+	hIcon := loadTrayIcon(hInstance)
 
 	nid := notifyIconDataW{
 		cbSize:           uint32(unsafe.Sizeof(notifyIconDataW{})),
@@ -333,6 +394,12 @@ func trayWndProc(hwnd, msgID, wParam, lParam uintptr) uintptr {
 		}
 		return 0
 
+	case msgReloadIcon:
+		if t != nil {
+			reloadTrayIconForTheme(t)
+		}
+		return 0
+
 	default:
 		// Custom show-message broadcast from a second instance launch.
 		if t != nil && uint32(msgID) == t.showMsgID {
@@ -344,6 +411,42 @@ func trayWndProc(hwnd, msgID, wParam, lParam uintptr) uintptr {
 		r, _, _ := procDefWindowProcW.Call(hwnd, msgID, wParam, lParam)
 		return r
 	}
+}
+
+// reloadTrayIconForTheme re-reads the system theme and, if it differs
+// from the icon currently shown in the tray, swaps the icon via
+// Shell_NotifyIcon(NIM_MODIFY). Must run on the tray's OS thread.
+func reloadTrayIconForTheme(t *Tray) {
+	desired := uintptr(iconResourceDark)
+	if !winutil.IsSystemLightTheme() {
+		desired = iconResourceLight
+	}
+	if desired == currentIconID {
+		return
+	}
+	hInstance, _, _ := procGetModuleHandleW.Call(0)
+	hIcon := loadTrayIcon(hInstance)
+	if hIcon == 0 {
+		return
+	}
+	nid := notifyIconDataW{
+		cbSize: uint32(unsafe.Sizeof(notifyIconDataW{})),
+		hWnd:   t.hwnd,
+		uID:    1,
+		uFlags: nifIcon,
+		hIcon:  hIcon,
+	}
+	_, _, _ = procShellNotifyIconW.Call(uintptr(nimModify), uintptr(unsafe.Pointer(&nid)))
+}
+
+// ReloadIcon asks the tray's message loop to re-evaluate the system
+// theme and swap the icon to the matching variant. Safe to call from
+// any goroutine — it just posts a message to the tray's own window.
+func (t *Tray) ReloadIcon() {
+	if t == nil || t.hwnd == 0 {
+		return
+	}
+	winutil.PostMessage(t.hwnd, msgReloadIcon, 0, 0)
 }
 
 func showTrayPopup(t *Tray) {

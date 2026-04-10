@@ -85,6 +85,10 @@ const hideGuardWindow = 300 * time.Millisecond
 // than "user wants to show again".
 const toggleDebounce = 150 * time.Millisecond
 
+// trayCornerMargin is the gap between the window and the screen /
+// taskbar edges when anchored to the tray corner.
+const trayCornerMargin = 8
+
 func main() {
 	// 1. Single-instance lock. If another CopyNote is already running,
 	//    broadcast a "show window" message to it and exit immediately.
@@ -151,7 +155,6 @@ func main() {
 			Title:  "CopyNote",
 			Width:  420,
 			Height: 640,
-			Center: true,
 		},
 	})
 	if w == nil {
@@ -159,12 +162,10 @@ func main() {
 	}
 	defer w.Destroy()
 
-	// 7. Subclass the webview window so the close button hides instead
-	//    of destroying it.
+	// 7. Bind CRUD bridge methods. The window hwnd is captured below;
+	//    no bound function needs it, so ordering with subclass install
+	//    is free.
 	hwnd := uintptr(w.Window())
-	hideOnClose(hwnd)
-
-	// 8. Bind CRUD bridge methods.
 	mustBind := func(name string, fn any) {
 		if err := w.Bind(name, fn); err != nil {
 			log.Fatalf("bind %s: %v", name, err)
@@ -175,9 +176,16 @@ func main() {
 	mustBind("update", svc.Update)
 	mustBind("remove", svc.Delete) // "delete" is a JS operator, use "remove"
 	mustBind("copy", svc.Copy)
+	mustBind("hide", func() {
+		w.Dispatch(func() {
+			winutil.ShowWindow(hwnd, winutil.SW_HIDE)
+		})
+	})
 
-	// 9. Tray. Runs on a dedicated OS-locked goroutine; communicates
-	//    with the webview UI thread via w.Dispatch.
+	// 8. Tray. Runs on a dedicated OS-locked goroutine; communicates
+	//    with the webview UI thread via w.Dispatch. Constructed
+	//    before the subclass install so the subclass WndProc can
+	//    hold a pointer to it for theme-change notifications.
 	trayCtrl := &tray.Tray{
 		OnShow: func() {
 			w.Dispatch(func() { showAndFocus(hwnd) })
@@ -200,10 +208,15 @@ func main() {
 		}
 	}()
 
+	// 9. Subclass the webview window: hide-on-close, auto-hide on
+	//    cross-process focus loss, WM_SETTINGCHANGE → tray.ReloadIcon.
+	//    Then anchor it to the tray corner and hide — the app lives
+	//    in the tray by default and the user opens it via left click.
+	installSubclass(hwnd, trayCtrl)
+	anchorToTrayCorner(hwnd)
+	winutil.ShowWindow(hwnd, winutil.SW_HIDE)
+
 	// 10. Run the webview message loop. Blocks until Terminate().
-	//     Mark "just shown" so the focus-loss auto-hide guard doesn't
-	//     fire on a startup race.
-	lastShownNS.Store(time.Now().UnixNano())
 	w.Navigate(url)
 	w.Run()
 
@@ -212,14 +225,19 @@ func main() {
 	<-trayDone
 }
 
-// hideOnClose installs a subclass WndProc on hwnd that intercepts
-// WM_CLOSE (close button → hide instead of destroy) and WM_ACTIVATEAPP
-// (focus moves to another process → hide). Quitting bypasses both.
+// installSubclass installs a subclass WndProc on hwnd that intercepts
+// a small set of messages and forwards everything else to the
+// webview's original WndProc. Handled messages:
 //
-// WM_ACTIVATEAPP fires only on cross-process focus changes, so our
-// own tray popup window (same process) does NOT trigger an auto-hide
-// when shown.
-func hideOnClose(hwnd uintptr) {
+//   - WM_CLOSE        → hide instead of destroying (real quit goes
+//     through the quitting flag so shutdown still works).
+//   - WM_ACTIVATEAPP  → auto-hide when another process takes focus,
+//     respecting the 300 ms startup guard. Fires only on cross-
+//     process focus changes, so our own tray popup window (same
+//     process) does NOT trigger an auto-hide when shown.
+//   - WM_SETTINGCHANGE("ImmersiveColorSet") → the system theme was
+//     toggled, ask the tray to reload its icon variant.
+func installSubclass(hwnd uintptr, tr *tray.Tray) {
 	wndProcCB = syscall.NewCallback(func(h, msg, wParam, lParam uintptr) uintptr {
 		if quitting.Load() {
 			return winutil.CallWindowProc(origWndProc, h, msg, wParam, lParam)
@@ -229,14 +247,16 @@ func hideOnClose(hwnd uintptr) {
 			winutil.ShowWindow(h, winutil.SW_HIDE)
 			return 0
 		case winutil.WM_ACTIVATEAPP:
-			// wParam == 0 → window is becoming inactive (another
-			// process took foreground).
 			if wParam == 0 {
 				elapsed := time.Now().UnixNano() - lastShownNS.Load()
 				if elapsed > int64(hideGuardWindow) && winutil.IsWindowVisible(h) {
 					activationLossHideNS.Store(time.Now().UnixNano())
 					winutil.ShowWindow(h, winutil.SW_HIDE)
 				}
+			}
+		case winutil.WM_SETTINGCHANGE:
+			if winutil.StringFromLPCWSTR(lParam) == "ImmersiveColorSet" && tr != nil {
+				tr.ReloadIcon()
 			}
 		}
 		return winutil.CallWindowProc(origWndProc, h, msg, wParam, lParam)
@@ -248,14 +268,64 @@ func hideOnClose(hwnd uintptr) {
 // and brings it to the foreground. Called via w.Dispatch from the
 // tray thread. Updates the show-guard timestamp so auto-hide doesn't
 // fire immediately on the activation race.
+//
+// The window is re-anchored to the tray corner on every show, so
+// secondary monitor changes or taskbar resizes between runs don't
+// leave it stranded off-screen.
 func showAndFocus(hwnd uintptr) {
 	lastShownNS.Store(time.Now().UnixNano())
+	anchorToTrayCorner(hwnd)
 	if winutil.IsIconic(hwnd) {
 		winutil.ShowWindow(hwnd, winutil.SW_RESTORE)
 	} else {
 		winutil.ShowWindow(hwnd, winutil.SW_SHOW)
 	}
 	winutil.SetForegroundWindow(hwnd)
+}
+
+// anchorToTrayCorner moves the window to the bottom-right corner of
+// the primary monitor's work area, with a small inset — matching
+// Windows' own tray flyouts (Calendar, Volume, Action Center).
+//
+// The work area excludes the taskbar, so this correctly handles
+// taskbars docked at the top/left/right as well. Multi-monitor
+// placement targets the primary monitor since that's where the
+// tray icon lives in the vast majority of setups.
+//
+// GetWindowRect on Win10+ includes the invisible resize border
+// (~7–9 px per DPI), which would push the visually rendered edge
+// away from the screen by that extra amount. We compensate by
+// querying DWMWA_EXTENDED_FRAME_BOUNDS for the truly visible rect
+// and offsetting the target position accordingly.
+func anchorToTrayCorner(hwnd uintptr) {
+	wa, ok := winutil.GetWorkArea()
+	if !ok {
+		return
+	}
+	wr, ok := winutil.GetWindowRect(hwnd)
+	if !ok {
+		return
+	}
+	width := wr.Right - wr.Left
+	height := wr.Bottom - wr.Top
+
+	// Compensate for the invisible DWM resize border, if available.
+	// If DWM is unreachable (virtualized env, etc.), fall back to
+	// raw GetWindowRect bounds.
+	var borderRight, borderBottom int32
+	if efb, ok := winutil.GetExtendedFrameBounds(hwnd); ok {
+		borderRight = wr.Right - efb.Right
+		borderBottom = wr.Bottom - efb.Bottom
+	}
+
+	x := wa.Right - width - trayCornerMargin + borderRight
+	y := wa.Bottom - height - trayCornerMargin + borderBottom
+	winutil.SetWindowPos(
+		hwnd,
+		0,
+		x, y, 0, 0,
+		winutil.SWP_NOSIZE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE,
+	)
 }
 
 // toggleVisibility hides the window if it's currently visible and on

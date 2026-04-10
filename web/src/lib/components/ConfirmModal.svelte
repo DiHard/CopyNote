@@ -25,6 +25,10 @@
       e.preventDefault();
       closeModal();
     }
+    if (e.key === "Enter" && !busy) {
+      e.preventDefault();
+      confirm();
+    }
   }
 </script>
 

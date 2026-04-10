@@ -10,7 +10,18 @@
   onMount(() => {
     void refresh();
   });
+
+  /** Escape when no modal is open → hide the window (same as close button). */
+  function onGlobalKeydown(e: KeyboardEvent) {
+    if (e.key === "Escape" && !state.modal) {
+      e.preventDefault();
+      // @ts-expect-error - injected by Go via webview.Bind
+      window.hide();
+    }
+  }
 </script>
+
+<svelte:window onkeydown={onGlobalKeydown} />
 
 <main
   class="flex h-full flex-col bg-gradient-to-br from-slate-900 to-slate-800 text-slate-100"
