@@ -91,3 +91,15 @@ body,
     -apple-system,
     sans-serif;
 }
+
+/* Hide the scrollbar during resize animations to prevent layout
+   shift (buttons jitter as scrollbar appears/disappears). The
+   window auto-resizes to fit content, so a visible scrollbar is
+   never needed except when content exceeds screen height — in
+   that case overflow still works, just without visible chrome. */
+html {
+  scrollbar-width: none; /* Firefox */
+}
+html::-webkit-scrollbar {
+  display: none; /* Chromium / WebView2 */
+}
