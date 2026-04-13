@@ -155,6 +155,13 @@ func main() {
 
 	hwnd := uintptr(w.Window())
 
+	// 6b. Immediately move the window off-screen so the unstyled
+	//     title-bar window isn't visible during the ~9 s WebView2
+	//     cold-start. The window will be moved to the tray corner
+	//     and shown later when the user clicks the tray icon.
+	winutil.SetWindowPos(hwnd, 0, -10000, -10000, 0, 0,
+		winutil.SWP_NOSIZE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE)
+
 	// 7. Bind CRUD bridge methods.
 	mustBind := func(name string, fn any) {
 		if err := w.Bind(name, fn); err != nil {
@@ -222,7 +229,6 @@ func main() {
 	winutil.SetWindowLongPtr(hwnd, winutil.GWL_STYLE, style)
 	winutil.SetWindowPos(hwnd, 0, 0, 0, 0, 0,
 		winutil.SWP_FRAMECHANGED|winutil.SWP_NOMOVE|winutil.SWP_NOSIZE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE)
-	winutil.SetWindowAlpha(hwnd, 242) // 95% opacity
 	winutil.DwmSetWindowCornerPreference(hwnd, 2) // DWMWCP_ROUND
 
 	// 11. Anchor to tray corner and start hidden.
