@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { fade } from "svelte/transition";
   import type { Entry } from "../types";
   import { closeModal, deleteEntry } from "../state.svelte";
 
@@ -37,6 +38,7 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div
   class="fixed inset-0 z-40 flex items-center justify-center bg-overlay p-4"
+  transition:fade={{ duration: 150 }}
   role="dialog"
   aria-modal="true"
   tabindex="-1"

@@ -92,12 +92,11 @@ body,
     sans-serif;
 }
 
-/* Hide the scrollbar during resize animations to prevent layout
-   shift (buttons jitter as scrollbar appears/disappears). The
-   window auto-resizes to fit content, so a visible scrollbar is
-   never needed except when content exceeds screen height — in
-   that case overflow still works, just without visible chrome. */
+/* Ensure the entire window area has a solid background so
+   expanding the window (e.g., for a modal) never shows a
+   transparent "hole" before WebView2 repaints. */
 html {
+  background-color: var(--color-surface);
   scrollbar-width: none; /* Firefox */
 }
 html::-webkit-scrollbar {
