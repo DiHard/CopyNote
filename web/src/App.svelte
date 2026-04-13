@@ -33,8 +33,8 @@
   const MODAL_MIN_H = 420;
   const EASE = 0.25; // move 25% of remaining distance per frame
 
-  let currentH = $state(0);
-  let targetH = $state(0);
+  let currentH = 0;
+  let targetH = 0;
   let rafId: number | null = null;
 
   function animateStep() {

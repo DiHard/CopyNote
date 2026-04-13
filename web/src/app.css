@@ -85,7 +85,6 @@ body,
      so the Go-side resizeWindow binding can shrink-wrap the window
      to the actual DOM scrollHeight. */
   margin: 0;
-  background: transparent !important;
   font-family:
     "Segoe UI",
     system-ui,

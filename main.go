@@ -37,17 +37,8 @@ var distFS embed.FS
 var browserArgs = []string{
 	"--disable-background-networking",
 	"--disable-component-update",
-	"--disable-domain-reliability",
 	"--disable-sync",
-	"--disable-breakpad",
-	"--disable-client-side-phishing-detection",
-	"--disable-default-apps",
-	"--disable-features=AutofillServerCommunication,CertificateTransparencyComponentUpdater,OptimizationHints",
-	"--no-pings",
 	"--no-first-run",
-	"--no-default-browser-check",
-	"--no-service-autorun",
-	"--metrics-recording-only",
 }
 
 // Subclassing state for the webview window. The callback must outlive
@@ -223,15 +214,15 @@ func main() {
 	//    BEFORE SWP_FRAMECHANGED triggers WM_NCCALCSIZE.
 	installSubclass(hwnd, trayCtrl)
 
-	// 10. Frameless window: strip title bar, trigger frame
-	//     recalculation (now handled by our WM_NCCALCSIZE),
-	//     then apply layered transparency + DWM rounded corners.
+	// 10. Frameless window: strip title bar, apply transparency,
+	//     rounded corners. Order matters — subclass must be installed
+	//     before SWP_FRAMECHANGED so our WM_NCCALCSIZE handler catches it.
 	style := winutil.GetWindowLongPtr(hwnd, winutil.GWL_STYLE)
 	style &^= winutil.WS_CAPTION
 	winutil.SetWindowLongPtr(hwnd, winutil.GWL_STYLE, style)
 	winutil.SetWindowPos(hwnd, 0, 0, 0, 0, 0,
 		winutil.SWP_FRAMECHANGED|winutil.SWP_NOMOVE|winutil.SWP_NOSIZE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE)
-	winutil.SetWindowAlpha(hwnd, 242)
+	winutil.SetWindowAlpha(hwnd, 242) // 95% opacity
 	winutil.DwmSetWindowCornerPreference(hwnd, 2) // DWMWCP_ROUND
 
 	// 11. Anchor to tray corner and start hidden.
@@ -295,9 +286,8 @@ func installSubclass(hwnd uintptr, tr *tray.Tray) {
 		}
 		switch msg {
 		case winutil.WM_NCCALCSIZE:
-			// Returning 0 when wParam!=0 tells Windows the entire
-			// window rect is client area — removes the thin residual
-			// DWM frame/border that remains after stripping WS_CAPTION.
+			// Return 0 so Windows treats the entire window as client
+			// area — no title bar strip, no non-client frame at all.
 			if wParam != 0 {
 				return 0
 			}
