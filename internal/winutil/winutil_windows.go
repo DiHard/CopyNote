@@ -54,7 +54,10 @@ const (
 const HWND_BROADCAST = 0xFFFF
 
 var (
-	moduser32 = windows.NewLazySystemDLL("user32.dll")
+	moduser32   = windows.NewLazySystemDLL("user32.dll")
+	modkernel32 = windows.NewLazySystemDLL("kernel32.dll")
+
+	procGetUserDefaultUILanguage = modkernel32.NewProc("GetUserDefaultUILanguage")
 	moddwmapi = windows.NewLazySystemDLL("dwmapi.dll")
 
 	procShowWindow             = moduser32.NewProc("ShowWindow")
@@ -247,6 +250,19 @@ func StringFromLPCWSTR(p uintptr) string {
 		buf[i] = *(*uint16)(unsafe.Pointer(p + uintptr(i*2)))
 	}
 	return windows.UTF16ToString(buf)
+}
+
+// SystemLocale returns a two-letter language code based on the
+// Windows UI language (e.g. "en", "ru"). Falls back to "en".
+func SystemLocale() string {
+	r, _, _ := procGetUserDefaultUILanguage.Call()
+	primary := uint16(r) & 0x3FF // lower 10 bits = primary language
+	switch primary {
+	case 0x19: // LANG_RUSSIAN
+		return "ru"
+	default:
+		return "en"
+	}
 }
 
 // IsSystemLightTheme reports whether Windows is currently using a

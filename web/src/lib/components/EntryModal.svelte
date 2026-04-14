@@ -2,6 +2,7 @@
   import { fade } from "svelte/transition";
   import type { Entry } from "../types";
   import { closeModal, createEntry, updateEntry } from "../state.svelte";
+  import { t } from "../i18n";
 
   let { entry }: { entry?: Entry } = $props();
 
@@ -64,7 +65,7 @@
     class="w-full max-w-sm rounded-xl border border-outline bg-surface-alt p-4 shadow-2xl"
   >
     <h2 class="mb-3 text-base font-semibold text-on-surface">
-      {isEdit ? "Edit entry" : "New entry"}
+      {isEdit ? t("modal.edit.title") : t("modal.create.title")}
     </h2>
 
     <form
@@ -76,25 +77,25 @@
     >
       <label class="flex flex-col gap-1">
         <span class="text-xs font-medium uppercase tracking-wide text-on-surface-dim"
-          >Label</span
+          >{t("modal.label")}</span
         >
         <input
           bind:this={labelInput}
           bind:value={label}
           type="text"
-          placeholder="e.g. Personal email"
+          placeholder={t("modal.label.placeholder")}
           class="rounded-md border border-input-border bg-input px-3 py-1.5 text-sm text-on-surface placeholder:text-on-surface-faint focus:border-input-focus focus:outline-none"
         />
       </label>
 
       <label class="flex flex-col gap-1">
         <span class="text-xs font-medium uppercase tracking-wide text-on-surface-dim"
-          >Value</span
+          >{t("modal.value")}</span
         >
         <textarea
           bind:value
           rows="3"
-          placeholder="e.g. me@example.com"
+          placeholder={t("modal.value.placeholder")}
           class="resize-y rounded-md border border-input-border bg-input px-3 py-1.5 text-sm text-on-surface placeholder:text-on-surface-faint focus:border-input-focus focus:outline-none"
         ></textarea>
       </label>
@@ -109,14 +110,14 @@
           onclick={closeModal}
           class="rounded-md border border-outline bg-surface px-3 py-1.5 text-sm text-on-surface hover:bg-surface-hover"
         >
-          Cancel
+          {t("modal.cancel")}
         </button>
         <button
           type="submit"
           disabled={!canSave}
           class="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-text shadow-sm transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isEdit ? "Save" : "Create"}
+          {isEdit ? t("modal.save") : t("modal.create")}
         </button>
       </div>
     </form>

@@ -2,6 +2,7 @@
   import { fade } from "svelte/transition";
   import type { Entry } from "../types";
   import { closeModal, deleteEntry } from "../state.svelte";
+  import { t } from "../i18n";
 
   let { entry }: { entry: Entry } = $props();
 
@@ -49,9 +50,9 @@
   <div
     class="w-full max-w-sm rounded-xl border border-outline bg-surface-alt p-4 shadow-2xl"
   >
-    <h2 class="mb-1 text-base font-semibold text-on-surface">Delete entry?</h2>
+    <h2 class="mb-1 text-base font-semibold text-on-surface">{t("confirm.delete.title")}</h2>
     <p class="mb-4 text-sm text-on-surface-dim">
-      "{entry.label}" will be permanently removed.
+      "{entry.label}" {t("confirm.delete.body")}
     </p>
 
     {#if error}
@@ -64,7 +65,7 @@
         onclick={closeModal}
         class="rounded-md border border-outline bg-surface px-3 py-1.5 text-sm text-on-surface hover:bg-surface-hover"
       >
-        Cancel
+        {t("confirm.cancel")}
       </button>
       <button
         type="button"
@@ -72,7 +73,7 @@
         onclick={confirm}
         class="rounded-md bg-danger px-3 py-1.5 text-sm font-medium text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        Delete
+        {t("confirm.delete")}
       </button>
     </div>
   </div>

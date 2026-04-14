@@ -17,6 +17,7 @@ export type ModalState =
 export interface UserSettings {
   autorun: boolean;
   theme: "light" | "dark" | "system";
+  locale: string; // "en" | "ru" | "system"
 }
 
 /** Which top-level view is active. */

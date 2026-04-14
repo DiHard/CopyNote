@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"copynote/internal/model"
+	"golang.org/x/sys/windows/registry"
 )
 
 // GetSettings returns the current user settings. If the settings
@@ -21,10 +22,45 @@ func (s *Service) GetSettings() (model.Settings, error) {
 
 // SaveSettings persists the given settings to settings.json next to
 // the entries data file. The write is atomic (tmp + rename).
+// If the autorun flag changed, the Windows Registry Run key is
+// updated so the app starts (or stops starting) at user login.
 func (s *Service) SaveSettings(settings model.Settings) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.saveSettingsLocked(settings)
+	if err := s.saveSettingsLocked(settings); err != nil {
+		return err
+	}
+	applyAutorun(settings.Autorun)
+	return nil
+}
+
+const autorunKeyPath = `Software\Microsoft\Windows\CurrentVersion\Run`
+const autorunValueName = "CopyNote"
+
+// applyAutorun creates or removes the CopyNote entry under
+// HKCU\Software\Microsoft\Windows\CurrentVersion\Run.
+// The value points to the currently running exe so the correct
+// binary is launched even if the user moves the file.
+func applyAutorun(enabled bool) {
+	k, err := registry.OpenKey(
+		registry.CURRENT_USER,
+		autorunKeyPath,
+		registry.SET_VALUE|registry.QUERY_VALUE,
+	)
+	if err != nil {
+		return // silently ignore — can't write to registry
+	}
+	defer k.Close()
+
+	if enabled {
+		exe, err := os.Executable()
+		if err != nil {
+			return
+		}
+		_ = k.SetStringValue(autorunValueName, exe)
+	} else {
+		_ = k.DeleteValue(autorunValueName)
+	}
 }
 
 // settingsPath derives the settings file path from the entries file.

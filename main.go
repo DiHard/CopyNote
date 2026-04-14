@@ -175,7 +175,7 @@ func main() {
 	mustBind("copy", svc.Copy)
 	mustBind("hide", func() {
 		w.Dispatch(func() {
-			winutil.ShowWindow(hwnd, winutil.SW_HIDE)
+			moveOffScreen(hwnd)
 		})
 	})
 	mustBind("getSettings", svc.GetSettings)
@@ -205,6 +205,16 @@ func main() {
 			quitting.Store(true)
 			w.Dispatch(func() { w.Terminate() })
 		},
+		GetLocale: func() string {
+			s, err := svc.GetSettings()
+			if err != nil {
+				return winutil.SystemLocale()
+			}
+			if s.Locale == "" || s.Locale == "system" {
+				return winutil.SystemLocale()
+			}
+			return s.Locale
+		},
 	}
 	trayDone := make(chan struct{})
 	go func() {
@@ -231,12 +241,13 @@ func main() {
 		winutil.SWP_FRAMECHANGED|winutil.SWP_NOMOVE|winutil.SWP_NOSIZE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE)
 	winutil.DwmSetWindowCornerPreference(hwnd, 2) // DWMWCP_ROUND
 
-	// 11. Anchor to tray corner and start hidden.
-	anchorToTrayCorner(hwnd)
-	winutil.ShowWindow(hwnd, winutil.SW_HIDE)
-
-	// 10. Run the webview message loop. Blocks until Terminate().
+	// 11. Navigate. The window is already off-screen (-10000,-10000)
+	//     but WS_VISIBLE so WebView2's renderer is NOT throttled.
+	//     We never use SW_HIDE — instead, "hidden" means off-screen
+	//     and "shown" means anchored to the tray corner.
 	w.Navigate(url)
+
+	// 12. Run the webview message loop. Blocks until Terminate().
 	w.Run()
 
 	// 11. Cleanup: tear down tray and wait for its goroutine to exit.
@@ -298,14 +309,14 @@ func installSubclass(hwnd uintptr, tr *tray.Tray) {
 				return 0
 			}
 		case winutil.WM_CLOSE:
-			winutil.ShowWindow(h, winutil.SW_HIDE)
+			moveOffScreen(h)
 			return 0
 		case winutil.WM_ACTIVATEAPP:
 			if wParam == 0 {
 				elapsed := time.Now().UnixNano() - lastShownNS.Load()
-				if elapsed > int64(hideGuardWindow) && winutil.IsWindowVisible(h) {
+				if elapsed > int64(hideGuardWindow) && isOnScreen(h) {
 					activationLossHideNS.Store(time.Now().UnixNano())
-					winutil.ShowWindow(h, winutil.SW_HIDE)
+					moveOffScreen(h)
 				}
 			}
 		case winutil.WM_SETTINGCHANGE:
@@ -329,12 +340,25 @@ func installSubclass(hwnd uintptr, tr *tray.Tray) {
 func showAndFocus(hwnd uintptr) {
 	lastShownNS.Store(time.Now().UnixNano())
 	anchorToTrayCorner(hwnd)
-	if winutil.IsIconic(hwnd) {
-		winutil.ShowWindow(hwnd, winutil.SW_RESTORE)
-	} else {
-		winutil.ShowWindow(hwnd, winutil.SW_SHOW)
-	}
 	winutil.SetForegroundWindow(hwnd)
+}
+
+// moveOffScreen hides the window by moving it far off-screen.
+// Unlike SW_HIDE this keeps WS_VISIBLE set so WebView2's renderer
+// is never throttled — preventing the blank-page bug.
+func moveOffScreen(hwnd uintptr) {
+	winutil.SetWindowPos(hwnd, 0, -10000, -10000, 0, 0,
+		winutil.SWP_NOSIZE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE)
+}
+
+// isOnScreen reports whether the window's left edge is within a
+// plausible screen range (i.e., not moved off-screen to hide).
+func isOnScreen(hwnd uintptr) bool {
+	wr, ok := winutil.GetWindowRect(hwnd)
+	if !ok {
+		return false
+	}
+	return wr.Left > -5000
 }
 
 // anchorToTrayCorner moves the window to the bottom-right corner of
@@ -398,8 +422,8 @@ func toggleVisibility(hwnd uintptr) {
 		}
 		activationLossHideNS.Store(0)
 	}
-	if winutil.IsWindowVisible(hwnd) && !winutil.IsIconic(hwnd) {
-		winutil.ShowWindow(hwnd, winutil.SW_HIDE)
+	if isOnScreen(hwnd) {
+		moveOffScreen(hwnd)
 		return
 	}
 	showAndFocus(hwnd)

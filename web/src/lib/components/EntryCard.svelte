@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Entry } from "../types";
   import { openEdit, openDelete, copyEntry } from "../state.svelte";
+  import { t } from "../i18n";
   import { onDestroy } from "svelte";
 
   let { entry }: { entry: Entry } = $props();
@@ -38,7 +39,7 @@
   <button
     type="button"
     onclick={onCopy}
-    title="Click to copy"
+    title={t("card.copy")}
     class="flex min-w-0 flex-1 cursor-pointer items-start px-3 py-2.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-l-lg"
   >
     <div class="min-w-0 flex-1">
@@ -59,8 +60,8 @@
   >
     <button
       type="button"
-      title="Edit"
-      aria-label="Edit"
+      title={t("card.edit")}
+      aria-label={t("card.edit")}
       tabindex={-1}
       onclick={() => openEdit(entry)}
       class="rounded p-1 text-on-surface-dim hover:bg-surface-hover hover:text-on-surface"
@@ -85,8 +86,8 @@
     </button>
     <button
       type="button"
-      title="Delete"
-      aria-label="Delete"
+      title={t("card.delete")}
+      aria-label={t("card.delete")}
       tabindex={-1}
       onclick={() => openDelete(entry)}
       class="rounded p-1 text-on-surface-dim hover:bg-danger-dim hover:text-danger"
@@ -121,13 +122,13 @@
       <span
         class="rounded-md bg-success px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white shadow-sm"
       >
-        Copied
+        {t("card.copied")}
       </span>
     {:else if copyState === "failed"}
       <span
         class="rounded-md bg-danger px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white shadow-sm"
       >
-        Failed
+        {t("card.failed")}
       </span>
     {/if}
   </div>

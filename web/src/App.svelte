@@ -102,19 +102,23 @@
 
 <svelte:window onkeydown={onGlobalKeydown} />
 
-{#if state.view === "settings"}
-  <SettingsView />
-{:else}
-  <main class="flex flex-col bg-surface text-on-surface">
-    <Header />
-    <EntryList />
-  </main>
+<!-- Re-key the entire UI when locale changes so every t() call
+     re-evaluates. Slightly heavy but simple and correct. -->
+{#key state.settings.locale}
+  {#if state.view === "settings"}
+    <SettingsView />
+  {:else}
+    <main class="flex flex-col bg-surface text-on-surface">
+      <Header />
+      <EntryList />
+    </main>
 
-  {#if state.modal?.kind === "create"}
-    <EntryModal />
-  {:else if state.modal?.kind === "edit"}
-    <EntryModal entry={state.modal.entry} />
-  {:else if state.modal?.kind === "delete"}
-    <ConfirmModal entry={state.modal.entry} />
+    {#if state.modal?.kind === "create"}
+      <EntryModal />
+    {:else if state.modal?.kind === "edit"}
+      <EntryModal entry={state.modal.entry} />
+    {:else if state.modal?.kind === "delete"}
+      <ConfirmModal entry={state.modal.entry} />
+    {/if}
   {/if}
-{/if}
+{/key}

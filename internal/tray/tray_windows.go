@@ -80,6 +80,10 @@ type Tray struct {
 	// loop is shut down via PostQuitMessage.
 	OnQuit func()
 
+	// GetLocale returns the current UI locale code (e.g. "en", "ru").
+	// Called each time the popup menu is shown so labels are up to date.
+	GetLocale func() string
+
 	hwnd      uintptr
 	showMsgID uint32
 	added     bool
@@ -454,13 +458,29 @@ func (t *Tray) ReloadIcon() {
 	winutil.PostMessage(t.hwnd, msgReloadIcon, 0, 0)
 }
 
+// Tray menu labels by locale. Falls back to English.
+var trayMenuLabels = map[string][3]string{
+	"en": {"Open CopyNote", "Settings", "Quit"},
+	"ru": {"Открыть CopyNote", "Настройки", "Выход"},
+}
+
 func showTrayPopup(t *Tray) {
 	var pt point
 	_, _, _ = procGetCursorPos.Call(uintptr(unsafe.Pointer(&pt)))
+
+	locale := "en"
+	if t.GetLocale != nil {
+		locale = t.GetLocale()
+	}
+	labels, ok := trayMenuLabels[locale]
+	if !ok {
+		labels = trayMenuLabels["en"]
+	}
+
 	items := []popupItem{
-		{id: menuIDOpen, label: "Open CopyNote"},
-		{id: menuIDSettings, label: "Settings"},
-		{id: menuIDQuit, label: "Quit"},
+		{id: menuIDOpen, label: labels[0]},
+		{id: menuIDSettings, label: labels[1]},
+		{id: menuIDQuit, label: labels[2]},
 	}
 	showCustomPopup(items, pt.x, pt.y, func(id uint32) {
 		switch id {

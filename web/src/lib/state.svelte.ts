@@ -1,5 +1,6 @@
 import type { Entry, ModalState, UserSettings, ViewMode } from "./types";
 import { api } from "./api";
+import { setLocale, systemLocale } from "./i18n";
 
 // Single source of truth for the UI. All mutations go through the
 // action functions below, which call the Go backend and mirror the
@@ -19,7 +20,7 @@ export const state = $state<{
   loading: false,
   loadError: null,
   view: "main",
-  settings: { autorun: false, theme: "system" },
+  settings: { autorun: false, theme: "system", locale: "system" },
 });
 
 /**
@@ -109,6 +110,7 @@ export async function loadSettings(): Promise<void> {
     // Silently fall back to defaults; settings UI will still render.
   }
   applyTheme(state.settings.theme);
+  applyLocale(state.settings.locale);
 }
 
 export async function saveSettings(
@@ -119,6 +121,17 @@ export async function saveSettings(
   state.settings = merged;
   if ("theme" in patch) {
     applyTheme(merged.theme);
+  }
+  if ("locale" in patch) {
+    applyLocale(merged.locale);
+  }
+}
+
+function applyLocale(locale: string): void {
+  if (locale === "system") {
+    setLocale(systemLocale());
+  } else {
+    setLocale(locale);
   }
 }
 
