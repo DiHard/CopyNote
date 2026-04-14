@@ -123,7 +123,11 @@ func (s *Service) Copy(id string) (model.Entry, error) {
 		return model.Entry{}, ErrNotFound
 	}
 	entry := s.store.Entries[idx]
-	if err := s.writeText(entry.Value); err != nil {
+	text := entry.Value
+	if text == "" {
+		text = entry.Label
+	}
+	if err := s.writeText(text); err != nil {
 		return model.Entry{}, fmt.Errorf("clipboard: %w", err)
 	}
 	return entry, nil

@@ -45,10 +45,8 @@
       <div class="truncate text-sm font-semibold text-on-surface">
         {entry.label}
       </div>
-      {#if entry.value}
+      {#if entry.value && entry.value !== entry.label}
         <div class="truncate text-xs text-on-surface-dim">{entry.value}</div>
-      {:else}
-        <div class="truncate text-xs italic text-on-surface-faint">(empty)</div>
       {/if}
     </div>
   </button>
