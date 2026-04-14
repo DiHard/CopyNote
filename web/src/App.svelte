@@ -6,6 +6,7 @@
     loadSettings,
     openSettings,
     closeSettings,
+    refreshAfterImport,
     filterEntries,
   } from "./lib/state.svelte";
   import Header from "./lib/components/Header.svelte";
@@ -18,10 +19,12 @@
     void refresh();
     void loadSettings();
     window.__openSettings = openSettings;
+    window.__refreshAfterImport = refreshAfterImport;
   });
 
   onDestroy(() => {
     delete window.__openSettings;
+    delete window.__refreshAfterImport;
   });
 
   // ── Auto-resize window to fit content ──────────────────────────

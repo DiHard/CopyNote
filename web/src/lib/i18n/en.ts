@@ -51,6 +51,8 @@ export const en: Record<string, string> = {
   "settings.data": "Data",
   "settings.import": "Import",
   "settings.export": "Export",
-  "settings.comingSoon": "Coming soon",
+  "settings.exportOk": "Data exported successfully",
+  "settings.importOk": "Data imported successfully",
+  "settings.importError": "Import failed: {error}",
   "settings.about": "About",
 };

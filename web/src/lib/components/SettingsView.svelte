@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { state, closeSettings, saveSettings } from "../state.svelte";
+  import { state as appState, closeSettings, saveSettings, exportData, importData } from "../state.svelte";
   import { t, availableLocales } from "../i18n";
 
   const themeOptions = () => [
@@ -7,6 +7,8 @@
     { value: "light", label: t("settings.theme.light") },
     { value: "dark", label: t("settings.theme.dark") },
   ];
+
+  let dataStatus = $state<string | null>(null);
 
   function onAutorunChange(e: Event) {
     const checked = (e.target as HTMLInputElement).checked;
@@ -24,6 +26,26 @@
   function onLocaleChange(e: Event) {
     const value = (e.target as HTMLSelectElement).value;
     void saveSettings({ locale: value });
+  }
+
+  async function onExport() {
+    dataStatus = null;
+    try {
+      await exportData();
+      dataStatus = t("settings.exportOk");
+    } catch (e) {
+      dataStatus = String(e);
+    }
+  }
+
+  async function onImport() {
+    dataStatus = null;
+    try {
+      await importData();
+      dataStatus = t("settings.importOk");
+    } catch (e) {
+      dataStatus = t("settings.importError", { error: String(e).replace(/^Error:\s*/, "") });
+    }
   }
 </script>
 
@@ -66,7 +88,7 @@
         <span class="text-sm">{t("settings.autorun")}</span>
         <input
           type="checkbox"
-          checked={state.settings.autorun}
+          checked={appState.settings.autorun}
           onchange={onAutorunChange}
           class="h-4 w-4 cursor-pointer rounded border-input-border bg-input text-accent focus:ring-accent focus:ring-offset-0"
         />
@@ -84,7 +106,7 @@
         >
           <span class="text-sm">{t("settings.theme")}</span>
           <select
-            value={state.settings.theme}
+            value={appState.settings.theme}
             onchange={onThemeChange}
             class="cursor-pointer rounded-md border border-input-border bg-input px-2 py-1 text-sm text-on-surface focus:border-input-focus focus:outline-none"
           >
@@ -99,7 +121,7 @@
         >
           <span class="text-sm">{t("settings.language")}</span>
           <select
-            value={state.settings.locale}
+            value={appState.settings.locale}
             onchange={onLocaleChange}
             class="cursor-pointer rounded-md border border-input-border bg-input px-2 py-1 text-sm text-on-surface focus:border-input-focus focus:outline-none"
           >
@@ -119,20 +141,22 @@
       <div class="flex gap-2">
         <button
           type="button"
-          disabled
-          class="flex-1 rounded-lg border border-outline bg-card px-3 py-2 text-sm text-on-surface-dim transition hover:bg-card-hover hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-50"
+          onclick={onImport}
+          class="flex-1 rounded-lg border border-outline bg-card px-3 py-2 text-sm text-on-surface-dim transition hover:bg-card-hover hover:text-on-surface"
         >
           {t("settings.import")}
         </button>
         <button
           type="button"
-          disabled
-          class="flex-1 rounded-lg border border-outline bg-card px-3 py-2 text-sm text-on-surface-dim transition hover:bg-card-hover hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-50"
+          onclick={onExport}
+          class="flex-1 rounded-lg border border-outline bg-card px-3 py-2 text-sm text-on-surface-dim transition hover:bg-card-hover hover:text-on-surface"
         >
           {t("settings.export")}
         </button>
       </div>
-      <p class="mt-1.5 text-[11px] text-on-surface-faint">{t("settings.comingSoon")}</p>
+      {#if dataStatus}
+        <p class="mt-1.5 text-[11px] text-on-surface-dim">{dataStatus}</p>
+      {/if}
     </section>
 
     <!-- About -->
@@ -146,10 +170,11 @@
           <span class="text-[11px] text-on-surface-faint">v1.0.0 · MIT</span>
         </div>
         <div class="text-xs text-on-surface-faint">
-          <!-- svelte-ignore a11y_missing_attribute -->
           <a
-            class="text-accent hover:underline"
-            onclick={(e) => e.preventDefault()}
+            href="https://github.com/DiHard/CopyNote"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="cursor-pointer text-accent hover:underline"
           >github.com/DiHard/CopyNote</a>
         </div>
       </div>

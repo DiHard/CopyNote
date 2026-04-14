@@ -4,6 +4,7 @@
 package service
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -174,4 +175,91 @@ func (s *Service) repackLocked() {
 // with s.mu held.
 func (s *Service) persistLocked() error {
 	return storage.Save(s.path, s.store)
+}
+
+// ── Import / Export ─────────────────────────────────────────────
+
+// AppVersion is embedded in export files for future compatibility.
+const AppVersion = "1.0.0"
+
+// backupFile is the combined structure written/read during export/import.
+type backupFile struct {
+	AppVersion string         `json:"appVersion"`
+	Entries    []model.Entry  `json:"entries"`
+	Settings   model.Settings `json:"settings"`
+}
+
+// ExportData returns a JSON blob containing all entries and settings.
+func (s *Service) ExportData() ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	settings, err := s.loadSettingsLocked()
+	if err != nil {
+		return nil, fmt.Errorf("load settings: %w", err)
+	}
+
+	bf := backupFile{
+		AppVersion: AppVersion,
+		Entries:    s.store.Entries,
+		Settings:   settings,
+	}
+	data, err := json.MarshalIndent(bf, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal: %w", err)
+	}
+	return data, nil
+}
+
+// ImportData merges entries from a backup JSON blob and overwrites
+// settings. Duplicate entries (same label + value) are skipped.
+func (s *Service) ImportData(raw []byte) error {
+	var bf backupFile
+	if err := json.Unmarshal(raw, &bf); err != nil {
+		return fmt.Errorf("invalid backup file: %w", err)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Overwrite settings.
+	if err := s.saveSettingsLocked(bf.Settings); err != nil {
+		return fmt.Errorf("save settings: %w", err)
+	}
+	applyAutorun(bf.Settings.Autorun)
+
+	// Build a set of existing label+value pairs for dedup.
+	type key struct{ label, value string }
+	existing := make(map[key]bool, len(s.store.Entries))
+	for _, e := range s.store.Entries {
+		existing[key{e.Label, e.Value}] = true
+	}
+
+	// Find max order in current entries.
+	maxOrder := -1
+	for _, e := range s.store.Entries {
+		if e.Order > maxOrder {
+			maxOrder = e.Order
+		}
+	}
+
+	// Append non-duplicate entries with fresh IDs and sequential order.
+	now := s.now()
+	for _, e := range bf.Entries {
+		if existing[key{e.Label, e.Value}] {
+			continue
+		}
+		maxOrder++
+		s.store.Entries = append(s.store.Entries, model.Entry{
+			ID:        model.NewUUID(),
+			Label:     e.Label,
+			Value:     e.Value,
+			Order:     maxOrder,
+			CreatedAt: now,
+			UpdatedAt: now,
+		})
+		existing[key{e.Label, e.Value}] = true
+	}
+
+	return s.persistLocked()
 }

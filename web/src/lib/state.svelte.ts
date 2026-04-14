@@ -101,6 +101,24 @@ export function closeSettings(): void {
   state.view = "main";
 }
 
+// ── Import / Export ──────────────────────────────────────────────
+
+export async function exportData(): Promise<void> {
+  await api.exportData();
+}
+
+export async function importData(): Promise<void> {
+  await api.importData();
+  // The Go side calls __refreshAfterImport via Eval after import
+  // succeeds, which triggers refresh + loadSettings below.
+}
+
+/** Called from Go after a successful import to reload everything. */
+export function refreshAfterImport(): void {
+  void refresh();
+  void loadSettings();
+}
+
 // ── Settings ─────────────────────────────────────────────────────
 
 export async function loadSettings(): Promise<void> {

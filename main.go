@@ -186,6 +186,39 @@ func main() {
 		})
 	})
 
+	const fileFilter = "CopyNote Backup (*.json)|*.json|All Files|*.*"
+
+	mustBind("exportData", func() error {
+		data, err := svc.ExportData()
+		if err != nil {
+			return err
+		}
+		path, ok := winutil.SaveFileDialog(hwnd, fileFilter, "copynote-backup.json")
+		if !ok {
+			return nil // user cancelled
+		}
+		return os.WriteFile(path, data, 0o644)
+	})
+
+	mustBind("importData", func() error {
+		path, ok := winutil.OpenFileDialog(hwnd, fileFilter)
+		if !ok {
+			return nil // user cancelled
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("read file: %w", err)
+		}
+		if err := svc.ImportData(raw); err != nil {
+			return err
+		}
+		// Refresh UI: reload entries + settings.
+		w.Dispatch(func() {
+			w.Eval(`window.__refreshAfterImport && window.__refreshAfterImport()`)
+		})
+		return nil
+	})
+
 	// 8. Tray. Runs on a dedicated OS-locked goroutine; communicates
 	//    with the webview UI thread via w.Dispatch.
 	trayCtrl := &tray.Tray{

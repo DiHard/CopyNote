@@ -15,8 +15,12 @@ declare global {
     resizeWindow: (contentHeight: number) => Promise<void>;
     getSettings: () => Promise<UserSettings>;
     saveSettings: (settings: UserSettings) => Promise<void>;
+    exportData: () => Promise<void>;
+    importData: () => Promise<void>;
     /** Injected at runtime by Go for tray→settings navigation. */
     __openSettings?: () => void;
+    /** Injected at runtime by Go for post-import UI refresh. */
+    __refreshAfterImport?: () => void;
   }
 }
 
@@ -30,4 +34,6 @@ export const api = {
   copy: (id: string): Promise<Entry> => window.copy(id),
   getSettings: (): Promise<UserSettings> => window.getSettings(),
   saveSettings: (s: UserSettings): Promise<void> => window.saveSettings(s),
+  exportData: (): Promise<void> => window.exportData(),
+  importData: (): Promise<void> => window.importData(),
 };

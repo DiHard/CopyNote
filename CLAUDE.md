@@ -1,5 +1,9 @@
 # CopyNote — Project Guide for Claude
 
+## Language Rule
+
+All communication with the user, plans, comments in code reviews, and commit descriptions MUST be in Russian. Code itself (variable names, comments in source) stays in English.
+
 ## What is this?
 
 Windows 11 tray utility for storing and quickly copying text snippets.

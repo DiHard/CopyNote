@@ -56,8 +56,11 @@ const HWND_BROADCAST = 0xFFFF
 var (
 	moduser32   = windows.NewLazySystemDLL("user32.dll")
 	modkernel32 = windows.NewLazySystemDLL("kernel32.dll")
+	modcomdlg32 = windows.NewLazySystemDLL("comdlg32.dll")
 
 	procGetUserDefaultUILanguage = modkernel32.NewProc("GetUserDefaultUILanguage")
+	procGetSaveFileNameW = modcomdlg32.NewProc("GetSaveFileNameW")
+	procGetOpenFileNameW = modcomdlg32.NewProc("GetOpenFileNameW")
 	moddwmapi = windows.NewLazySystemDLL("dwmapi.dll")
 
 	procShowWindow             = moduser32.NewProc("ShowWindow")
@@ -263,6 +266,104 @@ func SystemLocale() string {
 	default:
 		return "en"
 	}
+}
+
+// ── File Dialogs ────────────────────────────────────────────────
+
+// OPENFILENAMEW is the Win32 structure for GetOpenFileNameW / GetSaveFileNameW.
+type openFileNameW struct {
+	structSize      uint32
+	hwndOwner       uintptr
+	hInstance       uintptr
+	filter          *uint16
+	customFilter    *uint16
+	maxCustomFilter uint32
+	filterIndex     uint32
+	file            *uint16
+	maxFile         uint32
+	fileTitle       *uint16
+	maxFileTitle    uint32
+	initialDir      *uint16
+	title           *uint16
+	flags           uint32
+	fileOffset      uint16
+	fileExtension   uint16
+	defExt          *uint16
+	custData        uintptr
+	fnHook          uintptr
+	templateName    *uint16
+	// v5 extended fields — not needed, zero-initialized by default.
+}
+
+const (
+	ofnOverwritePrompt = 0x00000002
+	ofnFileMustExist   = 0x00001000
+	ofnPathMustExist   = 0x00000800
+	ofnNoChangeDir     = 0x00000008
+)
+
+// buildFilter converts a Go-friendly filter string to a double-NUL
+// terminated UTF-16 slice. Pairs are separated by '|', e.g.:
+//
+//	"CopyNote Backup (*.json)|*.json|All Files|*.*"
+func buildFilter(filter string) *uint16 {
+	// Replace '|' with NUL, then add a trailing double-NUL.
+	var buf []uint16
+	for _, r := range filter {
+		if r == '|' {
+			buf = append(buf, 0)
+		} else {
+			buf = append(buf, uint16(r))
+		}
+	}
+	buf = append(buf, 0, 0) // double-NUL terminator
+	return &buf[0]
+}
+
+// SaveFileDialog opens a native Save dialog. Returns the chosen path
+// and true, or ("", false) if the user cancelled.
+func SaveFileDialog(hwnd uintptr, filter, defaultName string) (string, bool) {
+	fileBuf := make([]uint16, 260)
+	if defaultName != "" {
+		u16, _ := windows.UTF16FromString(defaultName)
+		copy(fileBuf, u16)
+	}
+
+	ofn := openFileNameW{
+		hwndOwner: hwnd,
+		filter:    buildFilter(filter),
+		file:      &fileBuf[0],
+		maxFile:   uint32(len(fileBuf)),
+		flags:     ofnOverwritePrompt | ofnPathMustExist | ofnNoChangeDir,
+	}
+	ofn.structSize = uint32(unsafe.Sizeof(ofn))
+
+	r, _, _ := procGetSaveFileNameW.Call(uintptr(unsafe.Pointer(&ofn)))
+	if r == 0 {
+		return "", false
+	}
+	return windows.UTF16ToString(fileBuf), true
+}
+
+// OpenFileDialog opens a native Open dialog. Returns the chosen path
+// and true, or ("", false) if the user cancelled.
+func OpenFileDialog(hwnd uintptr, filter string) (string, bool) {
+	fileBuf := make([]uint16, 260)
+
+	ofn := openFileNameW{
+		hwndOwner: hwnd,
+		filter:    buildFilter(filter),
+		file:      &fileBuf[0],
+		maxFile:   uint32(len(fileBuf)),
+		flags:     ofnFileMustExist | ofnPathMustExist | ofnNoChangeDir,
+	}
+	ofn.structSize = uint32(unsafe.Sizeof(ofn))
+
+	r, _, _ := procGetOpenFileNameW.Call(uintptr(unsafe.Pointer(&ofn)))
+	if r == 0 {
+		return "", false
+	}
+	return windows.UTF16ToString(fileBuf), true
 }
 
 // IsSystemLightTheme reports whether Windows is currently using a
