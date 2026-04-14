@@ -13,12 +13,17 @@ A lightweight Windows tray utility for storing and instantly copying frequently 
 ## Features
 
 - **One-click copy** &mdash; click any entry to copy its value to the clipboard
-- **CRUD management** &mdash; create, edit, delete, and reorder entries
+- **CRUD management** &mdash; create, edit, delete entries
 - **Instant search** &mdash; filter entries by label or value as you type
-- **System tray integration** &mdash; lives in the notification area, toggle with a left click
-- **Auto-hide on focus loss** &mdash; click outside and the window quietly tucks away
+- **System tray integration** &mdash; lives in the notification area, slide-up/down animation on toggle
+- **Auto-hide on focus loss** &mdash; click outside and the window quietly slides away
+- **Light & dark theme** &mdash; follows system or manual override (Win11-inspired palette)
+- **Localization** &mdash; English and Russian, auto-detected from system language
+- **Import / Export** &mdash; backup all entries and settings to a single JSON file, restore with merge (deduplication by label+value)
+- **Autorun** &mdash; optional start at Windows login (via Registry)
 - **Single instance** &mdash; launching again brings the existing window to front
-- **Adaptive tray icon** &mdash; automatically switches between light and dark variants when you change the Windows theme
+- **Adaptive tray icon** &mdash; auto-switches light/dark on theme change; pulse animation during startup
+- **Silent startup** &mdash; no visible window or taskbar icon during WebView2 initialization
 - **Portable** &mdash; single `.exe`, no installation required
 - **Lightweight** &mdash; ~7 MB binary, ~40 MB RAM in idle
 
@@ -74,7 +79,8 @@ go run tools/genicon/main.go          # writes assets/icon-dark.ico + icon-light
 
 | What | Where |
 |------|-------|
-| Entries (JSON) | `%APPDATA%\CopyNote\data.json` |
+| Entries | `%APPDATA%\CopyNote\data.json` |
+| Settings | `%APPDATA%\CopyNote\settings.json` |
 | WebView2 cache | `%LOCALAPPDATA%\CopyNote\WebView2\` |
 
 No data is stored next to the executable &mdash; safe to put it anywhere.
@@ -94,6 +100,7 @@ No data is stored next to the executable &mdash; safe to put it anywhere.
 | Key | Context | Action |
 |-----|---------|--------|
 | `Escape` | Main window | Hide to tray |
+| `Escape` | Settings | Back to main view |
 | `Escape` | Any modal | Close modal |
 | `Enter` | Create/Edit form | Save |
 | `Enter` | Delete confirmation | Confirm |

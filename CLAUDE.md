@@ -44,6 +44,10 @@ CopyNote/
 │   │       ├── api.ts              # Typed Go bridge wrappers
 │   │       ├── types.ts            # Entry, Settings, ModalState interfaces
 │   │       ├── state.svelte.ts     # Reactive state (Runes), actions, theme logic
+│   │       ├── i18n/
+│   │       │   ├── index.ts        # t() function, setLocale, systemLocale
+│   │       │   ├── en.ts           # English dictionary (~45 keys)
+│   │       │   └── ru.ts           # Russian dictionary
 │   │       └── components/
 │   │           ├── Header.svelte       # Title bar (draggable), search, +, ⚙, ×
 │   │           ├── EntryList.svelte    # Filtered card list or empty state
@@ -98,26 +102,33 @@ Go functions are exposed to JavaScript via `webview.Bind()`:
 | `window.update(id, label, value)` | `svc.Update` | Edit entry |
 | `window.remove(id)` | `svc.Delete` | Delete entry |
 | `window.copy(id)` | `svc.Copy` | Write to clipboard |
-| `window.hide()` | ShowWindow(SW_HIDE) | Hide window to tray |
-| `window.resizeWindow(h)` | resizeToContent | Adjust window height |
+| `window.hide()` | moveOffScreen | Hide window (off-screen, not SW_HIDE) |
+| `window.resizeWindow(h)` | resizeToContent | Adjust window height + re-anchor |
 | `window.getSettings()` | svc.GetSettings | Load settings |
-| `window.saveSettings(s)` | svc.SaveSettings | Persist settings |
+| `window.saveSettings(s)` | svc.SaveSettings | Persist settings + autorun registry |
+| `window.exportData()` | svc.ExportData → SaveFileDialog | Export entries+settings to JSON |
+| `window.importData()` | OpenFileDialog → svc.ImportData | Import from JSON, merge entries |
+| `window.openExternal(url)` | ShellExecuteW | Open URL in default browser |
+| `window.notifyReady()` | trayCtrl.SetReady | Stop tray pulse, enable LMB |
 
 All bridge calls return Promises. The Go side persists to disk on every mutation.
 
 ### Window Behavior
 
 - **Frameless**: WS_CAPTION stripped, WM_NCCALCSIZE returns 0 (full client area)
+- **WS_EX_TOOLWINDOW**: hidden from taskbar and Alt+Tab
 - **Rounded corners**: DWM `DWMWCP_ROUND`
-- **Transparency**: `SetLayeredWindowAttributes` alpha=242 (95%)
-- **Auto-hide**: `WM_ACTIVATEAPP` wParam=0 hides after 300ms guard
+- **Silent startup**: window created off-screen (-10000,-10000) with WS_EX_TOOLWINDOW from the start
+- **No SW_HIDE**: visibility managed via off-screen positioning to prevent WebView2 renderer throttling
+- **Auto-hide**: `WM_ACTIVATEAPP` wParam=0 moves off-screen after 300ms guard
 - **Toggle debounce**: LMB on tray within 150ms of auto-hide = stay hidden
+- **Slide animation**: show = slide up from below screen (200ms ease-out), hide = slide down (150ms ease-in)
 - **Anchor**: Bottom-right corner, 8px margin, compensates for DWM invisible border
-- **Smooth resize**: Frontend measures DOM `scrollHeight`, Go eases via rAF
+- **Auto-resize**: Frontend measures DOM `scrollHeight` via `tick()` + `rAF`, instant expand / smooth shrink
 
 ### Tray System
 
-Runs on dedicated `runtime.LockOSThread()` goroutine. Custom popup menu (GDI-painted, not `TrackPopupMenu`). Adaptive icon swaps between dark/light stroke on `WM_SETTINGCHANGE("ImmersiveColorSet")`.
+Runs on dedicated `runtime.LockOSThread()` goroutine. Custom popup menu (GDI-painted, not `TrackPopupMenu`) with dark/light theme support. Adaptive icon swaps between dark/light stroke on `WM_SETTINGCHANGE("ImmersiveColorSet")`. Pulse animation during loading (10 GDI-generated alpha frames). Menu items localized (EN/RU).
 
 ### Single Instance
 
@@ -128,8 +139,9 @@ Named mutex `Local\dev.copynote.app.singleton`. Second launch broadcasts registe
 | File | Location | Format |
 |------|----------|--------|
 | Entries | `%APPDATA%\CopyNote\data.json` | `{version, entries[]}` |
-| Settings | `%APPDATA%\CopyNote\settings.json` | `{autorun, theme}` |
+| Settings | `%APPDATA%\CopyNote\settings.json` | `{autorun, theme, locale}` |
 | WebView2 cache | `%LOCALAPPDATA%\CopyNote\WebView2\` | Browser cache |
+| Export backup | User-chosen path | `{appVersion, entries[], settings}` |
 
 Writes are atomic: write `.tmp` → rename (NTFS guarantees atomicity).
 
@@ -150,6 +162,9 @@ CSS variables in `app.css` define a Windows 11–inspired palette:
 4. **`web/dist/` is committed** — allows `go build` without Node.js installed
 5. **Single HTML file** — `vite-plugin-singlefile` inlines all CSS/JS; served via loopback HTTP (not `NavigateToString`, which breaks ES modules)
 6. **Icon resources** — two RT_GROUP_ICON entries (IDs 1 and 9) in `.syso`, selected at runtime by theme
+7. **i18n** — `web/src/lib/i18n/` with `t(key, params?)` function, dictionaries in `en.ts`/`ru.ts`, locale in settings
+8. **Import/export** — single JSON backup with `appVersion`, dedup by label+value on import
+9. **No SW_HIDE** — WebView2 throttles hidden windows; visibility via off-screen positioning only
 
 ## Important Constraints
 
@@ -157,6 +172,7 @@ CSS variables in `app.css` define a Windows 11–inspired palette:
 - **No C++ toolchain** needed — pure Go + pure JS build
 - **Portable** — single `.exe`, no installer, no registry writes (except optional autorun)
 - **Kaspersky false positive** — COM calls + tray + HTTP loopback may trigger heuristics; add to exclusions or code-sign for release
+- **Svelte store_rune_conflict** — NEVER name a local `$state()` variable in a component that imports `state` from state.svelte.ts. Use `import { state as appState }` if `$state()` rune is needed in the same file
 
 ## Frontend State Management
 
@@ -165,10 +181,11 @@ Single `state` object in `lib/state.svelte.ts` (Svelte 5 Runes):
 export const state = $state({
   entries: [] as Entry[],
   query: "",
-  loading: true,
+  loading: false,
+  loadError: null as string | null,
   modal: null as ModalState,
   view: "main" as ViewMode,
-  settings: null as UserSettings | null,
+  settings: { autorun: false, theme: "system", locale: "system" },
 });
 ```
 
