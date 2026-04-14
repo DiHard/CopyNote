@@ -303,27 +303,16 @@ func (w *webview) CreateWithOptions(opts WindowOptions) bool {
 		windowHeight = 480
 	}
 
-	var posX, posY uint
-	if opts.Center {
-		// get screen size
-		screenWidth, _, _ := w32.User32GetSystemMetrics.Call(w32.SM_CXSCREEN)
-		screenHeight, _, _ := w32.User32GetSystemMetrics.Call(w32.SM_CYSCREEN)
-		// calculate window position
-		posX = (uint(screenWidth) - windowWidth) / 2
-		posY = (uint(screenHeight) - windowHeight) / 2
-	} else {
-		// use default position
-		posX = w32.CW_USEDEFAULT
-		posY = w32.CW_USEDEFAULT
-	}
-
+	// Create window off-screen with WS_EX_TOOLWINDOW so it's invisible
+	// during the ~9 s WebView2 cold-start (no taskbar icon, not on screen).
+	// The caller (main.go) repositions the window when ready.
 	w.hwnd, _, _ = w32.User32CreateWindowExW.Call(
-		0,
+		0x00000080, // WS_EX_TOOLWINDOW — no taskbar icon
 		uintptr(unsafe.Pointer(className)),
 		uintptr(unsafe.Pointer(windowName)),
 		0xCF0000, // WS_OVERLAPPEDWINDOW
-		uintptr(posX),
-		uintptr(posY),
+		uintptr(0xFFFF6518), // -40168 — far off-screen (signed trick for uintptr)
+		uintptr(0xFFFF6518),
 		uintptr(windowWidth),
 		uintptr(windowHeight),
 		0,
@@ -333,9 +322,10 @@ func (w *webview) CreateWithOptions(opts WindowOptions) bool {
 	)
 	setWindowContext(w.hwnd, w)
 
+	// ShowWindow is required for WebView2 to initialize its renderer.
+	// The window is off-screen so the user doesn't see it.
 	_, _, _ = w32.User32ShowWindow.Call(w.hwnd, w32.SWShow)
 	_, _, _ = w32.User32UpdateWindow.Call(w.hwnd)
-	_, _, _ = w32.User32SetFocus.Call(w.hwnd)
 
 	if !w.browser.Embed(w.hwnd) {
 		return false
