@@ -30,11 +30,39 @@ const (
 )
 
 // COLORREF values are 0x00BBGGRR.
-const (
+// Light theme (default).
+var (
 	colorBg    uint32 = 0x00FBFBFB
 	colorHover uint32 = 0x00EAEAEA
 	colorText  uint32 = 0x00202020
 )
+
+// Dark theme colors.
+const (
+	darkColorBg    uint32 = 0x002D2D2D
+	darkColorHover uint32 = 0x00383838
+	darkColorText  uint32 = 0x00FFFFFF
+)
+
+// Light theme colors.
+const (
+	lightColorBg    uint32 = 0x00FBFBFB
+	lightColorHover uint32 = 0x00EAEAEA
+	lightColorText  uint32 = 0x00202020
+)
+
+// applyPopupTheme sets the popup color vars based on the current system theme.
+func applyPopupTheme() {
+	if winutil.IsSystemLightTheme() {
+		colorBg = lightColorBg
+		colorHover = lightColorHover
+		colorText = lightColorText
+	} else {
+		colorBg = darkColorBg
+		colorHover = darkColorHover
+		colorText = darkColorText
+	}
+}
 
 // Win32 / GDI / DWM constants used by the popup window only.
 const (
@@ -218,10 +246,21 @@ func ensurePopupRegistered() {
 }
 
 func ensurePopupResources() {
+	// Re-detect theme and recreate brushes if colors changed.
+	applyPopupTheme()
+
+	// Recreate brushes each time (theme may have changed).
+	if popupBrushBg != 0 {
+		_, _, _ = procDeleteObject.Call(popupBrushBg)
+		popupBrushBg = 0
+	}
+	if popupBrushHover != 0 {
+		_, _, _ = procDeleteObject.Call(popupBrushHover)
+		popupBrushHover = 0
+	}
+
 	if popupFont == 0 {
 		name, _ := windows.UTF16PtrFromString("Segoe UI")
-		// CreateFontW: nHeight is signed; -14 means a 14px cell height.
-		// We pass it through int32 → uintptr to keep the bit-pattern.
 		nHeight := int32(-14)
 		h, _, _ := procCreateFontW.Call(
 			uintptr(uint32(nHeight)),
@@ -236,14 +275,10 @@ func ensurePopupResources() {
 		)
 		popupFont = h
 	}
-	if popupBrushBg == 0 {
-		bg, _, _ := procCreateSolidBrush.Call(uintptr(colorBg))
-		popupBrushBg = bg
-	}
-	if popupBrushHover == 0 {
-		hv, _, _ := procCreateSolidBrush.Call(uintptr(colorHover))
-		popupBrushHover = hv
-	}
+	bg, _, _ := procCreateSolidBrush.Call(uintptr(colorBg))
+	popupBrushBg = bg
+	hv, _, _ := procCreateSolidBrush.Call(uintptr(colorHover))
+	popupBrushHover = hv
 }
 
 func releasePopupResources() {
