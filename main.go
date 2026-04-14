@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"math"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -370,28 +372,112 @@ func installSubclass(hwnd uintptr, tr *tray.Tray) {
 // The window is re-anchored to the tray corner on every show, so
 // secondary monitor changes or taskbar resizes between runs don't
 // leave it stranded off-screen.
+// animMu serializes show/hide animations so they don't overlap.
+var animMu sync.Mutex
+
+// animating is true while a slide animation is in progress.
+// Used by toggleVisibility to avoid conflicting actions.
+var animating atomic.Bool
+
 func showAndFocus(hwnd uintptr) {
 	lastShownNS.Store(time.Now().UnixNano())
-	anchorToTrayCorner(hwnd)
+
+	// Compute the target (tray corner) position.
+	wa, ok := winutil.GetWorkArea()
+	if !ok {
+		anchorToTrayCorner(hwnd)
+		winutil.SetForegroundWindow(hwnd)
+		return
+	}
+	wr, ok := winutil.GetWindowRect(hwnd)
+	if !ok {
+		anchorToTrayCorner(hwnd)
+		winutil.SetForegroundWindow(hwnd)
+		return
+	}
+	width := wr.Right - wr.Left
+	height := wr.Bottom - wr.Top
+
+	var borderRight, borderBottom int32
+	if efb, ok := winutil.GetExtendedFrameBounds(hwnd); ok {
+		borderRight = wr.Right - efb.Right
+		borderBottom = wr.Bottom - efb.Bottom
+	}
+
+	targetX := wa.Right - width - trayCornerMargin + borderRight
+	targetY := wa.Bottom - height - trayCornerMargin + borderBottom
+	startY := wa.Bottom // start just below the screen
+
+	// Place at starting position and bring to front.
+	winutil.SetWindowPos(hwnd, 0, targetX, startY, 0, 0,
+		winutil.SWP_NOSIZE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE)
 	winutil.SetForegroundWindow(hwnd)
+
+	// Animate slide-up.
+	go animateY(hwnd, targetX, startY, targetY, 200*time.Millisecond, easeOutCubic)
 }
 
-// moveOffScreen hides the window by moving it far off-screen.
+// moveOffScreen hides the window by sliding it down below the screen edge.
 // Unlike SW_HIDE this keeps WS_VISIBLE set so WebView2's renderer
 // is never throttled — preventing the blank-page bug.
 func moveOffScreen(hwnd uintptr) {
-	winutil.SetWindowPos(hwnd, 0, -10000, -10000, 0, 0,
-		winutil.SWP_NOSIZE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE)
+	wa, ok := winutil.GetWorkArea()
+	wr, ok2 := winutil.GetWindowRect(hwnd)
+	if !ok || !ok2 || wr.Left < -5000 {
+		// Already off-screen or can't read — just move instantly.
+		winutil.SetWindowPos(hwnd, 0, -10000, -10000, 0, 0,
+			winutil.SWP_NOSIZE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE)
+		return
+	}
+	endY := wa.Bottom // below screen
+	go animateY(hwnd, wr.Left, wr.Top, endY, 150*time.Millisecond, easeInCubic)
 }
 
 // isOnScreen reports whether the window's left edge is within a
 // plausible screen range (i.e., not moved off-screen to hide).
 func isOnScreen(hwnd uintptr) bool {
+	if animating.Load() {
+		return false // treat as off-screen during animation
+	}
 	wr, ok := winutil.GetWindowRect(hwnd)
 	if !ok {
 		return false
 	}
 	return wr.Left > -5000
+}
+
+// animateY slides the window from startY to endY over duration.
+// Uses SetWindowPos from a background goroutine (safe for top-level
+// windows — Windows marshals the call internally).
+func animateY(hwnd uintptr, x, fromY, toY int32, duration time.Duration, ease func(float64) float64) {
+	animMu.Lock()
+	defer animMu.Unlock()
+	animating.Store(true)
+	defer animating.Store(false)
+
+	const steps = 20
+	stepDur := duration / steps
+	for i := 1; i <= steps; i++ {
+		t := ease(float64(i) / float64(steps))
+		y := fromY + int32(float64(toY-fromY)*t)
+		winutil.SetWindowPos(hwnd, 0, x, y, 0, 0,
+			winutil.SWP_NOSIZE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE)
+		time.Sleep(stepDur)
+	}
+	// Ensure final position is exact.
+	if toY > fromY {
+		// Hiding — park off-screen.
+		winutil.SetWindowPos(hwnd, 0, -10000, -10000, 0, 0,
+			winutil.SWP_NOSIZE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE)
+	}
+}
+
+func easeOutCubic(t float64) float64 {
+	return 1 - math.Pow(1-t, 3)
+}
+
+func easeInCubic(t float64) float64 {
+	return math.Pow(t, 3)
 }
 
 // anchorToTrayCorner moves the window to the bottom-right corner of
