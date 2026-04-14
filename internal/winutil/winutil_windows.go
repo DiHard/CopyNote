@@ -24,15 +24,16 @@ const (
 // SetWindowLongPtr / GetWindowLongPtr index constants.
 const (
 	GWL_STYLE    = -16
+	GWL_EXSTYLE  = -20
 	GWLP_WNDPROC = -4
 )
 
 // Window style bits.
 const (
-	WS_CAPTION    = 0x00C00000 // WS_BORDER | WS_DLGFRAME (title bar + border)
-	WS_EX_LAYERED = 0x00080000
-	GWL_EXSTYLE   = -20
-	LWA_ALPHA     = 0x00000002
+	WS_CAPTION       = 0x00C00000 // WS_BORDER | WS_DLGFRAME (title bar + border)
+	WS_EX_LAYERED    = 0x00080000
+	WS_EX_TOOLWINDOW = 0x00000080 // hides from taskbar + Alt+Tab
+	LWA_ALPHA        = 0x00000002
 )
 
 // Window messages we react to or forward.
@@ -68,6 +69,9 @@ var (
 	procIsIconic               = moduser32.NewProc("IsIconic")
 	procIsWindowVisible        = moduser32.NewProc("IsWindowVisible")
 	procPostMessageW           = moduser32.NewProc("PostMessageW")
+	procSendMessageW           = moduser32.NewProc("SendMessageW")
+	procLoadImageW             = moduser32.NewProc("LoadImageW")
+	procGetModuleHandleW       = modkernel32.NewProc("GetModuleHandleW")
 	procRegisterWindowMessageW = moduser32.NewProc("RegisterWindowMessageW")
 	procGetWindowLongPtrW           = moduser32.NewProc("GetWindowLongPtrW")
 	procSetWindowLongPtrW           = moduser32.NewProc("SetWindowLongPtrW")
@@ -253,6 +257,31 @@ func StringFromLPCWSTR(p uintptr) string {
 		buf[i] = *(*uint16)(unsafe.Pointer(p + uintptr(i*2)))
 	}
 	return windows.UTF16ToString(buf)
+}
+
+// SetWindowIcon loads an icon from the exe's embedded resources
+// and sets it on the window (both small and big icon).
+func SetWindowIcon(hwnd uintptr, resourceID int) {
+	const (
+		imageIcon      = 1
+		lrDefaultColor = 0x00000000
+		lrSharedIcon   = 0x00008000
+		wmSetIcon      = 0x0080
+		iconSmall      = 0
+		iconBig        = 1
+	)
+	hInstance, _, _ := procGetModuleHandleW.Call(0)
+	hIcon, _, _ := procLoadImageW.Call(
+		hInstance,
+		uintptr(resourceID),
+		uintptr(imageIcon),
+		0, 0,
+		uintptr(lrDefaultColor|lrSharedIcon),
+	)
+	if hIcon != 0 {
+		procSendMessageW.Call(hwnd, wmSetIcon, iconSmall, hIcon)
+		procSendMessageW.Call(hwnd, wmSetIcon, iconBig, hIcon)
+	}
 }
 
 // SystemLocale returns a two-letter language code based on the

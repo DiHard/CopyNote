@@ -266,12 +266,19 @@ func main() {
 	//    BEFORE SWP_FRAMECHANGED triggers WM_NCCALCSIZE.
 	installSubclass(hwnd, trayCtrl)
 
-	// 10. Frameless window: strip title bar, apply transparency,
-	//     rounded corners. Order matters — subclass must be installed
-	//     before SWP_FRAMECHANGED so our WM_NCCALCSIZE handler catches it.
+	// 10. Frameless window: strip title bar, hide from taskbar/Alt+Tab,
+	//     set app icon, apply rounded corners. Order matters — subclass
+	//     must be installed before SWP_FRAMECHANGED triggers WM_NCCALCSIZE.
 	style := winutil.GetWindowLongPtr(hwnd, winutil.GWL_STYLE)
 	style &^= winutil.WS_CAPTION
 	winutil.SetWindowLongPtr(hwnd, winutil.GWL_STYLE, style)
+
+	exStyle := winutil.GetWindowLongPtr(hwnd, winutil.GWL_EXSTYLE)
+	exStyle |= winutil.WS_EX_TOOLWINDOW
+	winutil.SetWindowLongPtr(hwnd, winutil.GWL_EXSTYLE, exStyle)
+
+	// Set the window icon to our embedded resource (dark variant = id 1).
+	winutil.SetWindowIcon(hwnd, 1)
 	winutil.SetWindowPos(hwnd, 0, 0, 0, 0, 0,
 		winutil.SWP_FRAMECHANGED|winutil.SWP_NOMOVE|winutil.SWP_NOSIZE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE)
 	winutil.DwmSetWindowCornerPreference(hwnd, 2) // DWMWCP_ROUND
