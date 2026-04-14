@@ -170,12 +170,12 @@
           <span class="text-[11px] text-on-surface-faint">v1.0.0 · MIT</span>
         </div>
         <div class="text-xs text-on-surface-faint">
-          <a
-            href="https://github.com/DiHard/CopyNote"
-            target="_blank"
-            rel="noopener noreferrer"
+          <!-- svelte-ignore a11y_missing_attribute a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+          <span
+            role="link"
+            onclick={() => window.openExternal?.("https://github.com/DiHard/CopyNote")}
             class="cursor-pointer text-accent hover:underline"
-          >github.com/DiHard/CopyNote</a>
+          >github.com/DiHard/CopyNote</span>
         </div>
       </div>
     </section>

@@ -74,6 +74,7 @@ var (
 	procGetModuleHandleW       = modkernel32.NewProc("GetModuleHandleW")
 	procSetClassLongPtrW       = moduser32.NewProc("SetClassLongPtrW")
 	procCreateSolidBrush       = windows.NewLazySystemDLL("gdi32.dll").NewProc("CreateSolidBrush")
+	procShellExecuteW          = windows.NewLazySystemDLL("shell32.dll").NewProc("ShellExecuteW")
 	procRegisterWindowMessageW = moduser32.NewProc("RegisterWindowMessageW")
 	procGetWindowLongPtrW           = moduser32.NewProc("GetWindowLongPtrW")
 	procSetWindowLongPtrW           = moduser32.NewProc("SetWindowLongPtrW")
@@ -259,6 +260,13 @@ func StringFromLPCWSTR(p uintptr) string {
 		buf[i] = *(*uint16)(unsafe.Pointer(p + uintptr(i*2)))
 	}
 	return windows.UTF16ToString(buf)
+}
+
+// OpenURL opens a URL in the user's default browser via ShellExecuteW.
+func OpenURL(url string) {
+	u16, _ := windows.UTF16PtrFromString(url)
+	open, _ := windows.UTF16PtrFromString("open")
+	procShellExecuteW.Call(0, uintptr(unsafe.Pointer(open)), uintptr(unsafe.Pointer(u16)), 0, 0, 1)
 }
 
 // SetWindowBackgroundColor sets the window class background brush

@@ -188,6 +188,10 @@ func main() {
 		})
 	})
 
+	mustBind("openExternal", func(url string) {
+		winutil.OpenURL(url)
+	})
+
 	const fileFilter = "CopyNote Backup (*.json)|*.json|All Files|*.*"
 
 	mustBind("exportData", func() error {
