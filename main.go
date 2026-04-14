@@ -320,6 +320,10 @@ const minWindowHeight = 80
 // workAreaHeight - 2*margin]. The window is re-anchored to the
 // bottom-right tray corner after resizing.
 func resizeToContent(hwnd uintptr, contentHeight int) {
+	// Cancel any running slide animation so it doesn't overwrite
+	// our position after we re-anchor.
+	cancelAnim.Store(true)
+
 	wa, ok := winutil.GetWorkArea()
 	if !ok {
 		return
@@ -398,6 +402,10 @@ var animMu sync.Mutex
 // Used by toggleVisibility to avoid conflicting actions.
 var animating atomic.Bool
 
+// cancelAnim is set to true to abort a running slide animation.
+// Checked each step; reset at animation start.
+var cancelAnim atomic.Bool
+
 func showAndFocus(hwnd uintptr) {
 	lastShownNS.Store(time.Now().UnixNano())
 
@@ -471,12 +479,16 @@ func isOnScreen(hwnd uintptr) bool {
 func animateY(hwnd uintptr, x, fromY, toY int32, duration time.Duration, ease func(float64) float64) {
 	animMu.Lock()
 	defer animMu.Unlock()
+	cancelAnim.Store(false)
 	animating.Store(true)
 	defer animating.Store(false)
 
 	const steps = 20
 	stepDur := duration / steps
 	for i := 1; i <= steps; i++ {
+		if cancelAnim.Load() {
+			return // aborted by resizeToContent or another caller
+		}
 		t := ease(float64(i) / float64(steps))
 		y := fromY + int32(float64(toY-fromY)*t)
 		winutil.SetWindowPos(hwnd, 0, x, y, 0, 0,

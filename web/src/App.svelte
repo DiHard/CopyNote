@@ -36,6 +36,7 @@
 
   const MIN_H = 80;
   const MODAL_MIN_H = 420;
+  const SETTINGS_MIN_H = 480;
   const EASE = 0.25; // move 25% of remaining distance per frame
 
   let currentH = 0;
@@ -83,15 +84,23 @@
     void state.loading;
     const modal = state.modal;
 
+    const view = state.view;
     void tick().then(() => {
-      const root = document.getElementById("app");
-      if (!root) return;
-      let h = Math.max(MIN_H, root.scrollHeight);
-      // Fixed/absolute modals don't affect scrollHeight — enforce min.
-      if (modal) {
-        h = Math.max(h, MODAL_MIN_H);
-      }
-      smoothResize(h);
+      // Wait one extra frame so the browser finishes layout after
+      // Svelte's DOM update — prevents measuring stale scrollHeight
+      // when switching views (e.g., opening settings from tray menu).
+      requestAnimationFrame(() => {
+        const root = document.getElementById("app");
+        if (!root) return;
+        let h = Math.max(MIN_H, root.scrollHeight);
+        if (modal) {
+          h = Math.max(h, MODAL_MIN_H);
+        }
+        if (view === "settings") {
+          h = Math.max(h, SETTINGS_MIN_H);
+        }
+        smoothResize(h);
+      });
     });
   });
 
