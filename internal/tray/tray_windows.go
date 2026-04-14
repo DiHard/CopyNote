@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"unsafe"
 
@@ -87,6 +88,8 @@ type Tray struct {
 	hwnd      uintptr
 	showMsgID uint32
 	added     bool
+	ready     atomic.Bool  // true once WebView2 has finished loading
+	timerID   uintptr      // pulse timer (0 = not running)
 
 	startOnce sync.Once
 	startErr  error
@@ -114,6 +117,13 @@ const (
 	nifMessage = 0x00000001
 	nifIcon    = 0x00000002
 	nifTip     = 0x00000004
+	nifState   = 0x00000008
+
+	nisHidden = 0x00000001
+
+	pulseTimerID    = 42
+	pulseIntervalMs = 80 // ms between animation frames (~12 fps)
+	pulseFrames     = 10 // number of opacity steps in one direction
 
 	// LoadIcon stock identifier (IDI_APPLICATION).
 	idiApplication = 32512
@@ -218,6 +228,17 @@ var (
 	procLoadIconW        = moduser32.NewProc("LoadIconW")
 	procLoadImageW       = moduser32.NewProc("LoadImageW")
 	procGetCursorPos     = moduser32.NewProc("GetCursorPos")
+	procSetTimer         = moduser32.NewProc("SetTimer")
+	procKillTimer        = moduser32.NewProc("KillTimer")
+	procGetIconInfo        = moduser32.NewProc("GetIconInfo")
+	procCreateIconIndirect = moduser32.NewProc("CreateIconIndirect")
+	procDestroyIcon        = moduser32.NewProc("DestroyIcon")
+
+	// GDI procs shared with popup_windows.go are declared there.
+	// Additional GDI procs needed only for pulse animation:
+	procGetObjectW       = modgdi32.NewProc("GetObjectW")
+	procGetDIBits        = modgdi32.NewProc("GetDIBits")
+	procCreateDIBSection = modgdi32.NewProc("CreateDIBSection")
 
 	procShellNotifyIconW = modshell32.NewProc("Shell_NotifyIconW")
 
@@ -348,6 +369,11 @@ func (t *Tray) setup() error {
 		return fmt.Errorf("Shell_NotifyIconW NIM_ADD: %w", addErr)
 	}
 	t.added = true
+
+	// Build pulse animation frames from the current icon and start timer.
+	buildPulseIcons(hIcon)
+	procSetTimer.Call(hwnd, pulseTimerID, pulseIntervalMs, 0)
+	t.timerID = pulseTimerID
 	return nil
 }
 
@@ -388,7 +414,8 @@ func trayWndProc(hwnd, msgID, wParam, lParam uintptr) uintptr {
 		// lParam is the actual mouse event from the tray icon.
 		switch uint32(lParam) {
 		case winutil.WM_LBUTTONUP:
-			if t != nil {
+			// Block LMB until WebView2 has loaded.
+			if t != nil && t.ready.Load() {
 				switch {
 				case t.OnToggle != nil:
 					t.OnToggle()
@@ -403,9 +430,34 @@ func trayWndProc(hwnd, msgID, wParam, lParam uintptr) uintptr {
 		}
 		return 0
 
+	case 0x0113: // WM_TIMER
+		if t != nil && wParam == pulseTimerID {
+			advancePulseFrame(t)
+		}
+		return 0
+
 	case msgReloadIcon:
 		if t != nil {
 			reloadTrayIconForTheme(t)
+		}
+		return 0
+
+	case msgSetReady:
+		if t != nil && t.timerID != 0 {
+			procKillTimer.Call(hwnd, t.timerID)
+			t.timerID = 0
+			// Restore the full-opacity theme-appropriate icon.
+			hInst, _, _ := procGetModuleHandleW.Call(0)
+			hIcon := loadTrayIcon(hInst)
+			nid := notifyIconDataW{
+				cbSize: uint32(unsafe.Sizeof(notifyIconDataW{})),
+				hWnd:   t.hwnd,
+				uID:    1,
+				uFlags: nifIcon,
+				hIcon:  hIcon,
+			}
+			_, _, _ = procShellNotifyIconW.Call(uintptr(nimModify), uintptr(unsafe.Pointer(&nid)))
+			destroyPulseIcons()
 		}
 		return 0
 
@@ -457,6 +509,199 @@ func (t *Tray) ReloadIcon() {
 	}
 	winutil.PostMessage(t.hwnd, msgReloadIcon, 0, 0)
 }
+
+// ── Pulse animation ─────────────────────────────────────────────
+//
+// Pre-generates N frames of the tray icon with varying alpha
+// (0.2 → 1.0 → 0.2 triangle wave). A WM_TIMER cycles through
+// them to create a smooth "breathing" pulse during loading.
+
+var (
+	pulseIcons []uintptr // HICON handles for each frame
+	pulseIdx   int       // current frame index
+	pulseDir   int       // +1 or -1
+)
+
+// buildPulseIcons creates pulseFrames HICON copies of srcIcon with
+// alpha scaled from ~20% to 100%. Must be called on the tray thread.
+func buildPulseIcons(srcIcon uintptr) {
+	if len(pulseIcons) > 0 {
+		return // already built
+	}
+	pulseIcons = make([]uintptr, pulseFrames)
+	for i := 0; i < pulseFrames; i++ {
+		// Alpha fraction: 0.2 .. 1.0 linearly
+		alpha := 0.2 + 0.8*float64(i)/float64(pulseFrames-1)
+		h := createAlphaIcon(srcIcon, alpha)
+		if h == 0 {
+			h = srcIcon // fallback
+		}
+		pulseIcons[i] = h
+	}
+	pulseIdx = pulseFrames - 1 // start at full opacity
+	pulseDir = -1              // fade out first
+}
+
+// advancePulseFrame sets the next pulse frame on the tray icon.
+func advancePulseFrame(t *Tray) {
+	if len(pulseIcons) == 0 {
+		return
+	}
+	pulseIdx += pulseDir
+	if pulseIdx >= pulseFrames {
+		pulseIdx = pulseFrames - 1
+		pulseDir = -1
+	} else if pulseIdx < 0 {
+		pulseIdx = 0
+		pulseDir = 1
+	}
+	nid := notifyIconDataW{
+		cbSize: uint32(unsafe.Sizeof(notifyIconDataW{})),
+		hWnd:   t.hwnd,
+		uID:    1,
+		uFlags: nifIcon,
+		hIcon:  pulseIcons[pulseIdx],
+	}
+	_, _, _ = procShellNotifyIconW.Call(uintptr(nimModify), uintptr(unsafe.Pointer(&nid)))
+}
+
+// destroyPulseIcons frees all generated HICON handles.
+func destroyPulseIcons() {
+	for _, h := range pulseIcons {
+		procDestroyIcon.Call(h)
+	}
+	pulseIcons = nil
+}
+
+// BITMAPINFOHEADER for GetDIBits/SetDIBits.
+type bitmapInfoHeader struct {
+	biSize          uint32
+	biWidth         int32
+	biHeight        int32
+	biPlanes        uint16
+	biBitCount      uint16
+	biCompression   uint32
+	biSizeImage     uint32
+	biXPelsPerMeter int32
+	biYPelsPerMeter int32
+	biClrUsed       uint32
+	biClrImportant  uint32
+}
+
+type iconInfo struct {
+	fIcon    int32
+	xHotspot uint32
+	yHotspot uint32
+	hbmMask  uintptr
+	hbmColor uintptr
+}
+
+type bitmap struct {
+	bmType       int32
+	bmWidth      int32
+	bmHeight     int32
+	bmWidthBytes int32
+	bmPlanes     uint16
+	bmBitsPixel  uint16
+	bmBits       uintptr
+}
+
+// createAlphaIcon duplicates srcIcon with every pixel's alpha
+// multiplied by alphaFrac (0.0–1.0). Returns a new HICON.
+func createAlphaIcon(srcIcon uintptr, alphaFrac float64) uintptr {
+	// Get source icon bitmaps.
+	var ii iconInfo
+	r, _, _ := procGetIconInfo.Call(srcIcon, uintptr(unsafe.Pointer(&ii)))
+	if r == 0 {
+		return 0
+	}
+	defer procDeleteObject.Call(ii.hbmMask)
+	defer procDeleteObject.Call(ii.hbmColor)
+
+	// Get bitmap dimensions.
+	var bm bitmap
+	procGetObjectW.Call(ii.hbmColor, unsafe.Sizeof(bm), uintptr(unsafe.Pointer(&bm)))
+	w := int(bm.bmWidth)
+	h := int(bm.bmHeight)
+	if w == 0 || h == 0 {
+		return 0
+	}
+
+	// Read BGRA pixel data from the color bitmap.
+	hdc, _, _ := procGetDC.Call(0)
+	defer procReleaseDC.Call(0, hdc)
+
+	bih := bitmapInfoHeader{
+		biSize:     uint32(unsafe.Sizeof(bitmapInfoHeader{})),
+		biWidth:    int32(w),
+		biHeight:   -int32(h), // top-down
+		biPlanes:   1,
+		biBitCount: 32,
+	}
+	pixels := make([]byte, w*h*4)
+	procGetDIBits.Call(hdc, ii.hbmColor, 0, uintptr(h),
+		uintptr(unsafe.Pointer(&pixels[0])),
+		uintptr(unsafe.Pointer(&bih)), 0)
+
+	// Scale alpha channel of every pixel.
+	for i := 3; i < len(pixels); i += 4 {
+		a := float64(pixels[i]) * alphaFrac
+		if a > 255 {
+			a = 255
+		}
+		pixels[i] = byte(a)
+		// Pre-multiply RGB by the new alpha ratio.
+		ratio := alphaFrac
+		pixels[i-3] = byte(float64(pixels[i-3]) * ratio)
+		pixels[i-2] = byte(float64(pixels[i-2]) * ratio)
+		pixels[i-1] = byte(float64(pixels[i-1]) * ratio)
+	}
+
+	// Create a new color bitmap with modified pixels.
+	var pBits uintptr
+	bihUp := bih
+	bihUp.biHeight = int32(h) // bottom-up for CreateDIBSection
+	hbm, _, _ := procCreateDIBSection.Call(hdc, uintptr(unsafe.Pointer(&bihUp)),
+		0, uintptr(unsafe.Pointer(&pBits)), 0, 0)
+	if hbm == 0 {
+		return 0
+	}
+
+	// Copy modified pixels into the new bitmap (flip rows for bottom-up).
+	stride := w * 4
+	dst := unsafe.Slice((*byte)(unsafe.Pointer(pBits)), len(pixels))
+	for row := 0; row < h; row++ {
+		srcOff := row * stride
+		dstOff := (h - 1 - row) * stride
+		copy(dst[dstOff:dstOff+stride], pixels[srcOff:srcOff+stride])
+	}
+
+	// Build a new icon from modified color bitmap + original mask.
+	newII := iconInfo{
+		fIcon:    1,
+		hbmMask:  ii.hbmMask,
+		hbmColor: hbm,
+	}
+	newIcon, _, _ := procCreateIconIndirect.Call(uintptr(unsafe.Pointer(&newII)))
+	procDeleteObject.Call(hbm)
+	return newIcon
+}
+
+// SetReady stops the pulse animation, ensures the icon is visible,
+// and enables LMB click handling. Safe to call from any goroutine.
+func (t *Tray) SetReady() {
+	if t == nil {
+		return
+	}
+	t.ready.Store(true)
+	// Post a message to the tray thread to stop the timer and
+	// ensure the icon is in a visible state.
+	if t.hwnd != 0 {
+		winutil.PostMessage(t.hwnd, msgSetReady, 0, 0)
+	}
+}
+
+const msgSetReady = winutil.WM_APP + 3
 
 // Tray menu labels by locale. Falls back to English.
 var trayMenuLabels = map[string][3]string{

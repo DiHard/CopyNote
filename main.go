@@ -255,6 +255,10 @@ func main() {
 			return s.Locale
 		},
 	}
+	mustBind("notifyReady", func() {
+		trayCtrl.SetReady()
+	})
+
 	trayDone := make(chan struct{})
 	go func() {
 		runtime.LockOSThread()

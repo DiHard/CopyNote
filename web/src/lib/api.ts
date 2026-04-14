@@ -18,6 +18,7 @@ declare global {
     exportData: () => Promise<void>;
     importData: () => Promise<void>;
     openExternal: (url: string) => Promise<void>;
+    notifyReady: () => Promise<void>;
     /** Injected at runtime by Go for tray→settings navigation. */
     __openSettings?: () => void;
     /** Injected at runtime by Go for post-import UI refresh. */

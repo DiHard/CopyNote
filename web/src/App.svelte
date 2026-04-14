@@ -15,11 +15,13 @@
   import ConfirmModal from "./lib/components/ConfirmModal.svelte";
   import SettingsView from "./lib/components/SettingsView.svelte";
 
-  onMount(() => {
-    void refresh();
-    void loadSettings();
+  onMount(async () => {
     window.__openSettings = openSettings;
     window.__refreshAfterImport = refreshAfterImport;
+    await Promise.all([refresh(), loadSettings()]);
+    // Signal Go that the UI is ready — stops tray icon pulse
+    // and enables LMB click.
+    window.notifyReady?.();
   });
 
   onDestroy(() => {
