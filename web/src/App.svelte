@@ -55,12 +55,15 @@
 
   function smoothResize(h: number) {
     targetH = h;
-    if (currentH === 0) {
-      // First call — jump instantly, no animation.
+    if (currentH === 0 || h > currentH) {
+      // First call or EXPANDING — jump instantly to prevent black
+      // gap at the bottom (unpainted pixels before WebView2 redraws).
+      if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
       currentH = h;
       window.resizeWindow?.(Math.round(h));
       return;
     }
+    // SHRINKING — animate for smooth visual.
     if (!rafId) {
       rafId = requestAnimationFrame(animateStep);
     }

@@ -279,6 +279,10 @@ func main() {
 
 	// Set the window icon to our embedded resource (dark variant = id 1).
 	winutil.SetWindowIcon(hwnd, 1)
+
+	// Set window background brush to light surface color so any area
+	// exposed during resize is #f3f3f3 instead of black.
+	winutil.SetWindowBackgroundColor(hwnd, 0xf3, 0xf3, 0xf3)
 	winutil.SetWindowPos(hwnd, 0, 0, 0, 0, 0,
 		winutil.SWP_FRAMECHANGED|winutil.SWP_NOMOVE|winutil.SWP_NOSIZE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE)
 	winutil.DwmSetWindowCornerPreference(hwnd, 2) // DWMWCP_ROUND

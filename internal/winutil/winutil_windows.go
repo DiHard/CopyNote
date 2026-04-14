@@ -72,6 +72,8 @@ var (
 	procSendMessageW           = moduser32.NewProc("SendMessageW")
 	procLoadImageW             = moduser32.NewProc("LoadImageW")
 	procGetModuleHandleW       = modkernel32.NewProc("GetModuleHandleW")
+	procSetClassLongPtrW       = moduser32.NewProc("SetClassLongPtrW")
+	procCreateSolidBrush       = windows.NewLazySystemDLL("gdi32.dll").NewProc("CreateSolidBrush")
 	procRegisterWindowMessageW = moduser32.NewProc("RegisterWindowMessageW")
 	procGetWindowLongPtrW           = moduser32.NewProc("GetWindowLongPtrW")
 	procSetWindowLongPtrW           = moduser32.NewProc("SetWindowLongPtrW")
@@ -257,6 +259,19 @@ func StringFromLPCWSTR(p uintptr) string {
 		buf[i] = *(*uint16)(unsafe.Pointer(p + uintptr(i*2)))
 	}
 	return windows.UTF16ToString(buf)
+}
+
+// SetWindowBackgroundColor sets the window class background brush
+// to a solid color (COLORREF = 0x00BBGGRR). This ensures any area
+// exposed during resize is painted with this color instead of black.
+func SetWindowBackgroundColor(hwnd uintptr, r, g, b byte) {
+	colorRef := uintptr(r) | uintptr(g)<<8 | uintptr(b)<<16
+	brush, _, _ := procCreateSolidBrush.Call(colorRef)
+	if brush != 0 {
+		// GCLP_HBRBACKGROUND = -10; use twos-complement for uintptr.
+		const gclpHbrBackground = ^uintptr(10 - 1) // == -10 as uintptr
+		procSetClassLongPtrW.Call(hwnd, gclpHbrBackground, brush)
+	}
 }
 
 // SetWindowIcon loads an icon from the exe's embedded resources
