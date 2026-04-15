@@ -53,7 +53,6 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div
   class="fixed inset-0 z-40 flex items-center justify-center bg-overlay p-4"
-  transition:fade={{ duration: 150 }}
   role="dialog"
   aria-modal="true"
   tabindex="-1"
@@ -63,6 +62,7 @@
 >
   <div
     class="w-full max-w-sm rounded-xl border border-outline bg-surface-alt p-4 shadow-2xl"
+    transition:fade={{ duration: 150 }}
   >
     <h2 class="mb-3 text-base font-semibold text-on-surface">
       {isEdit ? t("modal.edit.title") : t("modal.create.title")}

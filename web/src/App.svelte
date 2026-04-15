@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from "svelte";
   import {
-    state,
+    state as appState,
     refresh,
     loadSettings,
     openSettings,
@@ -37,7 +37,7 @@
   const MIN_H = 80;
   const MODAL_MIN_H = 420;
   const SETTINGS_MIN_H = 480;
-  const EASE = 0.25; // move 25% of remaining distance per frame
+  const EASE = 0.35; // move 35% of remaining distance per frame (fast but smooth)
 
   let currentH = 0;
   let targetH = 0;
@@ -58,15 +58,15 @@
 
   function smoothResize(h: number) {
     targetH = h;
-    if (currentH === 0 || h > currentH) {
-      // First call or EXPANDING — jump instantly to prevent black
-      // gap at the bottom (unpainted pixels before WebView2 redraws).
-      if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    if (currentH === 0) {
+      // Very first call — jump instantly, no animation.
       currentH = h;
       window.resizeWindow?.(Math.round(h));
       return;
     }
-    // SHRINKING — animate for smooth visual.
+    // Both expanding and shrinking use smooth animation.
+    // The window background brush (#f3f3f3) fills any briefly
+    // exposed area during expansion, preventing black gaps.
     if (!rafId) {
       rafId = requestAnimationFrame(animateStep);
     }
@@ -78,13 +78,13 @@
 
   $effect(() => {
     // Touch reactive deps so the effect re-runs when they change.
-    void state.view;
-    void state.entries;
-    void state.query;
-    void state.loading;
-    const modal = state.modal;
+    void appState.view;
+    void appState.entries;
+    void appState.query;
+    void appState.loading;
+    const modal = appState.modal;
 
-    const view = state.view;
+    const view = appState.view;
     void tick().then(() => {
       // Wait one extra frame so the browser finishes layout after
       // Svelte's DOM update — prevents measuring stale scrollHeight
@@ -104,11 +104,28 @@
     });
   });
 
+  // Delay modal rendering so the window resize animation completes
+  // before the overlay + modal card appear. Without this, the user
+  // briefly sees the overlay on an undersized window.
+  let showModal = $state(false);
+  let modalTimer: number | null = null;
+
+  $effect(() => {
+    const modal = appState.modal;
+    if (modal) {
+      // Schedule modal show after resize has time to finish.
+      modalTimer = window.setTimeout(() => { showModal = true; }, 180);
+    } else {
+      if (modalTimer) { clearTimeout(modalTimer); modalTimer = null; }
+      showModal = false;
+    }
+  });
+
   /** Global keyboard shortcuts. */
   function onGlobalKeydown(e: KeyboardEvent) {
-    if (e.key === "Escape" && !state.modal) {
+    if (e.key === "Escape" && !appState.modal) {
       e.preventDefault();
-      if (state.view === "settings") {
+      if (appState.view === "settings") {
         closeSettings();
       } else {
         window.hide();
@@ -121,8 +138,8 @@
 
 <!-- Re-key the entire UI when locale changes so every t() call
      re-evaluates. Slightly heavy but simple and correct. -->
-{#key state.settings.locale}
-  {#if state.view === "settings"}
+{#key appState.settings.locale}
+  {#if appState.view === "settings"}
     <SettingsView />
   {:else}
     <main class="flex flex-col bg-surface text-on-surface">
@@ -130,12 +147,12 @@
       <EntryList />
     </main>
 
-    {#if state.modal?.kind === "create"}
+    {#if showModal && appState.modal?.kind === "create"}
       <EntryModal />
-    {:else if state.modal?.kind === "edit"}
-      <EntryModal entry={state.modal.entry} />
-    {:else if state.modal?.kind === "delete"}
-      <ConfirmModal entry={state.modal.entry} />
+    {:else if showModal && appState.modal?.kind === "edit"}
+      <EntryModal entry={appState.modal.entry} />
+    {:else if showModal && appState.modal?.kind === "delete"}
+      <ConfirmModal entry={appState.modal.entry} />
     {/if}
   {/if}
 {/key}

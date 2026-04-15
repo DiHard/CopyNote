@@ -53,8 +53,12 @@ export async function createEntry(
   value: string,
 ): Promise<Entry> {
   const created = await api.create(label, value);
-  // Re-list to pick up the order shift applied server-side.
-  state.entries = await api.list();
+  // Server sets order=0 for the new entry and shifts existing ones.
+  // Mirror locally: bump all existing orders by 1, prepend the new entry.
+  state.entries = [
+    created,
+    ...state.entries.map((e) => ({ ...e, order: e.order + 1 })),
+  ];
   return created;
 }
 
@@ -64,13 +68,17 @@ export async function updateEntry(
   value: string,
 ): Promise<Entry> {
   const updated = await api.update(id, label, value);
-  state.entries = await api.list();
+  // Replace the entry in-place, preserving order.
+  state.entries = state.entries.map((e) => (e.id === id ? updated : e));
   return updated;
 }
 
 export async function deleteEntry(id: string): Promise<void> {
   await api.remove(id);
-  state.entries = await api.list();
+  // Remove locally and repack order values.
+  state.entries = state.entries
+    .filter((e) => e.id !== id)
+    .map((e, i) => ({ ...e, order: i }));
 }
 
 export async function copyEntry(id: string): Promise<void> {

@@ -67,6 +67,7 @@ var (
 	quitting             atomic.Bool
 	lastShownNS          atomic.Int64
 	activationLossHideNS atomic.Int64
+	windowHidden         atomic.Bool // true = window is parked off-screen
 )
 
 // hideGuardWindow is the minimum time after a show during which we
@@ -161,8 +162,7 @@ func main() {
 	//     title-bar window isn't visible during the ~9 s WebView2
 	//     cold-start. The window will be moved to the tray corner
 	//     and shown later when the user clicks the tray icon.
-	winutil.SetWindowPos(hwnd, 0, -10000, -10000, 0, 0,
-		winutil.SWP_NOSIZE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE)
+	parkOffScreen(hwnd)
 
 	// 7. Bind CRUD bridge methods.
 	mustBind := func(name string, fn any) {
@@ -295,7 +295,7 @@ func main() {
 		winutil.SWP_FRAMECHANGED|winutil.SWP_NOMOVE|winutil.SWP_NOSIZE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE)
 	winutil.DwmSetWindowCornerPreference(hwnd, 2) // DWMWCP_ROUND
 
-	// 11. Navigate. The window is already off-screen (-10000,-10000)
+	// 11. Navigate. The window is parked off-screen (windowHidden=true)
 	//     but WS_VISIBLE so WebView2's renderer is NOT throttled.
 	//     We never use SW_HIDE — instead, "hidden" means off-screen
 	//     and "shown" means anchored to the tray corner.
@@ -372,7 +372,7 @@ func installSubclass(hwnd uintptr, tr *tray.Tray) {
 		case winutil.WM_ACTIVATEAPP:
 			if wParam == 0 {
 				elapsed := time.Now().UnixNano() - lastShownNS.Load()
-				if elapsed > int64(hideGuardWindow) && isOnScreen(h) {
+				if elapsed > int64(hideGuardWindow) && !windowHidden.Load() {
 					activationLossHideNS.Store(time.Now().UnixNano())
 					moveOffScreen(h)
 				}
@@ -396,18 +396,15 @@ func installSubclass(hwnd uintptr, tr *tray.Tray) {
 // secondary monitor changes or taskbar resizes between runs don't
 // leave it stranded off-screen.
 // animMu serializes show/hide animations so they don't overlap.
-var animMu sync.Mutex
-
-// animating is true while a slide animation is in progress.
-// Used by toggleVisibility to avoid conflicting actions.
-var animating atomic.Bool
-
-// cancelAnim is set to true to abort a running slide animation.
-// Checked each step; reset at animation start.
-var cancelAnim atomic.Bool
+// cancelAnim aborts a running animation (set by resizeToContent).
+var (
+	animMu     sync.Mutex
+	cancelAnim atomic.Bool
+)
 
 func showAndFocus(hwnd uintptr) {
 	lastShownNS.Store(time.Now().UnixNano())
+	windowHidden.Store(false)
 
 	// Compute the target (tray corner) position.
 	wa, ok := winutil.GetWorkArea()
@@ -444,33 +441,38 @@ func showAndFocus(hwnd uintptr) {
 	go animateY(hwnd, targetX, startY, targetY, 200*time.Millisecond, easeOutCubic)
 }
 
-// moveOffScreen hides the window by sliding it down below the screen edge.
-// Unlike SW_HIDE this keeps WS_VISIBLE set so WebView2's renderer
-// is never throttled — preventing the blank-page bug.
+// offScreenX/Y is where we park the window when "hidden". Kept as
+// named constants (not magic numbers) for clarity. The values are
+// far enough off any realistic multi-monitor arrangement.
+const (
+	offScreenX = -30000
+	offScreenY = -30000
+)
+
+// moveOffScreen hides the window by sliding it down below the screen
+// edge, then parking it at offScreenX/Y. Unlike SW_HIDE this keeps
+// WS_VISIBLE set so WebView2's renderer is never throttled.
 func moveOffScreen(hwnd uintptr) {
+	if windowHidden.Load() {
+		return // already hidden
+	}
 	wa, ok := winutil.GetWorkArea()
 	wr, ok2 := winutil.GetWindowRect(hwnd)
-	if !ok || !ok2 || wr.Left < -5000 {
-		// Already off-screen or can't read — just move instantly.
-		winutil.SetWindowPos(hwnd, 0, -10000, -10000, 0, 0,
-			winutil.SWP_NOSIZE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE)
+	if !ok || !ok2 {
+		parkOffScreen(hwnd)
 		return
 	}
 	endY := wa.Bottom // below screen
+	windowHidden.Store(true)
 	go animateY(hwnd, wr.Left, wr.Top, endY, 150*time.Millisecond, easeInCubic)
 }
 
-// isOnScreen reports whether the window's left edge is within a
-// plausible screen range (i.e., not moved off-screen to hide).
-func isOnScreen(hwnd uintptr) bool {
-	if animating.Load() {
-		return false // treat as off-screen during animation
-	}
-	wr, ok := winutil.GetWindowRect(hwnd)
-	if !ok {
-		return false
-	}
-	return wr.Left > -5000
+// parkOffScreen moves the window to the off-screen parking position
+// instantly (no animation).
+func parkOffScreen(hwnd uintptr) {
+	windowHidden.Store(true)
+	winutil.SetWindowPos(hwnd, 0, offScreenX, offScreenY, 0, 0,
+		winutil.SWP_NOSIZE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE)
 }
 
 // animateY slides the window from startY to endY over duration.
@@ -480,8 +482,6 @@ func animateY(hwnd uintptr, x, fromY, toY int32, duration time.Duration, ease fu
 	animMu.Lock()
 	defer animMu.Unlock()
 	cancelAnim.Store(false)
-	animating.Store(true)
-	defer animating.Store(false)
 
 	const steps = 20
 	stepDur := duration / steps
@@ -498,8 +498,7 @@ func animateY(hwnd uintptr, x, fromY, toY int32, duration time.Duration, ease fu
 	// Ensure final position is exact.
 	if toY > fromY {
 		// Hiding — park off-screen.
-		winutil.SetWindowPos(hwnd, 0, -10000, -10000, 0, 0,
-			winutil.SWP_NOSIZE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE)
+		parkOffScreen(hwnd)
 	}
 }
 
@@ -572,7 +571,7 @@ func toggleVisibility(hwnd uintptr) {
 		}
 		activationLossHideNS.Store(0)
 	}
-	if isOnScreen(hwnd) {
+	if !windowHidden.Load() {
 		moveOffScreen(hwnd)
 		return
 	}
