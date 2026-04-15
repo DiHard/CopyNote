@@ -18,6 +18,7 @@ export interface UserSettings {
   autorun: boolean;
   theme: "light" | "dark" | "system";
   locale: string; // "en" | "ru" | "system"
+  topmost: boolean;
 }
 
 /** Which top-level view is active. */

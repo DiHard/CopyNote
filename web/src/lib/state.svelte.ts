@@ -20,7 +20,7 @@ export const state = $state<{
   loading: false,
   loadError: null,
   view: "main",
-  settings: { autorun: false, theme: "system", locale: "system" },
+  settings: { autorun: false, theme: "system", locale: "system", topmost: true },
 });
 
 /**
@@ -137,6 +137,8 @@ export async function loadSettings(): Promise<void> {
   }
   applyTheme(state.settings.theme);
   applyLocale(state.settings.locale);
+  // @ts-expect-error - injected by Go via webview.Bind
+  window.applyTopmost?.(state.settings.topmost);
 }
 
 export async function saveSettings(
@@ -150,6 +152,10 @@ export async function saveSettings(
   }
   if ("locale" in patch) {
     applyLocale(merged.locale);
+  }
+  if ("topmost" in patch) {
+    // @ts-expect-error - injected by Go via webview.Bind
+    window.applyTopmost?.(merged.topmost);
   }
 }
 

@@ -42,6 +42,7 @@ export const en: Record<string, string> = {
   "settings.back": "Back",
   "settings.general": "General",
   "settings.autorun": "Run at startup",
+  "settings.topmost": "Always on top",
   "settings.appearance": "Appearance",
   "settings.theme": "Theme",
   "settings.theme.system": "System",

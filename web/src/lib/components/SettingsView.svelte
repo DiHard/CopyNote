@@ -15,6 +15,11 @@
     void saveSettings({ autorun: checked });
   }
 
+  function onTopmostChange(e: Event) {
+    const checked = (e.target as HTMLInputElement).checked;
+    void saveSettings({ topmost: checked });
+  }
+
   function onThemeChange(e: Event) {
     const value = (e.target as HTMLSelectElement).value as
       | "light"
@@ -90,6 +95,17 @@
           type="checkbox"
           checked={appState.settings.autorun}
           onchange={onAutorunChange}
+          class="h-4 w-4 cursor-pointer rounded border-input-border bg-input text-accent focus:ring-accent focus:ring-offset-0"
+        />
+      </label>
+      <label
+        class="mt-2 flex cursor-pointer items-center justify-between rounded-lg border border-outline bg-card px-3 py-2.5"
+      >
+        <span class="text-sm">{t("settings.topmost")}</span>
+        <input
+          type="checkbox"
+          checked={appState.settings.topmost}
+          onchange={onTopmostChange}
           class="h-4 w-4 cursor-pointer rounded border-input-border bg-input text-accent focus:ring-accent focus:ring-offset-0"
         />
       </label>

@@ -68,6 +68,7 @@ var (
 	lastShownNS          atomic.Int64
 	activationLossHideNS atomic.Int64
 	windowHidden         atomic.Bool // true = window is parked off-screen
+	topmostEnabled       atomic.Bool // user preference for always-on-top
 )
 
 // hideGuardWindow is the minimum time after a show during which we
@@ -119,6 +120,14 @@ func main() {
 	svc, err := service.New(dataFile)
 	if err != nil {
 		log.Fatalf("service init: %v", err)
+	}
+
+	// 3b. Load settings early so topmost preference is known before the
+	//     first showAndFocus call.
+	if s, err := svc.GetSettings(); err == nil {
+		topmostEnabled.Store(s.Topmost)
+	} else {
+		topmostEnabled.Store(true) // default
 	}
 
 	// 4. WebView2 picks up this env var before spawning msedgewebview2.exe.
@@ -190,6 +199,18 @@ func main() {
 
 	mustBind("openExternal", func(url string) {
 		winutil.OpenURL(url)
+	})
+
+	mustBind("applyTopmost", func(enabled bool) {
+		topmostEnabled.Store(enabled)
+		w.Dispatch(func() {
+			zOrder := winutil.HWND_NOTOPMOST
+			if enabled {
+				zOrder = winutil.HWND_TOPMOST
+			}
+			winutil.SetWindowPos(hwnd, zOrder, 0, 0, 0, 0,
+				winutil.SWP_NOMOVE|winutil.SWP_NOSIZE|winutil.SWP_NOACTIVATE)
+		})
 	})
 
 	const fileFilter = "CopyNote Backup (*.json)|*.json|All Files|*.*"
@@ -439,9 +460,14 @@ func showAndFocus(hwnd uintptr) {
 	targetY := wa.Bottom - height - trayCornerMargin + borderBottom
 	startY := wa.Bottom // start just below the screen
 
-	// Place at starting position and bring to front.
-	winutil.SetWindowPos(hwnd, 0, targetX, startY, 0, 0,
-		winutil.SWP_NOSIZE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE)
+	// Place at starting position. Use TOPMOST if the user has it
+	// enabled (default true) — draws above the overflow tray popup.
+	zOrder := winutil.HWND_NOTOPMOST
+	if topmostEnabled.Load() {
+		zOrder = winutil.HWND_TOPMOST
+	}
+	winutil.SetWindowPos(hwnd, zOrder, targetX, startY, 0, 0,
+		winutil.SWP_NOSIZE|winutil.SWP_NOACTIVATE)
 	winutil.SetForegroundWindow(hwnd)
 
 	// Animate slide-up.

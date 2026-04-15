@@ -117,13 +117,16 @@ const (
 	SPI_GETWORKAREA = 0x0030
 )
 
-// SetWindowPos flags we use.
+// SetWindowPos flags and z-order sentinels.
 const (
 	SWP_NOSIZE       = 0x0001
 	SWP_NOMOVE       = 0x0002
 	SWP_NOZORDER     = 0x0004
 	SWP_NOACTIVATE   = 0x0010
 	SWP_FRAMECHANGED = 0x0020
+
+	HWND_TOPMOST    uintptr = ^uintptr(0)  // (HWND)-1
+	HWND_NOTOPMOST  uintptr = ^uintptr(1)  // (HWND)-2
 )
 
 // ShowWindow → BOOL ShowWindow(HWND, int).
