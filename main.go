@@ -450,11 +450,7 @@ func showAndFocus(hwnd uintptr) {
 	width := wr.Right - wr.Left
 	height := wr.Bottom - wr.Top
 
-	var borderRight, borderBottom int32
-	if efb, ok := winutil.GetExtendedFrameBounds(hwnd); ok {
-		borderRight = wr.Right - efb.Right
-		borderBottom = wr.Bottom - efb.Bottom
-	}
+	borderRight, borderBottom := dwmInvisibleBorder(hwnd, wr)
 
 	targetX := wa.Right - width - trayCornerMargin + borderRight
 	targetY := wa.Bottom - height - trayCornerMargin + borderBottom
@@ -572,11 +568,7 @@ func anchorToTrayCorner(hwnd uintptr) {
 	// Compensate for the invisible DWM resize border, if available.
 	// If DWM is unreachable (virtualized env, etc.), fall back to
 	// raw GetWindowRect bounds.
-	var borderRight, borderBottom int32
-	if efb, ok := winutil.GetExtendedFrameBounds(hwnd); ok {
-		borderRight = wr.Right - efb.Right
-		borderBottom = wr.Bottom - efb.Bottom
-	}
+	borderRight, borderBottom := dwmInvisibleBorder(hwnd, wr)
 
 	x := wa.Right - width - trayCornerMargin + borderRight
 	y := wa.Bottom - height - trayCornerMargin + borderBottom
@@ -586,6 +578,30 @@ func anchorToTrayCorner(hwnd uintptr) {
 		x, y, 0, 0,
 		winutil.SWP_NOSIZE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE,
 	)
+}
+
+// dwmInvisibleBorder returns the right/bottom offsets of the window's
+// invisible DWM resize border (~7-9 px per DPI on Win10+). Computed as
+// GetWindowRect minus DWMWA_EXTENDED_FRAME_BOUNDS.
+//
+// On some machines DWM returns garbage values when the window is parked
+// far off-screen (e.g. at -30000, -30000), which would corrupt window
+// placement math. The returned offsets are clamped to [0, 32] px.
+func dwmInvisibleBorder(hwnd uintptr, wr winutil.Rect) (right, bottom int32) {
+	const maxInvisibleBorder = 32
+	efb, ok := winutil.GetExtendedFrameBounds(hwnd)
+	if !ok {
+		return 0, 0
+	}
+	br := wr.Right - efb.Right
+	bb := wr.Bottom - efb.Bottom
+	if br < 0 || br > maxInvisibleBorder {
+		br = 0
+	}
+	if bb < 0 || bb > maxInvisibleBorder {
+		bb = 0
+	}
+	return br, bb
 }
 
 // toggleVisibility hides the window if it's currently visible and on
