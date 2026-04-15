@@ -339,7 +339,14 @@ func resizeToContent(hwnd uintptr, contentHeight int) {
 
 	winutil.SetWindowPos(hwnd, 0, 0, 0, int32(windowWidth), int32(h),
 		winutil.SWP_NOMOVE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE)
-	anchorToTrayCorner(hwnd)
+
+	// Only re-anchor to the tray corner if the window is currently
+	// on-screen. If it's parked off-screen (hidden), just resize in
+	// place — otherwise the window would jump into view without the
+	// user clicking the tray icon.
+	if !windowHidden.Load() {
+		anchorToTrayCorner(hwnd)
+	}
 }
 
 // installSubclass installs a subclass WndProc on hwnd that intercepts
