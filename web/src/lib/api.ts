@@ -19,6 +19,7 @@ declare global {
     importData: () => Promise<void>;
     openExternal: (url: string) => Promise<void>;
     notifyReady: () => Promise<void>;
+    getVersion: () => Promise<string>;
     /** Injected at runtime by Go for tray→settings navigation. */
     __openSettings?: () => void;
     /** Injected at runtime by Go for post-import UI refresh. */
@@ -38,4 +39,5 @@ export const api = {
   saveSettings: (s: UserSettings): Promise<void> => window.saveSettings(s),
   exportData: (): Promise<void> => window.exportData(),
   importData: (): Promise<void> => window.importData(),
+  getVersion: (): Promise<string> => window.getVersion(),
 };

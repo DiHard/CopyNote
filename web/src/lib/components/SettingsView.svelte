@@ -1,6 +1,18 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { state as appState, closeSettings, saveSettings, exportData, importData } from "../state.svelte";
   import { t, availableLocales } from "../i18n";
+  import { api } from "../api";
+
+  let appVersion = $state("");
+
+  onMount(async () => {
+    try {
+      appVersion = await api.getVersion();
+    } catch {
+      appVersion = "";
+    }
+  });
 
   const themeOptions = () => [
     { value: "system", label: t("settings.theme.system") },
@@ -183,7 +195,7 @@
       <div class="rounded-lg border border-outline bg-card px-3 py-2">
         <div class="flex items-baseline justify-between">
           <span class="text-sm font-medium">{t("app.title")}</span>
-          <span class="text-[11px] text-on-surface-faint">v1.0.0 · MIT</span>
+          <span class="text-[11px] text-on-surface-faint">{appVersion ? `v${appVersion} · ` : ""}MIT</span>
         </div>
         <div class="text-xs text-on-surface-faint">
           <!-- svelte-ignore a11y_missing_attribute a11y_no_static_element_interactions a11y_click_events_have_key_events -->

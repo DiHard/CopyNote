@@ -22,6 +22,7 @@ import (
 	"copynote/internal/service"
 	"copynote/internal/singleton"
 	"copynote/internal/tray"
+	"copynote/internal/version"
 	"copynote/internal/winutil"
 )
 
@@ -199,6 +200,10 @@ func main() {
 
 	mustBind("openExternal", func(url string) {
 		winutil.OpenURL(url)
+	})
+
+	mustBind("getVersion", func() string {
+		return version.Version
 	})
 
 	mustBind("applyTopmost", func(enabled bool) {

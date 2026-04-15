@@ -196,3 +196,47 @@ Actions (refresh, create, update, delete, copy, openSettings…) are plain expor
 - **Escape**: Close modal → close settings → hide window (cascading)
 - **Enter** in modal form: Submit (create/edit)
 - **Tab**: Navigates only between copy buttons (edit/delete have `tabindex="-1"`)
+
+## Versioning
+
+### Single source of truth
+
+The application version lives in **one place only**: [internal/version/version.go](internal/version/version.go) — `var Version = "X.Y.Z"` (no leading `v`, no quotes on anything else).
+
+Everything else reads from this variable:
+- `service.ExportData` embeds it into backup JSON as `appVersion`
+- The `getVersion` bridge binding in `main.go` exposes it to the frontend
+- `SettingsView.svelte` calls `api.getVersion()` on mount and renders it in the About section
+
+Do **not** hardcode the version string in Go source, Svelte templates, or `web/package.json` (which stays at `0.0.0` — it's never published to npm). If you see a version string anywhere except `internal/version/version.go`, that's a bug — replace it with a read from `version.Version` (Go) or `api.getVersion()` (frontend).
+
+### Semantic versioning
+
+Follows [SemVer](https://semver.org): `MAJOR.MINOR.PATCH`.
+- **PATCH** (e.g. 1.0.1): bug fixes, no behavior changes visible to the user
+- **MINOR** (e.g. 1.1.0): new features, backwards-compatible
+- **MAJOR** (e.g. 2.0.0): breaking changes (removed features, changed UX, incompatible settings schema)
+
+### Schema version is separate
+
+`model.SchemaVersion` (in `internal/model/entry.go`) is the on-disk JSON format version. It is **unrelated** to the application version — it bumps only when `data.json` structure changes and storage needs a migration path. Don't bump it just because you cut an app release.
+
+### Release checklist
+
+1. Bump `Version` in `internal/version/version.go`
+2. Create `release-notes-vX.Y.Z.md` at the repo root, describing user-facing changes
+3. Rebuild frontend and Go binary with the standard commands
+4. Commit: `chore: release vX.Y.Z` (message in Russian per the Language Rule)
+5. Tag: `git tag -a vX.Y.Z -m "vX.Y.Z"`
+6. `git push && git push --tags`
+
+### CI / release-build override (optional)
+
+`Version` is a `var`, not a `const`, so a release pipeline can inject the version from the git tag without editing source:
+
+```bash
+VERSION=$(git describe --tags --abbrev=0 | sed 's/^v//')
+go build -ldflags="-H=windowsgui -s -w -X copynote/internal/version.Version=$VERSION" -o copynote.exe .
+```
+
+For local development / manual releases, just edit the `var` directly — the ldflags override is for automation.

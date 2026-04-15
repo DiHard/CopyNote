@@ -15,6 +15,7 @@ import (
 	"copynote/internal/clipboard"
 	"copynote/internal/model"
 	"copynote/internal/storage"
+	"copynote/internal/version"
 )
 
 // Errors returned from Service operations. These are surfaced to the
@@ -179,10 +180,8 @@ func (s *Service) persistLocked() error {
 
 // ── Import / Export ─────────────────────────────────────────────
 
-// AppVersion is embedded in export files for future compatibility.
-const AppVersion = "1.0.0"
-
 // backupFile is the combined structure written/read during export/import.
+// AppVersion is sourced from the single-source-of-truth version package.
 type backupFile struct {
 	AppVersion string         `json:"appVersion"`
 	Entries    []model.Entry  `json:"entries"`
@@ -200,7 +199,7 @@ func (s *Service) ExportData() ([]byte, error) {
 	}
 
 	bf := backupFile{
-		AppVersion: AppVersion,
+		AppVersion: version.Version,
 		Entries:    s.store.Entries,
 		Settings:   settings,
 	}
