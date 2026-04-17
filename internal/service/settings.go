@@ -63,6 +63,39 @@ func applyAutorun(enabled bool) {
 	}
 }
 
+// EnsureAutorunPath checks whether autorun is enabled and, if so,
+// verifies that the registry points to the current exe path. If the
+// exe has been moved (path differs), the registry value is silently
+// updated. Called once at startup — self-healing, ~1 ms, no UI.
+func (s *Service) EnsureAutorunPath() {
+	s.mu.Lock()
+	settings, err := s.loadSettingsLocked()
+	s.mu.Unlock()
+	if err != nil || !settings.Autorun {
+		return
+	}
+
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+
+	k, err := registry.OpenKey(
+		registry.CURRENT_USER,
+		autorunKeyPath,
+		registry.SET_VALUE|registry.QUERY_VALUE,
+	)
+	if err != nil {
+		return
+	}
+	defer k.Close()
+
+	current, _, err := k.GetStringValue(autorunValueName)
+	if err != nil || current != exe {
+		_ = k.SetStringValue(autorunValueName, exe)
+	}
+}
+
 // settingsPath derives the settings file path from the entries file.
 func (s *Service) settingsPath() string {
 	return filepath.Join(filepath.Dir(s.path), "settings.json")
