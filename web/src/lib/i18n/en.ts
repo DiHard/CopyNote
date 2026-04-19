@@ -5,6 +5,7 @@ export const en: Record<string, string> = {
   "header.new": "New entry",
   "header.settings": "Settings",
   "header.hide": "Hide to tray",
+  "header.updateAvailable": "Update available",
 
   // EntryList
   "list.loading": "Loading\u2026",
@@ -55,5 +56,13 @@ export const en: Record<string, string> = {
   "settings.exportOk": "Data exported successfully",
   "settings.importOk": "Data imported successfully",
   "settings.importError": "Import failed: {error}",
+  "settings.updates.title": "Updates",
+  "settings.updates.available": "Version {version} is available",
+  "settings.updates.upToDate": "You're on the latest version",
+  "settings.updates.download": "Download",
+  "settings.updates.check": "Check for updates",
+  "settings.updates.checking": "Checking\u2026",
+  "settings.updates.checkFailed": "Could not check for updates",
+  "settings.updates.autoCheck": "Automatically check for updates",
   "settings.about": "About",
 };

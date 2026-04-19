@@ -2,7 +2,7 @@
 // Each function returns a promise that rejects with an Error whose message
 // matches the Go error returned by the bound method.
 
-import type { Entry, UserSettings } from "./types";
+import type { Entry, UpdateInfo, UserSettings } from "./types";
 
 declare global {
   interface Window {
@@ -20,6 +20,9 @@ declare global {
     openExternal: (url: string) => Promise<void>;
     notifyReady: () => Promise<void>;
     getVersion: () => Promise<string>;
+    checkForUpdates: () => Promise<UpdateInfo | null>;
+    forceCheckForUpdates: () => Promise<UpdateInfo | null>;
+    markUpdateSeen: (version: string) => Promise<void>;
     /** Injected at runtime by Go for tray→settings navigation. */
     __openSettings?: () => void;
     /** Injected at runtime by Go for post-import UI refresh. */
@@ -40,4 +43,9 @@ export const api = {
   exportData: (): Promise<void> => window.exportData(),
   importData: (): Promise<void> => window.importData(),
   getVersion: (): Promise<string> => window.getVersion(),
+  checkForUpdates: (): Promise<UpdateInfo | null> => window.checkForUpdates(),
+  forceCheckForUpdates: (): Promise<UpdateInfo | null> =>
+    window.forceCheckForUpdates(),
+  markUpdateSeen: (version: string): Promise<void> =>
+    window.markUpdateSeen(version),
 };

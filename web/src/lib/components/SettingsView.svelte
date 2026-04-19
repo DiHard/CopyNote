@@ -1,6 +1,13 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { state as appState, closeSettings, saveSettings, exportData, importData } from "../state.svelte";
+  import {
+    state as appState,
+    closeSettings,
+    saveSettings,
+    exportData,
+    importData,
+    forceCheckUpdateInfo,
+  } from "../state.svelte";
   import { t, availableLocales } from "../i18n";
   import { api } from "../api";
 
@@ -43,6 +50,23 @@
   function onLocaleChange(e: Event) {
     const value = (e.target as HTMLSelectElement).value;
     void saveSettings({ locale: value });
+  }
+
+  // Auto-check toggle uses inverted semantics against the persisted
+  // `disableUpdateCheck` field so the UX label is positive.
+  function onAutoCheckChange(e: Event) {
+    const checked = (e.target as HTMLInputElement).checked;
+    void saveSettings({ disableUpdateCheck: !checked });
+  }
+
+  async function onCheckUpdates() {
+    await forceCheckUpdateInfo();
+  }
+
+  function openReleasePage() {
+    if (appState.updateInfo) {
+      window.openExternal?.(appState.updateInfo.url);
+    }
   }
 
   async function onExport() {
@@ -185,6 +209,63 @@
       {#if dataStatus}
         <p class="mt-1.5 text-[11px] text-on-surface-dim">{dataStatus}</p>
       {/if}
+    </section>
+
+    <!-- Updates -->
+    <section>
+      <h2 class="mb-2 text-[11px] font-semibold uppercase tracking-widest text-on-surface-faint">
+        {t("settings.updates.title")}
+      </h2>
+      <div class="space-y-2">
+        {#if appState.updateInfo}
+          <div class="rounded-lg border border-outline bg-card px-3 py-2.5">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-sm">
+                {t("settings.updates.available", { version: appState.updateInfo.version })}
+              </span>
+              <button
+                type="button"
+                onclick={openReleasePage}
+                class="shrink-0 rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-accent-text transition hover:bg-accent-hover"
+              >
+                {t("settings.updates.download")}
+              </button>
+            </div>
+          </div>
+        {/if}
+
+        <!-- The button doubles as the status line. Text changes with
+             updateCheckStatus to avoid layout shift from a separate
+             status card. Clicking always triggers a fresh check. -->
+        <button
+          type="button"
+          onclick={onCheckUpdates}
+          disabled={appState.updateCheckStatus.kind === "checking"}
+          class="w-full rounded-lg border border-outline bg-card px-3 py-2 text-sm text-on-surface-dim transition hover:bg-card-hover hover:text-on-surface disabled:opacity-60"
+        >
+          {#if appState.updateCheckStatus.kind === "checking"}
+            {t("settings.updates.checking")}
+          {:else if appState.updateCheckStatus.kind === "upToDate"}
+            {t("settings.updates.upToDate")}
+          {:else if appState.updateCheckStatus.kind === "failed"}
+            {t("settings.updates.checkFailed")}
+          {:else}
+            {t("settings.updates.check")}
+          {/if}
+        </button>
+
+        <label
+          class="flex cursor-pointer items-center justify-between rounded-lg border border-outline bg-card px-3 py-2.5"
+        >
+          <span class="text-sm">{t("settings.updates.autoCheck")}</span>
+          <input
+            type="checkbox"
+            checked={!appState.settings.disableUpdateCheck}
+            onchange={onAutoCheckChange}
+            class="h-4 w-4 cursor-pointer rounded border-input-border bg-input text-accent focus:ring-accent focus:ring-offset-0"
+          />
+        </label>
+      </div>
     </section>
 
     <!-- About -->

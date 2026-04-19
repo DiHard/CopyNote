@@ -1,10 +1,19 @@
-import type { Entry, ModalState, UserSettings, ViewMode } from "./types";
+import type { Entry, ModalState, UpdateInfo, UserSettings, ViewMode } from "./types";
 import { api } from "./api";
 import { setLocale, systemLocale } from "./i18n";
 
 // Single source of truth for the UI. All mutations go through the
 // action functions below, which call the Go backend and mirror the
 // server response into `state.entries`.
+/** Result of the last manual "Check for updates" click. Used only by
+ * the Settings view to show a transient status line. */
+export type UpdateCheckStatus =
+  | { kind: "idle" }
+  | { kind: "checking" }
+  | { kind: "upToDate" }
+  | { kind: "available" }
+  | { kind: "failed" };
+
 export const state = $state<{
   entries: Entry[];
   query: string;
@@ -13,6 +22,8 @@ export const state = $state<{
   loadError: string | null;
   view: ViewMode;
   settings: UserSettings;
+  updateInfo: UpdateInfo | null;
+  updateCheckStatus: UpdateCheckStatus;
 }>({
   entries: [],
   query: "",
@@ -20,8 +31,29 @@ export const state = $state<{
   loading: false,
   loadError: null,
   view: "main",
-  settings: { autorun: false, theme: "system", locale: "system", topmost: true },
+  settings: {
+    autorun: false,
+    theme: "system",
+    locale: "system",
+    topmost: true,
+    disableUpdateCheck: false,
+    lastSeenUpdateVersion: "",
+  },
+  updateInfo: null,
+  updateCheckStatus: { kind: "idle" },
 });
+
+/**
+ * True when there is an update available AND the user has not yet
+ * acknowledged it (by opening Settings for this version). Drives the
+ * orange dot on the gear icon.
+ */
+export function hasUnseenUpdate(): boolean {
+  return (
+    state.updateInfo !== null &&
+    state.updateInfo.version !== state.settings.lastSeenUpdateVersion
+  );
+}
 
 /**
  * Case-insensitive substring match on label OR value.
@@ -103,6 +135,17 @@ export function closeModal(): void {
 export function openSettings(): void {
   state.modal = null;
   state.view = "settings";
+  // Acknowledge the current update notification (if any) as soon as
+  // the user enters Settings. We update local state optimistically so
+  // the dot disappears immediately; the Go call is fire-and-forget.
+  if (hasUnseenUpdate() && state.updateInfo) {
+    const v = state.updateInfo.version;
+    state.settings.lastSeenUpdateVersion = v;
+    void api.markUpdateSeen(v).catch(() => {
+      // best-effort — a failed save just means the dot may reappear
+      // after a restart, not a correctness problem.
+    });
+  }
 }
 
 export function closeSettings(): void {
@@ -201,4 +244,41 @@ function applyTheme(mode: string): void {
 
 function setFromMedia(isDark: boolean): void {
   document.documentElement.classList.toggle("dark", isDark);
+}
+
+// ── Updates ──────────────────────────────────────────────────────
+
+/**
+ * Background check triggered at startup. Honors the
+ * disableUpdateCheck preference on the Go side. Silently no-ops on
+ * any error — update notifications are a nice-to-have, not critical.
+ */
+export async function loadUpdateInfo(): Promise<void> {
+  try {
+    state.updateInfo = await api.checkForUpdates();
+    state.updateCheckStatus = state.updateInfo
+      ? { kind: "available" }
+      : { kind: "idle" };
+  } catch {
+    // Leave updateInfo as null. The UI renders nothing.
+  }
+}
+
+/**
+ * Manual check triggered by the "Check for updates" button in
+ * Settings. Always hits the network, regardless of
+ * disableUpdateCheck. Surfaces a per-invocation status so the UI can
+ * show "checking / up to date / failed".
+ */
+export async function forceCheckUpdateInfo(): Promise<void> {
+  state.updateCheckStatus = { kind: "checking" };
+  try {
+    const info = await api.forceCheckForUpdates();
+    state.updateInfo = info;
+    state.updateCheckStatus = info
+      ? { kind: "available" }
+      : { kind: "upToDate" };
+  } catch {
+    state.updateCheckStatus = { kind: "failed" };
+  }
 }

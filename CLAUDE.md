@@ -34,6 +34,7 @@ CopyNote/
 │   ├── clipboard/    # Win32 clipboard (CF_UNICODETEXT, no cgo)
 │   ├── singleton/    # Named mutex for single-instance enforcement
 │   ├── tray/         # System tray icon + custom GDI popup menu
+│   ├── updater/      # GitHub Releases check (notify-only, no download)
 │   └── winutil/      # Shared Win32 wrappers (ShowWindow, DWM, registry…)
 │
 ├── web/
@@ -110,6 +111,10 @@ Go functions are exposed to JavaScript via `webview.Bind()`:
 | `window.importData()` | OpenFileDialog → svc.ImportData | Import from JSON, merge entries |
 | `window.openExternal(url)` | ShellExecuteW | Open URL in default browser |
 | `window.notifyReady()` | trayCtrl.SetReady | Stop tray pulse, enable LMB |
+| `window.getVersion()` | version.Version | App version string (no leading `v`) |
+| `window.checkForUpdates()` | updater.CheckLatest | Background check, honors disableUpdateCheck |
+| `window.forceCheckForUpdates()` | updater.CheckLatest | Manual check, bypasses preference |
+| `window.markUpdateSeen(version)` | svc.SaveSettings | Record acknowledged update version |
 
 All bridge calls return Promises. The Go side persists to disk on every mutation.
 
@@ -139,7 +144,7 @@ Named mutex `Local\dev.copynote.app.singleton`. Second launch broadcasts registe
 | File | Location | Format |
 |------|----------|--------|
 | Entries | `%APPDATA%\CopyNote\data.json` | `{version, entries[]}` |
-| Settings | `%APPDATA%\CopyNote\settings.json` | `{autorun, theme, locale}` |
+| Settings | `%APPDATA%\CopyNote\settings.json` | `{autorun, theme, locale, topmost, disableUpdateCheck, lastSeenUpdateVersion}` |
 | WebView2 cache | `%LOCALAPPDATA%\CopyNote\WebView2\` | Browser cache |
 | Export backup | User-chosen path | `{appVersion, entries[], settings}` |
 

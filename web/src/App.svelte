@@ -8,6 +8,7 @@
     closeSettings,
     refreshAfterImport,
     filterEntries,
+    loadUpdateInfo,
   } from "./lib/state.svelte";
   import Header from "./lib/components/Header.svelte";
   import EntryList from "./lib/components/EntryList.svelte";
@@ -22,6 +23,9 @@
     // Signal Go that the UI is ready — stops tray icon pulse
     // and enables LMB click.
     window.notifyReady?.();
+    // Background update check — fire-and-forget, runs after the UI is
+    // already interactive so it never blocks startup.
+    void loadUpdateInfo();
   });
 
   onDestroy(() => {

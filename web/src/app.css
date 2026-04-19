@@ -28,6 +28,7 @@
   --color-input: var(--t-input);
   --color-input-border: var(--t-input-border);
   --color-input-focus: var(--t-input-focus);
+  --color-update-dot: var(--t-update-dot);
 }
 
 /* ── Light (default, matches Windows 11 light Calendar widget) ── */
@@ -52,6 +53,7 @@
   --t-input: #ffffff;
   --t-input-border: #d1d1d1;
   --t-input-focus: #0078d4;
+  --t-update-dot: #ea580c; /* orange-600 — darker for light-mode contrast */
 }
 
 /* ── Dark (matches Windows 11 dark Calendar widget) ── */
@@ -76,6 +78,7 @@
   --t-input: #383838;
   --t-input-border: #4d4d4d;
   --t-input-focus: #60cdff;
+  --t-update-dot: #fb923c; /* orange-400 — lighter for dark-mode contrast */
 }
 
 html,

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"fmt"
 	"io/fs"
@@ -22,6 +23,7 @@ import (
 	"copynote/internal/service"
 	"copynote/internal/singleton"
 	"copynote/internal/tray"
+	"copynote/internal/updater"
 	"copynote/internal/version"
 	"copynote/internal/winutil"
 )
@@ -204,6 +206,50 @@ func main() {
 
 	mustBind("getVersion", func() string {
 		return version.Version
+	})
+
+	// checkForUpdates is the normal path called at startup and from the
+	// Settings view. It respects the DisableUpdateCheck preference and
+	// returns nil when the check is disabled or no newer release exists.
+	mustBind("checkForUpdates", func() *updater.ReleaseInfo {
+		s, err := svc.GetSettings()
+		if err == nil && s.DisableUpdateCheck {
+			return nil
+		}
+		info, err := updater.CheckLatest(context.Background(), version.Version)
+		if err != nil {
+			log.Printf("update check: %v", err)
+			return nil
+		}
+		return info
+	})
+
+	// forceCheckForUpdates bypasses the DisableUpdateCheck preference —
+	// wired to the "Check for updates" button, which is an explicit
+	// user action and should work regardless of the auto-check setting.
+	// Returns the raw error so the UI can distinguish "no update" from
+	// "check failed".
+	mustBind("forceCheckForUpdates", func() (*updater.ReleaseInfo, error) {
+		info, err := updater.CheckLatest(context.Background(), version.Version)
+		if err != nil {
+			return nil, err
+		}
+		return info, nil
+	})
+
+	// markUpdateSeen records that the user has acknowledged the given
+	// release version. The frontend calls this when the Settings view
+	// opens while an unseen update notification is active.
+	mustBind("markUpdateSeen", func(v string) error {
+		s, err := svc.GetSettings()
+		if err != nil {
+			return err
+		}
+		if s.LastSeenUpdateVersion == v {
+			return nil
+		}
+		s.LastSeenUpdateVersion = v
+		return svc.SaveSettings(s)
 	})
 
 	mustBind("applyTopmost", func(enabled bool) {
