@@ -125,7 +125,10 @@ func main() {
 		log.Fatalf("service init: %v", err)
 	}
 
-	// 3b. Load settings early so topmost preference is known before the
+	// 3b. Self-heal autorun registry if exe was moved.
+	svc.EnsureAutorunPath()
+
+	// 3c. Load settings early so topmost preference is known before the
 	//     first showAndFocus call.
 	if s, err := svc.GetSettings(); err == nil {
 		topmostEnabled.Store(s.Topmost)
@@ -339,6 +342,11 @@ func main() {
 		if err := trayCtrl.Run(); err != nil {
 			log.Printf("tray: %v", err)
 		}
+		// Tray exited (crash, error, or explorer.exe restart removed
+		// the icon). Terminate webview so the process doesn't hang as
+		// an invisible zombie with no tray icon.
+		quitting.Store(true)
+		w.Dispatch(func() { w.Terminate() })
 	}()
 
 	// 9. Subclass FIRST — installs WM_NCCALCSIZE handler that
