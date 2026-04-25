@@ -21,8 +21,10 @@ import (
 // Errors returned from Service operations. These are surfaced to the
 // JS side as rejected promises and can be matched via error message.
 var (
-	ErrEmptyLabel = errors.New("label must not be empty")
-	ErrNotFound   = errors.New("entry not found")
+	ErrEmptyLabel    = errors.New("label must not be empty")
+	ErrNotFound      = errors.New("entry not found")
+	ErrReorderLength = errors.New("reorder list size mismatch")
+	ErrReorderDup    = errors.New("reorder list has duplicate id")
 )
 
 // Service holds the in-memory store and persists mutations to disk.
@@ -133,6 +135,35 @@ func (s *Service) Copy(id string) (model.Entry, error) {
 		return model.Entry{}, fmt.Errorf("clipboard: %w", err)
 	}
 	return entry, nil
+}
+
+// Reorder applies a new ordering given as a slice of ids in the desired
+// final order. The slice must contain every existing entry's id exactly
+// once; partial reorderings are rejected to keep the operation atomic.
+func (s *Service) Reorder(orderedIDs []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if len(orderedIDs) != len(s.store.Entries) {
+		return ErrReorderLength
+	}
+	idx := make(map[string]int, len(orderedIDs))
+	for i, id := range orderedIDs {
+		if _, dup := idx[id]; dup {
+			return ErrReorderDup
+		}
+		idx[id] = i
+	}
+	// Verify every existing entry appears in the new order.
+	for i := range s.store.Entries {
+		if _, ok := idx[s.store.Entries[i].ID]; !ok {
+			return ErrNotFound
+		}
+	}
+	for i := range s.store.Entries {
+		s.store.Entries[i].Order = idx[s.store.Entries[i].ID]
+	}
+	return s.persistLocked()
 }
 
 // Delete removes an entry and re-packs the order values of the

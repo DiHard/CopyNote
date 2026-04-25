@@ -117,6 +117,33 @@ export async function copyEntry(id: string): Promise<void> {
   await api.copy(id);
 }
 
+/**
+ * Apply a new order to entries. Optimistically updates the local list
+ * (so the UI feels instant) and reconciles with the server result. On
+ * failure, falls back to a fresh refresh() so the UI cannot diverge
+ * from disk.
+ */
+export async function reorderEntries(orderedIds: string[]): Promise<void> {
+  const byId = new Map(state.entries.map((e) => [e.id, e]));
+  const next: Entry[] = [];
+  for (let i = 0; i < orderedIds.length; i++) {
+    const e = byId.get(orderedIds[i]);
+    if (!e) continue;
+    next.push({ ...e, order: i });
+  }
+  if (next.length !== state.entries.length) {
+    // Caller passed a malformed list; ignore and refresh instead.
+    void refresh();
+    return;
+  }
+  state.entries = next;
+  try {
+    await api.reorder(orderedIds);
+  } catch {
+    void refresh();
+  }
+}
+
 export function openCreate(): void {
   state.modal = { kind: "create" };
 }

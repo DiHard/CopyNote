@@ -189,6 +189,7 @@ func main() {
 	mustBind("create", svc.Create)
 	mustBind("update", svc.Update)
 	mustBind("remove", svc.Delete) // "delete" is a JS operator, use "remove"
+	mustBind("reorder", svc.Reorder)
 	mustBind("copy", svc.Copy)
 	mustBind("hide", func() {
 		w.Dispatch(func() {

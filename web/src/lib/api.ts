@@ -10,6 +10,7 @@ declare global {
     create: (label: string, value: string) => Promise<Entry>;
     update: (id: string, label: string, value: string) => Promise<Entry>;
     remove: (id: string) => Promise<null>;
+    reorder: (orderedIds: string[]) => Promise<null>;
     copy: (id: string) => Promise<Entry>;
     hide: () => Promise<void>;
     resizeWindow: (contentHeight: number) => Promise<void>;
@@ -37,6 +38,7 @@ export const api = {
   update: (id: string, label: string, value: string): Promise<Entry> =>
     window.update(id, label, value),
   remove: (id: string): Promise<null> => window.remove(id),
+  reorder: (orderedIds: string[]): Promise<null> => window.reorder(orderedIds),
   copy: (id: string): Promise<Entry> => window.copy(id),
   getSettings: (): Promise<UserSettings> => window.getSettings(),
   saveSettings: (s: UserSettings): Promise<void> => window.saveSettings(s),

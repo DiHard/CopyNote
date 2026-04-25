@@ -4,7 +4,21 @@
   import { t } from "../i18n";
   import { onDestroy } from "svelte";
 
-  let { entry }: { entry: Entry } = $props();
+  let {
+    entry,
+    isDragging = false,
+    dragInProgress = false,
+    dragDisabled = false,
+    onDragPointerDown,
+    onMoveByKey,
+  }: {
+    entry: Entry;
+    isDragging?: boolean;
+    dragInProgress?: boolean;
+    dragDisabled?: boolean;
+    onDragPointerDown?: (e: PointerEvent) => void;
+    onMoveByKey?: (dir: -1 | 1) => void;
+  } = $props();
 
   type CopyState = "idle" | "copied" | "failed";
   let copyState = $state<CopyState>("idle");
@@ -28,19 +42,39 @@
     }
   }
 
+  function onKeyDown(e: KeyboardEvent) {
+    if (!e.ctrlKey || dragDisabled) return;
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      onMoveByKey?.(-1);
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      onMoveByKey?.(1);
+    }
+  }
+
   onDestroy(() => {
     if (timer !== null) clearTimeout(timer);
   });
 </script>
 
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-  class="group relative flex items-stretch gap-1 rounded-lg border border-outline bg-surface-alt transition hover:border-outline-strong hover:bg-card-hover"
+  role="listitem"
+  data-entry-id={entry.id}
+  onpointerdown={(e) => onDragPointerDown?.(e)}
+  onkeydown={onKeyDown}
+  class="group relative flex items-stretch gap-1 rounded-lg border border-outline bg-surface-alt transition hover:border-outline-strong hover:bg-card-hover {isDragging
+    ? 'opacity-60 shadow-lg ring-2 ring-accent/40'
+    : ''}"
 >
   <button
     type="button"
     onclick={onCopy}
     title={t("card.copy")}
-    class="flex min-w-0 flex-1 cursor-pointer items-start px-3 py-2.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-l-lg"
+    class="flex min-w-0 flex-1 items-start px-3 py-2.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-l-lg {dragInProgress
+      ? 'cursor-grabbing'
+      : 'cursor-pointer'}"
   >
     <div class="min-w-0 flex-1">
       <div class="truncate text-sm font-semibold text-on-surface">
@@ -53,6 +87,7 @@
   </button>
 
   <div
+    data-no-drag
     class="flex shrink-0 items-center gap-1 px-2 opacity-0 transition-opacity group-hover:opacity-100 {copyState !==
     'idle'
       ? 'pointer-events-none opacity-0'

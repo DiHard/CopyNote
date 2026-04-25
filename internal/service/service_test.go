@@ -295,6 +295,84 @@ func TestCopy_EmptyValueIsAllowed(t *testing.T) {
 	}
 }
 
+func TestReorder_AppliesNewOrderAndPersists(t *testing.T) {
+	s, path, _ := newTestService(t)
+
+	// Create C, B, A → list order is A, B, C (newest first).
+	c, _ := s.Create("C", "")
+	b, _ := s.Create("B", "")
+	a, _ := s.Create("A", "")
+
+	// Move A from top to bottom: new order = B, C, A.
+	if err := s.Reorder([]string{b.ID, c.ID, a.ID}); err != nil {
+		t.Fatalf("Reorder: %v", err)
+	}
+	list := s.List()
+	wantIDs := []string{b.ID, c.ID, a.ID}
+	for i, id := range wantIDs {
+		if list[i].ID != id {
+			t.Errorf("pos %d: want %s, got %s", i, id, list[i].ID)
+		}
+		if list[i].Order != i {
+			t.Errorf("pos %d: want order %d, got %d", i, i, list[i].Order)
+		}
+	}
+
+	// Disk should reflect the new ordering after persist.
+	reload, err := storage.Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	// reload.Entries is in storage order, not necessarily by Order.
+	got := map[string]int{}
+	for _, e := range reload.Entries {
+		got[e.ID] = e.Order
+	}
+	want := map[string]int{b.ID: 0, c.ID: 1, a.ID: 2}
+	for id, w := range want {
+		if got[id] != w {
+			t.Errorf("on-disk order for %s: want %d, got %d", id, w, got[id])
+		}
+	}
+}
+
+func TestReorder_RejectsLengthMismatch(t *testing.T) {
+	s, _, _ := newTestService(t)
+	a, _ := s.Create("A", "")
+	_, _ = s.Create("B", "")
+
+	if err := s.Reorder([]string{a.ID}); !errors.Is(err, ErrReorderLength) {
+		t.Errorf("want ErrReorderLength, got %v", err)
+	}
+}
+
+func TestReorder_RejectsDuplicate(t *testing.T) {
+	s, _, _ := newTestService(t)
+	a, _ := s.Create("A", "")
+	_, _ = s.Create("B", "")
+
+	if err := s.Reorder([]string{a.ID, a.ID}); !errors.Is(err, ErrReorderDup) {
+		t.Errorf("want ErrReorderDup, got %v", err)
+	}
+}
+
+func TestReorder_RejectsUnknownID(t *testing.T) {
+	s, _, _ := newTestService(t)
+	a, _ := s.Create("A", "")
+	_, _ = s.Create("B", "")
+
+	if err := s.Reorder([]string{a.ID, "missing-id"}); !errors.Is(err, ErrNotFound) {
+		t.Errorf("want ErrNotFound, got %v", err)
+	}
+}
+
+func TestReorder_EmptyStoreEmptyList(t *testing.T) {
+	s, _, _ := newTestService(t)
+	if err := s.Reorder([]string{}); err != nil {
+		t.Errorf("Reorder on empty store should be a no-op, got %v", err)
+	}
+}
+
 func TestService_ReloadsExistingFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "data.json")
