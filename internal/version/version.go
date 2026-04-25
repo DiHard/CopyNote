@@ -12,4 +12,4 @@ package version
 // Version is the application's semantic version (MAJOR.MINOR.PATCH),
 // without a leading "v". Bump in-source for normal release commits;
 // the ldflags override is only for CI / tagged-release automation.
-var Version = "1.1.0"
+var Version = "1.2.0"
