@@ -226,14 +226,11 @@ Follows [SemVer](https://semver.org): `MAJOR.MINOR.PATCH`.
 
 `model.SchemaVersion` (in `internal/model/entry.go`) is the on-disk JSON format version. It is **unrelated** to the application version — it bumps only when `data.json` structure changes and storage needs a migration path. Don't bump it just because you cut an app release.
 
-### Release checklist
+### Release process
 
-1. Bump `Version` in `internal/version/version.go`
-2. Create `release-notes-vX.Y.Z.md` at the repo root, describing user-facing changes
-3. Rebuild frontend and Go binary with the standard commands
-4. Commit: `chore: release vX.Y.Z` (message in Russian per the Language Rule)
-5. Tag: `git tag -a vX.Y.Z -m "vX.Y.Z"`
-6. `git push && git push --tags`
+Use the **`release` skill** at [.claude/skills/release.md](.claude/skills/release.md) — it is the single source of truth for the release flow. The skill performs pre-flight checks, version bump, release notes, build, commit, tag, push, and `gh release create` with the binary attached. Triggers on phrases like "релиз vX.Y.Z", "выложи новую версию", "ship vX.Y.Z".
+
+Do not improvise or shortcut steps — past ad-hoc releases left `version.go` out of sync with what was published on GitHub.
 
 ### CI / release-build override (optional)
 
