@@ -92,7 +92,7 @@
 
 <div class="flex h-full flex-col bg-surface text-on-surface">
   <!-- Header -->
-  <div class="flex items-center gap-2 border-b border-outline bg-surface-alt px-3 py-2.5">
+  <div class="flex items-center gap-1.5 border-b border-outline bg-surface-alt px-2.5 py-2">
     <button
       type="button"
       onclick={closeSettings}
@@ -117,14 +117,14 @@
   </div>
 
   <!-- Scrollable content -->
-  <div class="flex-1 space-y-6 overflow-y-auto px-4 py-4">
+  <div class="flex-1 space-y-5 overflow-y-auto px-3 py-3">
     <!-- General -->
     <section>
-      <h2 class="mb-2 text-[11px] font-semibold uppercase tracking-widest text-on-surface-faint">
+      <h2 class="mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-on-surface-faint">
         {t("settings.general")}
       </h2>
       <label
-        class="flex cursor-pointer items-center justify-between rounded-lg border border-outline bg-card px-3 py-2.5"
+        class="flex cursor-pointer items-center justify-between rounded-lg border border-outline bg-card px-2.5 py-2"
       >
         <span class="text-sm">{t("settings.autorun")}</span>
         <input
@@ -135,7 +135,7 @@
         />
       </label>
       <label
-        class="mt-2 flex cursor-pointer items-center justify-between rounded-lg border border-outline bg-card px-3 py-2.5"
+        class="mt-1.5 flex cursor-pointer items-center justify-between rounded-lg border border-outline bg-card px-2.5 py-2"
       >
         <span class="text-sm">{t("settings.topmost")}</span>
         <input
@@ -149,12 +149,12 @@
 
     <!-- Appearance -->
     <section>
-      <h2 class="mb-2 text-[11px] font-semibold uppercase tracking-widest text-on-surface-faint">
+      <h2 class="mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-on-surface-faint">
         {t("settings.appearance")}
       </h2>
-      <div class="space-y-2">
+      <div class="space-y-1.5">
         <div
-          class="flex items-center justify-between rounded-lg border border-outline bg-card px-3 py-2.5"
+          class="flex items-center justify-between rounded-lg border border-outline bg-card px-2.5 py-2"
         >
           <span class="text-sm">{t("settings.theme")}</span>
           <select
@@ -169,7 +169,7 @@
         </div>
 
         <div
-          class="flex items-center justify-between rounded-lg border border-outline bg-card px-3 py-2.5"
+          class="flex items-center justify-between rounded-lg border border-outline bg-card px-2.5 py-2"
         >
           <span class="text-sm">{t("settings.language")}</span>
           <select
@@ -187,39 +187,39 @@
 
     <!-- Data -->
     <section>
-      <h2 class="mb-2 text-[11px] font-semibold uppercase tracking-widest text-on-surface-faint">
+      <h2 class="mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-on-surface-faint">
         {t("settings.data")}
       </h2>
-      <div class="flex gap-2">
+      <div class="flex gap-1.5">
         <button
           type="button"
           onclick={onImport}
-          class="flex-1 rounded-lg border border-outline bg-card px-3 py-2 text-sm text-on-surface-dim transition hover:bg-card-hover hover:text-on-surface"
+          class="flex-1 rounded-lg border border-outline bg-card px-2.5 py-1.5 text-sm text-on-surface-dim transition hover:bg-card-hover hover:text-on-surface"
         >
           {t("settings.import")}
         </button>
         <button
           type="button"
           onclick={onExport}
-          class="flex-1 rounded-lg border border-outline bg-card px-3 py-2 text-sm text-on-surface-dim transition hover:bg-card-hover hover:text-on-surface"
+          class="flex-1 rounded-lg border border-outline bg-card px-2.5 py-1.5 text-sm text-on-surface-dim transition hover:bg-card-hover hover:text-on-surface"
         >
           {t("settings.export")}
         </button>
       </div>
       {#if dataStatus}
-        <p class="mt-1.5 text-[11px] text-on-surface-dim">{dataStatus}</p>
+        <p class="mt-1 text-[11px] text-on-surface-dim">{dataStatus}</p>
       {/if}
     </section>
 
     <!-- Updates -->
     <section>
-      <h2 class="mb-2 text-[11px] font-semibold uppercase tracking-widest text-on-surface-faint">
+      <h2 class="mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-on-surface-faint">
         {t("settings.updates.title")}
       </h2>
-      <div class="space-y-2">
+      <div class="space-y-1.5">
         {#if appState.updateInfo}
-          <div class="rounded-lg border border-outline bg-card px-3 py-2.5">
-            <div class="flex items-center justify-between gap-2">
+          <div class="rounded-lg border border-outline bg-card px-2.5 py-2">
+            <div class="flex items-center justify-between gap-1.5">
               <span class="text-sm">
                 {t("settings.updates.available", { version: appState.updateInfo.version })}
               </span>
@@ -241,7 +241,7 @@
           type="button"
           onclick={onCheckUpdates}
           disabled={appState.updateCheckStatus.kind === "checking"}
-          class="w-full rounded-lg border border-outline bg-card px-3 py-2 text-sm text-on-surface-dim transition hover:bg-card-hover hover:text-on-surface disabled:opacity-60"
+          class="w-full rounded-lg border border-outline bg-card px-2.5 py-1.5 text-sm text-on-surface-dim transition hover:bg-card-hover hover:text-on-surface disabled:opacity-60"
         >
           {#if appState.updateCheckStatus.kind === "checking"}
             {t("settings.updates.checking")}
@@ -255,7 +255,7 @@
         </button>
 
         <label
-          class="flex cursor-pointer items-center justify-between rounded-lg border border-outline bg-card px-3 py-2.5"
+          class="flex cursor-pointer items-center justify-between rounded-lg border border-outline bg-card px-2.5 py-2"
         >
           <span class="text-sm">{t("settings.updates.autoCheck")}</span>
           <input
@@ -270,10 +270,10 @@
 
     <!-- About -->
     <section>
-      <h2 class="mb-2 text-[11px] font-semibold uppercase tracking-widest text-on-surface-faint">
+      <h2 class="mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-on-surface-faint">
         {t("settings.about")}
       </h2>
-      <div class="rounded-lg border border-outline bg-card px-3 py-2">
+      <div class="rounded-lg border border-outline bg-card px-2.5 py-1.5">
         <div class="flex items-baseline justify-between">
           <span class="text-sm font-medium">{t("app.title")}</span>
           <span class="text-[11px] text-on-surface-faint">{appVersion ? `v${appVersion} · ` : ""}MIT</span>
