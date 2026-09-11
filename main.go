@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/jchv/go-webview2"
 
@@ -41,7 +42,7 @@ func main() {
 	closeLog := initializeLogging()
 	defer closeLog()
 	// 1. Single-instance lock. If another CopyNote is already running,
-	//    broadcast a "show window" message to it and exit immediately.
+	//    ask it to show its window and exit.
 	release, already, err := singleton.Acquire(`Local\dev.copynote.app.singleton`)
 	if err != nil {
 		fatalStartup("singleton: %v", err)
@@ -49,10 +50,10 @@ func main() {
 	defer release()
 
 	if already {
-		showMsgID, err := winutil.RegisterWindowMessage("dev.copynote.app.SHOW")
-		if err == nil && showMsgID != 0 {
-			winutil.PostMessage(winutil.HWND_BROADCAST, showMsgID, 0, 0)
-		}
+		// The wait covers a running instance that is still in its
+		// WebView2 cold start and has no tray window yet.
+		delivered := tray.ShowRunningInstance(15 * time.Second)
+		log.Printf("another instance is running; show request delivered: %v", delivered)
 		return
 	}
 

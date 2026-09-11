@@ -4,8 +4,8 @@
 // menu and runs its own Win32 message loop on a dedicated OS thread.
 //
 // The package owns three Win32 objects across its lifetime:
-//   - a message-only HWND that receives tray callback and broadcast
-//     messages,
+//   - a message-only HWND that receives tray callbacks and the show
+//     request posted by a second exe launch (see ShowRunningInstance),
 //   - the tray icon registered via Shell_NotifyIcon,
 //   - a popup HMENU shown on right-click.
 //
@@ -62,8 +62,8 @@ func loadTrayIcon(hInstance uintptr) uintptr {
 // runtime.LockOSThread().
 type Tray struct {
 	// OnShow is invoked from the tray thread when the user explicitly
-	// wants to surface the main window (Open menu item, or a
-	// single-instance "show" broadcast from a second exe launch).
+	// wants to surface the main window (Open menu item, or the show
+	// request from a second exe launch).
 	OnShow func()
 
 	// OnToggle is invoked from the tray thread on left click of the
@@ -90,6 +90,10 @@ type Tray struct {
 	added     bool
 	ready     atomic.Bool // true once WebView2 has finished loading
 	timerID   uintptr     // pulse timer (0 = not running)
+
+	// showPending records a show request that arrived before WebView2
+	// finished loading; it is honoured on msgSetReady. Tray thread only.
+	showPending bool
 
 	startOnce sync.Once
 	startErr  error
@@ -284,11 +288,6 @@ func (t *Tray) Stop() {
 	_, _, _ = procPostMessageW.Call(t.hwnd, uintptr(winutil.WM_QUIT), 0, 0)
 }
 
-// ShowMessageID returns the registered window message that triggers
-// OnShow when broadcast from another process. Used by main.go to wake
-// up an existing instance from the second exe launch.
-func (t *Tray) ShowMessageID() uint32 { return t.showMsgID }
-
 func (t *Tray) setup() error {
 	if instance != nil {
 		return errors.New("tray: another instance already running in this process")
@@ -300,7 +299,7 @@ func (t *Tray) setup() error {
 	// Register the window class once. classNamePtr is a package-level
 	// var so the underlying memory survives until process exit.
 	if classNamePtr == nil {
-		ptr, err := windows.UTF16PtrFromString("CopyNoteTrayWnd")
+		ptr, err := windows.UTF16PtrFromString(trayClassName)
 		if err != nil {
 			return fmt.Errorf("class name: %w", err)
 		}
@@ -341,9 +340,9 @@ func (t *Tray) setup() error {
 	}
 	t.hwnd = hwnd
 
-	// IPC channel: a system-wide registered window message that the
-	// second exe launch broadcasts to wake us up.
-	id, err := winutil.RegisterWindowMessage("dev.copynote.app.SHOW")
+	// IPC channel: a system-wide registered window message that a second
+	// exe launch posts to this window (see ShowRunningInstance).
+	id, err := winutil.RegisterWindowMessage(showMessageName)
 	if err != nil {
 		return fmt.Errorf("register show msg: %w", err)
 	}
@@ -459,11 +458,23 @@ func trayWndProc(hwnd, msgID, wParam, lParam uintptr) uintptr {
 			_, _, _ = procShellNotifyIconW.Call(uintptr(nimModify), uintptr(unsafe.Pointer(&nid)))
 			destroyPulseIcons()
 		}
+		if t != nil && t.showPending {
+			t.showPending = false
+			if t.OnShow != nil {
+				t.OnShow()
+			}
+		}
 		return 0
 
 	default:
-		// Custom show-message broadcast from a second instance launch.
+		// Show request from a second exe launch (see ShowRunningInstance).
 		if t != nil && uint32(msgID) == t.showMsgID {
+			if !t.ready.Load() {
+				// Still loading: show once WebView2 is ready instead of
+				// sliding out an empty window.
+				t.showPending = true
+				return 0
+			}
 			if t.OnShow != nil {
 				t.OnShow()
 			}

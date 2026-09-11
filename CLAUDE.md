@@ -113,7 +113,7 @@ Go functions are exposed to JavaScript via `webview.Bind()`:
 | `window.exportData()` | svc.ExportData → SaveFileDialog | Export entries+settings to JSON |
 | `window.importData()` | OpenFileDialog → svc.ImportData | Import from JSON, merge entries |
 | `window.openExternal(url)` | ShellExecuteW | Open URL in default browser |
-| `window.notifyReady()` | trayCtrl.SetReady | Stop tray pulse, enable LMB |
+| `window.notifyReady()` | trayCtrl.SetReady | Stop tray pulse, enable LMB, honour a deferred second-launch show |
 | `window.getVersion()` | version.Version | App version string (no leading `v`) |
 | `window.checkForUpdates()` | updater.CheckLatest | Background check, honors disableUpdateCheck |
 | `window.forceCheckForUpdates()` | updater.CheckLatest | Manual check, bypasses preference |
@@ -140,7 +140,7 @@ Runs on dedicated `runtime.LockOSThread()` goroutine. Custom popup menu (GDI-pai
 
 ### Single Instance
 
-Named mutex `Local\dev.copynote.app.singleton`. Second launch broadcasts registered window message → existing instance shows.
+Named mutex `Local\dev.copynote.app.singleton`. A second launch (`tray.ShowRunningInstance`) finds the running instance's tray window via `FindWindowEx(HWND_MESSAGE, "CopyNoteTrayWnd")`, grants it foreground rights with `AllowSetForegroundWindow` and posts the registered `dev.copynote.app.SHOW` message to it directly — the tray window is message-only, and message-only windows never receive `HWND_BROADCAST`. It waits up to 15 s for that window (the running instance may still be in WebView2 cold start); a request that arrives before `notifyReady` is shown once the UI is ready.
 
 ## Data Persistence
 
