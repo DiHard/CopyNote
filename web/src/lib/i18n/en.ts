@@ -65,4 +65,6 @@ export const en: Record<string, string> = {
   "settings.updates.checkFailed": "Could not check for updates",
   "settings.updates.autoCheck": "Automatically check for updates",
   "settings.about": "About",
+  "settings.saveError": "Could not load or save settings: {error}",
+  "operation.error": "Operation failed: {error}",
 };

@@ -6,10 +6,9 @@
     loadSettings,
     openSettings,
     closeSettings,
-    refreshAfterImport,
-    filterEntries,
     loadUpdateInfo,
   } from "./lib/state.svelte";
+  import { t } from "./lib/i18n";
   import Header from "./lib/components/Header.svelte";
   import EntryList from "./lib/components/EntryList.svelte";
   import EntryModal from "./lib/components/EntryModal.svelte";
@@ -18,7 +17,6 @@
 
   onMount(async () => {
     window.__openSettings = openSettings;
-    window.__refreshAfterImport = refreshAfterImport;
     await Promise.all([refresh(), loadSettings()]);
     // Signal Go that the UI is ready — stops tray icon pulse
     // and enables LMB click.
@@ -30,7 +28,6 @@
 
   onDestroy(() => {
     delete window.__openSettings;
-    delete window.__refreshAfterImport;
   });
 
   // ── Auto-resize window to fit content ──────────────────────────
@@ -123,10 +120,12 @@
       if (modalTimer) { clearTimeout(modalTimer); modalTimer = null; }
       showModal = false;
     }
+    return () => { if (modalTimer) clearTimeout(modalTimer); };
   });
 
   /** Global keyboard shortcuts. */
   function onGlobalKeydown(e: KeyboardEvent) {
+	if (e.defaultPrevented) return;
     if (e.key === "Escape" && !appState.modal) {
       e.preventDefault();
       if (appState.view === "settings") {
@@ -148,6 +147,9 @@
   {:else}
     <main class="flex flex-col bg-surface text-on-surface">
       <Header />
+      {#if appState.operationError}
+        <p role="alert" class="px-3 text-xs text-danger">{t("operation.error", {error: appState.operationError})}</p>
+      {/if}
       <EntryList />
     </main>
 

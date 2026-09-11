@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { modalFocus } from "../modalFocus";
   import { fade } from "svelte/transition";
   import type { Entry } from "../types";
   import { closeModal, deleteEntry } from "../state.svelte";
@@ -10,6 +11,7 @@
   let error = $state<string | null>(null);
 
   async function confirm() {
+    if (busy) return;
     busy = true;
     error = null;
     try {
@@ -23,13 +25,9 @@
   }
 
   function onKeydown(e: KeyboardEvent) {
-    if (e.key === "Escape") {
+    if (e.key === "Escape" && !busy) {
       e.preventDefault();
       closeModal();
-    }
-    if (e.key === "Enter" && !busy) {
-      e.preventDefault();
-      confirm();
     }
   }
 </script>
@@ -39,18 +37,20 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div
   class="fixed inset-0 z-40 flex items-center justify-center bg-overlay p-4"
+  use:modalFocus
   role="dialog"
+  aria-labelledby="modal-title"
   aria-modal="true"
   tabindex="-1"
   onclick={(e) => {
-    if (e.target === e.currentTarget) closeModal();
+    if (e.target === e.currentTarget && !busy) closeModal();
   }}
 >
   <div
     class="w-full max-w-sm rounded-xl border border-outline bg-surface-alt p-4 shadow-2xl"
     transition:fade={{ duration: 150 }}
   >
-    <h2 class="mb-1 text-base font-semibold text-on-surface">{t("confirm.delete.title")}</h2>
+    <h2 id="modal-title" class="mb-1 text-base font-semibold text-on-surface">{t("confirm.delete.title")}</h2>
     <p class="mb-4 text-sm text-on-surface-dim">
       "{entry.label}" {t("confirm.delete.body")}
     </p>
@@ -63,6 +63,8 @@
       <button
         type="button"
         onclick={closeModal}
+        disabled={busy}
+        data-initial-focus
         class="rounded-md border border-outline bg-surface px-3 py-1.5 text-sm text-on-surface hover:bg-surface-hover"
       >
         {t("confirm.cancel")}

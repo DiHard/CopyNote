@@ -58,6 +58,10 @@ type githubRelease struct {
 // non-200 status, malformed JSON. Callers should treat errors as
 // "try again later" and surface nothing to the user.
 func CheckLatest(ctx context.Context, currentVersion string) (*ReleaseInfo, error) {
+	return checkLatest(ctx, http.DefaultClient, releasesURL, currentVersion)
+}
+
+func checkLatest(ctx context.Context, client *http.Client, endpoint, currentVersion string) (*ReleaseInfo, error) {
 	if !isSemverLike(currentVersion) {
 		// dev / empty / unparseable — refuse to nag the user.
 		return nil, nil
@@ -66,14 +70,14 @@ func CheckLatest(ctx context.Context, currentVersion string) (*ReleaseInfo, erro
 	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, releasesURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", "CopyNote/"+currentVersion+" (+https://github.com/DiHard/CopyNote)")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("http: %w", err)
 	}

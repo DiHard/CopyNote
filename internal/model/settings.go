@@ -1,7 +1,13 @@
 package model
 
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+)
+
 // Settings holds user-configurable preferences persisted to
-// %APPDATA%\CopyNote\settings.json, separate from entry data.
+// data.json alongside entries. Older settings.json files are migrated on save.
 //
 // DisableUpdateCheck uses inverted semantics on purpose: zero-value
 // (missing from older settings.json files) means "update checks are
@@ -31,4 +37,29 @@ func DefaultSettings() Settings {
 		// LastSeenUpdateVersion: "" → first non-null remote version will
 		// trigger a notification.
 	}
+}
+
+// DecodeSettings preserves defaults for fields absent in older exports.
+// Explicit nulls and missing core fields are malformed, not default values.
+func DecodeSettings(raw []byte) (Settings, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return Settings{}, err
+	}
+	if fields == nil || fields["theme"] == nil || fields["locale"] == nil {
+		return Settings{}, fmt.Errorf("settings must include theme and locale")
+	}
+	for key, value := range fields {
+		if bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+			return Settings{}, fmt.Errorf("setting %s must not be null", key)
+		}
+	}
+	s := DefaultSettings()
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return Settings{}, err
+	}
+	if err := ValidateSettings(s); err != nil {
+		return Settings{}, err
+	}
+	return s, nil
 }

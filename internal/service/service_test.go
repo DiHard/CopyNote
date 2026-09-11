@@ -1,6 +1,7 @@
 package service
 
 import (
+	"copynote/internal/testutil"
 	"errors"
 	"os"
 	"path/filepath"
@@ -15,7 +16,7 @@ import (
 // on clipboard interaction replace s.writeText with a closure of their own.
 func newTestService(t *testing.T) (*Service, string, *time.Time) {
 	t.Helper()
-	dir := t.TempDir()
+	dir := testutil.TempDir(t)
 	path := filepath.Join(dir, "data.json")
 	s, err := New(path)
 	if err != nil {
@@ -24,6 +25,7 @@ func newTestService(t *testing.T) (*Service, string, *time.Time) {
 	clock := time.Date(2026, 4, 9, 10, 0, 0, 0, time.UTC)
 	s.now = func() time.Time { return clock }
 	s.writeText = func(string) error { return nil }
+	s.setAutorun = func(bool) error { return nil }
 	return s, path, &clock
 }
 
@@ -280,7 +282,7 @@ func TestCopy_DoesNotMutateStore(t *testing.T) {
 	}
 }
 
-func TestCopy_EmptyValueIsAllowed(t *testing.T) {
+func TestCopy_EmptyValueCopiesLabel(t *testing.T) {
 	s, _, _ := newTestService(t)
 	created, _ := s.Create("Empty", "")
 	got := ""
@@ -290,8 +292,8 @@ func TestCopy_EmptyValueIsAllowed(t *testing.T) {
 	if _, err := s.Copy(created.ID); err != nil {
 		t.Fatalf("Copy: %v", err)
 	}
-	if !called || got != "" {
-		t.Errorf("want writeText called with empty string, got called=%v val=%q", called, got)
+	if !called || got != "Empty" {
+		t.Errorf("want writeText called with label, got called=%v val=%q", called, got)
 	}
 }
 
@@ -374,7 +376,7 @@ func TestReorder_EmptyStoreEmptyList(t *testing.T) {
 }
 
 func TestService_ReloadsExistingFile(t *testing.T) {
-	dir := t.TempDir()
+	dir := testutil.TempDir(t)
 	path := filepath.Join(dir, "data.json")
 
 	// Create a service, add an entry, throw it away.

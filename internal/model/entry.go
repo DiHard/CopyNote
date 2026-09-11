@@ -10,7 +10,7 @@ import (
 
 // SchemaVersion is the current version of the on-disk JSON format.
 // Bump this when introducing a breaking change to Store/Entry shape.
-const SchemaVersion = 1
+const SchemaVersion = 2
 
 // Entry is a single CopyNote record.
 //
@@ -28,6 +28,8 @@ type Entry struct {
 type Store struct {
 	Version int     `json:"version"`
 	Entries []Entry `json:"entries"`
+	// Settings is optional while migrating the legacy settings.json file.
+	Settings *Settings `json:"settings,omitempty"`
 }
 
 // NewStore returns an empty store with the current schema version.

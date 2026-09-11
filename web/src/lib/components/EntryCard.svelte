@@ -63,7 +63,6 @@
   role="listitem"
   data-entry-id={entry.id}
   onpointerdown={(e) => onDragPointerDown?.(e)}
-  onkeydown={onKeyDown}
   class="group relative flex items-stretch gap-1 rounded-lg border border-outline bg-surface-alt transition hover:border-outline-strong hover:bg-card-hover {isDragging
     ? 'opacity-60 shadow-lg ring-2 ring-accent/40'
     : ''}"
@@ -71,6 +70,7 @@
   <button
     type="button"
     onclick={onCopy}
+    onkeydown={onKeyDown}
     title={t("card.copy")}
     class="flex min-w-0 flex-1 items-start px-3 py-2.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-l-lg {dragInProgress
       ? 'cursor-grabbing'
@@ -88,7 +88,7 @@
 
   <div
     data-no-drag
-    class="flex shrink-0 items-center gap-1 px-2 opacity-0 transition-opacity group-hover:opacity-100 {copyState !==
+    class="flex shrink-0 items-center gap-1 px-2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 {copyState !==
     'idle'
       ? 'pointer-events-none opacity-0'
       : ''}"
@@ -97,7 +97,6 @@
       type="button"
       title={t("card.edit")}
       aria-label={t("card.edit")}
-      tabindex={-1}
       onclick={() => openEdit(entry)}
       class="rounded p-1 text-on-surface-dim hover:bg-surface-hover hover:text-on-surface"
     >
@@ -123,7 +122,6 @@
       type="button"
       title={t("card.delete")}
       aria-label={t("card.delete")}
-      tabindex={-1}
       onclick={() => openDelete(entry)}
       class="rounded p-1 text-on-surface-dim hover:bg-danger-dim hover:text-danger"
     >

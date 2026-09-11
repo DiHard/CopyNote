@@ -1,6 +1,6 @@
 # CopyNote
 
-[![Go](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+[![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![Svelte](https://img.shields.io/badge/Svelte-5-FF3E00?logo=svelte&logoColor=white)](https://svelte.dev/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
 [![WebView2](https://img.shields.io/badge/WebView2-Runtime-0078D4?logo=microsoftedge&logoColor=white)](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)
@@ -44,8 +44,8 @@
 
 | Инструмент | Версия |
 |-----------|--------|
-| [Go](https://go.dev/dl/) | 1.23+ |
-| [Node.js](https://nodejs.org/) | 18+ (только для сборки фронтенда) |
+| [Go](https://go.dev/dl/) | 1.25+ |
+| [Node.js](https://nodejs.org/) | 22+ (только для сборки фронтенда) |
 
 ### Шаги
 
@@ -56,7 +56,7 @@ cd CopyNote
 
 # 2. Собрать фронтенд (Svelte + Tailwind → один HTML-файл)
 cd web
-npm install
+npm ci
 npm run build
 cd ..
 
@@ -79,8 +79,9 @@ go run tools/genicon/main.go          # создаёт assets/icon-dark.ico + ic
 
 | Что | Где |
 |-----|-----|
-| Записи | `%APPDATA%\CopyNote\data.json` |
-| Настройки | `%APPDATA%\CopyNote\settings.json` |
+| Записи и настройки | `%APPDATA%\CopyNote\data.json` |
+| Предыдущая сохранённая версия | `%APPDATA%\CopyNote\data.json.bak` |
+| Журнал диагностики | `%LOCALAPPDATA%\CopyNote\copynote.log` |
 | Кэш WebView2 | `%LOCALAPPDATA%\CopyNote\WebView2\` |
 
 Рядом с исполняемым файлом ничего не хранится &mdash; можно положить куда угодно.
@@ -103,9 +104,45 @@ go run tools/genicon/main.go          # создаёт assets/icon-dark.ico + ic
 | `Escape` | Настройки | Вернуться к списку записей |
 | `Escape` | Любой диалог | Закрыть диалог |
 | `Enter` | Форма создания/редактирования | Сохранить |
-| `Enter` | Подтверждение удаления | Подтвердить |
-| `Tab` | Список записей | Навигация между записями |
+| `Enter` | Подтверждение удаления | Нажать выбранную кнопку; начальный фокус на «Отмена» |
+| `Tab` | Список записей | Переход между копированием, редактированием и удалением |
 
 ## Лицензия
 
 [MIT](LICENSE)
+
+## Надёжность и совместимость
+
+Формат данных 2 сохраняет записи и настройки одним снимком. Данные формата 1
+и прежний settings.json читаются автоматически; переход происходит при следующем
+успешном сохранении. Старый файл настроек остаётся на диске, но источником
+настроек становится data.json. После перехода используйте эту или более новую
+совместимую версию: прежние exe не понимают объединённое хранение настроек.
+
+Перед заменой данных предыдущий корректный снимок сохраняется в data.json.bak.
+Если при запуске данные не читаются, приложение предлагает восстановить корректную
+резервную копию и сохраняет исходный файл как data.json.corrupt-TIMESTAMP.
+Восстанавливается предыдущее сохранённое состояние — последнее изменение может
+отсутствовать. Если корректной копии нет, диалог сообщает путь к данным; файл
+не сбрасывается в пустой список.
+
+Импорт проверяет резервную копию до изменения данных. Старые экспорты поддерживаются;
+в новые добавлено поле formatVersion. Отмена импорта или экспорта не считается
+успехом. При пустом значении записи копируется её название.
+
+## Проверки разработки
+
+Из корня репозитория:
+
+```powershell
+go test ./...
+go vet ./...
+```
+
+В каталоге web/: npm ci, npm run check, npm test, npm run build. Тесты фронтенда
+проверяют реальный модуль состояния Svelte с подменённым мостом Go. Пользовательские
+данные, реестр и буфер обмена не затрагиваются. Windows CI выполняет эти проверки,
+проверяет актуальность встроенного web/dist и собирает exe.
+
+Происхождение локальных зависимостей и порядок их обновления описаны в
+[third_party/DEPENDENCIES.md](third_party/DEPENDENCIES.md).

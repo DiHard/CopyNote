@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { modalFocus } from "../modalFocus";
   import { fade } from "svelte/transition";
   import type { Entry } from "../types";
   import { closeModal, createEntry, updateEntry } from "../state.svelte";
@@ -41,7 +42,7 @@
   }
 
   function onKeydown(e: KeyboardEvent) {
-    if (e.key === "Escape") {
+    if (e.key === "Escape" && !saving) {
       e.preventDefault();
       closeModal();
     }
@@ -53,18 +54,20 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div
   class="fixed inset-0 z-40 flex items-center justify-center bg-overlay p-4"
+  use:modalFocus
   role="dialog"
+  aria-labelledby="modal-title"
   aria-modal="true"
   tabindex="-1"
   onclick={(e) => {
-    if (e.target === e.currentTarget) closeModal();
+    if (e.target === e.currentTarget && !saving) closeModal();
   }}
 >
   <div
     class="w-full max-w-sm rounded-xl border border-outline bg-surface-alt p-4 shadow-2xl"
     transition:fade={{ duration: 150 }}
   >
-    <h2 class="mb-3 text-base font-semibold text-on-surface">
+    <h2 id="modal-title" class="mb-3 text-base font-semibold text-on-surface">
       {isEdit ? t("modal.edit.title") : t("modal.create.title")}
     </h2>
 
@@ -108,6 +111,7 @@
         <button
           type="button"
           onclick={closeModal}
+          disabled={saving}
           class="rounded-md border border-outline bg-surface px-3 py-1.5 text-sm text-on-surface hover:bg-surface-hover"
         >
           {t("modal.cancel")}

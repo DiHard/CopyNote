@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"copynote/internal/testutil"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -11,7 +12,7 @@ import (
 )
 
 func TestLoad_MissingFile(t *testing.T) {
-	dir := t.TempDir()
+	dir := testutil.TempDir(t)
 	path := filepath.Join(dir, "nope.json")
 
 	s, err := Load(path)
@@ -27,7 +28,7 @@ func TestLoad_MissingFile(t *testing.T) {
 }
 
 func TestSaveLoad_RoundTrip(t *testing.T) {
-	dir := t.TempDir()
+	dir := testutil.TempDir(t)
 	path := filepath.Join(dir, "data.json")
 
 	now := time.Date(2026, 4, 9, 10, 0, 0, 0, time.UTC)
@@ -51,7 +52,7 @@ func TestSaveLoad_RoundTrip(t *testing.T) {
 }
 
 func TestSave_Atomic_NoTempLeftover(t *testing.T) {
-	dir := t.TempDir()
+	dir := testutil.TempDir(t)
 	path := filepath.Join(dir, "data.json")
 
 	if err := Save(path, model.NewStore()); err != nil {
@@ -63,7 +64,7 @@ func TestSave_Atomic_NoTempLeftover(t *testing.T) {
 }
 
 func TestSave_CreatesMissingParentDir(t *testing.T) {
-	dir := t.TempDir()
+	dir := testutil.TempDir(t)
 	path := filepath.Join(dir, "sub", "nested", "data.json")
 
 	if err := Save(path, model.NewStore()); err != nil {
@@ -75,7 +76,7 @@ func TestSave_CreatesMissingParentDir(t *testing.T) {
 }
 
 func TestLoad_CorruptJSON(t *testing.T) {
-	dir := t.TempDir()
+	dir := testutil.TempDir(t)
 	path := filepath.Join(dir, "data.json")
 	if err := os.WriteFile(path, []byte("{not json"), 0o644); err != nil {
 		t.Fatal(err)
@@ -86,7 +87,7 @@ func TestLoad_CorruptJSON(t *testing.T) {
 }
 
 func TestSave_OverwritesExisting(t *testing.T) {
-	dir := t.TempDir()
+	dir := testutil.TempDir(t)
 	path := filepath.Join(dir, "data.json")
 
 	first := model.Store{Version: 1, Entries: []model.Entry{{ID: "1", Label: "A", Order: 0}}}

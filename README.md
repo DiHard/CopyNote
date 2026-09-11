@@ -1,6 +1,6 @@
 # CopyNote
 
-[![Go](https://img.shields.io/badge/Go-1.23+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+[![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![Svelte](https://img.shields.io/badge/Svelte-5-FF3E00?logo=svelte&logoColor=white)](https://svelte.dev/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
 [![WebView2](https://img.shields.io/badge/WebView2-Runtime-0078D4?logo=microsoftedge&logoColor=white)](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)
@@ -44,8 +44,8 @@ The app starts minimized to the system tray. Left-click the tray icon to open.
 
 | Tool | Version |
 |------|---------|
-| [Go](https://go.dev/dl/) | 1.23+ |
-| [Node.js](https://nodejs.org/) | 18+ (only for building the frontend) |
+| [Go](https://go.dev/dl/) | 1.25+ |
+| [Node.js](https://nodejs.org/) | 22+ (only for building the frontend) |
 
 ### Steps
 
@@ -56,7 +56,7 @@ cd CopyNote
 
 # 2. Build the frontend (Svelte + Tailwind → single inlined HTML)
 cd web
-npm install
+npm ci
 npm run build
 cd ..
 
@@ -79,8 +79,9 @@ go run tools/genicon/main.go          # writes assets/icon-dark.ico + icon-light
 
 | What | Where |
 |------|-------|
-| Entries | `%APPDATA%\CopyNote\data.json` |
-| Settings | `%APPDATA%\CopyNote\settings.json` |
+| Entries and settings | `%APPDATA%\CopyNote\data.json` |
+| Previous saved snapshot | `%APPDATA%\CopyNote\data.json.bak` |
+| Diagnostic log | `%LOCALAPPDATA%\CopyNote\copynote.log` |
 | WebView2 cache | `%LOCALAPPDATA%\CopyNote\WebView2\` |
 
 No data is stored next to the executable &mdash; safe to put it anywhere.
@@ -103,9 +104,44 @@ No data is stored next to the executable &mdash; safe to put it anywhere.
 | `Escape` | Settings | Back to main view |
 | `Escape` | Any modal | Close modal |
 | `Enter` | Create/Edit form | Save |
-| `Enter` | Delete confirmation | Confirm |
-| `Tab` | Entry list | Navigate between entries |
+| `Enter` | Delete confirmation | Activate the focused button (Cancel is focused initially) |
+| `Tab` | Entry list | Navigate copy, edit and delete controls |
 
 ## License
 
 [MIT](LICENSE)
+
+## Reliability and compatibility
+
+Data schema 2 saves entries and settings as one snapshot. Schema 1 data and the
+legacy settings.json file are read automatically and migrated on the next
+successful save. The legacy file is retained, but data.json becomes authoritative.
+Use this version or a newer compatible version after migration: older executables
+do not understand the combined settings snapshot.
+
+Before replacement, the previous valid snapshot is saved to data.json.bak. If
+startup cannot read the data, CopyNote offers restoration from a valid backup
+and preserves the original as data.json.corrupt-TIMESTAMP. Recovery restores
+the previous saved version, so the latest change may be absent. Without a valid
+backup, an error dialog shows the data path; the file is never reset to empty.
+
+Import validates the backup before changing data. Legacy exports remain supported;
+new exports include formatVersion. Cancelling import/export is not reported as
+success. If an entry's value is empty, copying uses its label.
+
+## Development checks
+
+Run Go checks from the repository root:
+
+```powershell
+go test ./...
+go vet ./...
+```
+
+Run npm ci, npm run check, npm test and npm run build in web/. Frontend tests
+exercise the real Svelte state module with a fake Go bridge. They do not touch
+application data, the registry, or the clipboard. Windows CI runs these checks,
+checks the committed web/dist, and builds the executable.
+
+See [local dependency provenance](third_party/DEPENDENCIES.md) before updating
+vendored Go sources.

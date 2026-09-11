@@ -1,0 +1,43 @@
+name: Checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: web
+      - name: Check frontend
+        run: npm run check
+        working-directory: web
+      - name: Test frontend state
+        run: npm test
+        working-directory: web
+      - name: Build embedded frontend
+        run: npm run build
+        working-directory: web
+      - name: Verify committed frontend is current
+        run: git diff --exit-code --ignore-space-at-eol -- web/dist
+      - name: Test Go
+        run: go test ./...
+      - name: Vet Go
+        run: go vet ./...
+      - name: Build Windows executable
+        run: go build -ldflags="-H=windowsgui -s -w" -o build/copynote.exe .

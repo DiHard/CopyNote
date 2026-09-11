@@ -60,31 +60,33 @@ var (
 	modcomdlg32 = windows.NewLazySystemDLL("comdlg32.dll")
 
 	procGetUserDefaultUILanguage = modkernel32.NewProc("GetUserDefaultUILanguage")
-	procGetSaveFileNameW = modcomdlg32.NewProc("GetSaveFileNameW")
-	procGetOpenFileNameW = modcomdlg32.NewProc("GetOpenFileNameW")
-	moddwmapi = windows.NewLazySystemDLL("dwmapi.dll")
+	procMoveMemory               = modkernel32.NewProc("RtlMoveMemory")
+	procMessageBox               = moduser32.NewProc("MessageBoxW")
+	procGetSaveFileNameW         = modcomdlg32.NewProc("GetSaveFileNameW")
+	procGetOpenFileNameW         = modcomdlg32.NewProc("GetOpenFileNameW")
+	moddwmapi                    = windows.NewLazySystemDLL("dwmapi.dll")
 
-	procShowWindow             = moduser32.NewProc("ShowWindow")
-	procSetForegroundWindow    = moduser32.NewProc("SetForegroundWindow")
-	procIsIconic               = moduser32.NewProc("IsIconic")
-	procIsWindowVisible        = moduser32.NewProc("IsWindowVisible")
-	procPostMessageW           = moduser32.NewProc("PostMessageW")
-	procSendMessageW           = moduser32.NewProc("SendMessageW")
-	procLoadImageW             = moduser32.NewProc("LoadImageW")
-	procGetModuleHandleW       = modkernel32.NewProc("GetModuleHandleW")
-	procSetClassLongPtrW       = moduser32.NewProc("SetClassLongPtrW")
-	procCreateSolidBrush       = windows.NewLazySystemDLL("gdi32.dll").NewProc("CreateSolidBrush")
-	procShellExecuteW          = windows.NewLazySystemDLL("shell32.dll").NewProc("ShellExecuteW")
-	procRegisterWindowMessageW = moduser32.NewProc("RegisterWindowMessageW")
-	procGetWindowLongPtrW           = moduser32.NewProc("GetWindowLongPtrW")
-	procSetWindowLongPtrW           = moduser32.NewProc("SetWindowLongPtrW")
-	procSetLayeredWindowAttributes  = moduser32.NewProc("SetLayeredWindowAttributes")
-	procCallWindowProcW        = moduser32.NewProc("CallWindowProcW")
-	procSystemParametersInfoW  = moduser32.NewProc("SystemParametersInfoW")
-	procGetWindowRect          = moduser32.NewProc("GetWindowRect")
-	procSetWindowPos           = moduser32.NewProc("SetWindowPos")
-	procDwmGetWindowAttribute      = moddwmapi.NewProc("DwmGetWindowAttribute")
-	procDwmSetWindowAttribute      = moddwmapi.NewProc("DwmSetWindowAttribute")
+	procShowWindow                   = moduser32.NewProc("ShowWindow")
+	procSetForegroundWindow          = moduser32.NewProc("SetForegroundWindow")
+	procIsIconic                     = moduser32.NewProc("IsIconic")
+	procIsWindowVisible              = moduser32.NewProc("IsWindowVisible")
+	procPostMessageW                 = moduser32.NewProc("PostMessageW")
+	procSendMessageW                 = moduser32.NewProc("SendMessageW")
+	procLoadImageW                   = moduser32.NewProc("LoadImageW")
+	procGetModuleHandleW             = modkernel32.NewProc("GetModuleHandleW")
+	procSetClassLongPtrW             = moduser32.NewProc("SetClassLongPtrW")
+	procCreateSolidBrush             = windows.NewLazySystemDLL("gdi32.dll").NewProc("CreateSolidBrush")
+	procShellExecuteW                = windows.NewLazySystemDLL("shell32.dll").NewProc("ShellExecuteW")
+	procRegisterWindowMessageW       = moduser32.NewProc("RegisterWindowMessageW")
+	procGetWindowLongPtrW            = moduser32.NewProc("GetWindowLongPtrW")
+	procSetWindowLongPtrW            = moduser32.NewProc("SetWindowLongPtrW")
+	procSetLayeredWindowAttributes   = moduser32.NewProc("SetLayeredWindowAttributes")
+	procCallWindowProcW              = moduser32.NewProc("CallWindowProcW")
+	procSystemParametersInfoW        = moduser32.NewProc("SystemParametersInfoW")
+	procGetWindowRect                = moduser32.NewProc("GetWindowRect")
+	procSetWindowPos                 = moduser32.NewProc("SetWindowPos")
+	procDwmGetWindowAttribute        = moddwmapi.NewProc("DwmGetWindowAttribute")
+	procDwmSetWindowAttribute        = moddwmapi.NewProc("DwmSetWindowAttribute")
 	procDwmExtendFrameIntoClientArea = moddwmapi.NewProc("DwmExtendFrameIntoClientArea")
 )
 
@@ -125,8 +127,8 @@ const (
 	SWP_NOACTIVATE   = 0x0010
 	SWP_FRAMECHANGED = 0x0020
 
-	HWND_TOPMOST    uintptr = ^uintptr(0)  // (HWND)-1
-	HWND_NOTOPMOST  uintptr = ^uintptr(1)  // (HWND)-2
+	HWND_TOPMOST   uintptr = ^uintptr(0) // (HWND)-1
+	HWND_NOTOPMOST uintptr = ^uintptr(1) // (HWND)-2
 )
 
 // ShowWindow → BOOL ShowWindow(HWND, int).
@@ -244,25 +246,36 @@ func StringFromLPCWSTR(p uintptr) string {
 	}
 	// Walk the memory until we hit the terminating NUL, then copy
 	// out a slice of uint16 and decode with the stdlib helper.
-	var length int
-	for {
-		c := *(*uint16)(unsafe.Pointer(p + uintptr(length*2)))
+	buf := make([]uint16, 0, 512)
+	for i := 0; i < 512; i++ {
+		var c uint16
+		procMoveMemory.Call(uintptr(unsafe.Pointer(&c)), p+uintptr(i*2), 2)
 		if c == 0 {
 			break
 		}
-		length++
-		if length > 512 { // bounded sanity limit
-			break
-		}
-	}
-	if length == 0 {
-		return ""
-	}
-	buf := make([]uint16, length)
-	for i := 0; i < length; i++ {
-		buf[i] = *(*uint16)(unsafe.Pointer(p + uintptr(i*2)))
+		buf = append(buf, c)
 	}
 	return windows.UTF16ToString(buf)
+}
+
+// WriteNativeMemory copies Go-owned bytes into a caller-owned native allocation.
+func WriteNativeMemory(dst uintptr, src []byte) {
+	if len(src) == 0 {
+		return
+	}
+	procMoveMemory.Call(dst, uintptr(unsafe.Pointer(&src[0])), uintptr(len(src)))
+}
+
+// MessageBox remains usable even when the WebView or data store cannot start.
+func MessageBox(text string, question bool) bool {
+	body, _ := windows.UTF16PtrFromString(text)
+	title, _ := windows.UTF16PtrFromString("CopyNote")
+	flags := uintptr(0x10) // MB_ICONERROR
+	if question {
+		flags = 0x04 | 0x20 | 0x100
+	} // YESNO, QUESTION, default No
+	result, _, _ := procMessageBox.Call(0, uintptr(unsafe.Pointer(body)), uintptr(unsafe.Pointer(title)), flags)
+	return result == 6 // IDYES
 }
 
 // OpenURL opens a URL in the user's default browser via ShellExecuteW.

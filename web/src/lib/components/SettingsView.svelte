@@ -9,6 +9,7 @@
     forceCheckUpdateInfo,
   } from "../state.svelte";
   import { t, availableLocales } from "../i18n";
+  import type { UserSettings } from "../types";
   import { api } from "../api";
 
   let appVersion = $state("");
@@ -28,15 +29,26 @@
   ];
 
   let dataStatus = $state<string | null>(null);
+  let dataBusy = $state(false);
+
+  function savePreference(patch: Partial<UserSettings>, event: Event, inverted = false) {
+    const control = event.currentTarget as HTMLInputElement | HTMLSelectElement;
+    void saveSettings(patch).catch(() => {
+      const key = Object.keys(patch)[0] as keyof UserSettings;
+      const value = appState.settings[key];
+      if (control instanceof HTMLInputElement) control.checked = inverted ? !value : Boolean(value);
+      else control.value = String(value);
+    });
+  }
 
   function onAutorunChange(e: Event) {
     const checked = (e.target as HTMLInputElement).checked;
-    void saveSettings({ autorun: checked });
+    savePreference({ autorun: checked }, e);
   }
 
   function onTopmostChange(e: Event) {
     const checked = (e.target as HTMLInputElement).checked;
-    void saveSettings({ topmost: checked });
+    savePreference({ topmost: checked }, e);
   }
 
   function onThemeChange(e: Event) {
@@ -44,19 +56,19 @@
       | "light"
       | "dark"
       | "system";
-    void saveSettings({ theme: value });
+    savePreference({ theme: value }, e);
   }
 
   function onLocaleChange(e: Event) {
     const value = (e.target as HTMLSelectElement).value;
-    void saveSettings({ locale: value });
+    savePreference({ locale: value }, e);
   }
 
   // Auto-check toggle uses inverted semantics against the persisted
   // `disableUpdateCheck` field so the UX label is positive.
   function onAutoCheckChange(e: Event) {
     const checked = (e.target as HTMLInputElement).checked;
-    void saveSettings({ disableUpdateCheck: !checked });
+    savePreference({ disableUpdateCheck: !checked }, e, true);
   }
 
   async function onCheckUpdates() {
@@ -70,23 +82,25 @@
   }
 
   async function onExport() {
+    if (dataBusy) return;
+    dataBusy = true;
     dataStatus = null;
     try {
-      await exportData();
-      dataStatus = t("settings.exportOk");
+      if (await exportData()) dataStatus = t("settings.exportOk");
     } catch (e) {
       dataStatus = String(e);
-    }
+    } finally { dataBusy = false; }
   }
 
   async function onImport() {
+	if (dataBusy) return;
+	dataBusy = true;
     dataStatus = null;
     try {
-      await importData();
-      dataStatus = t("settings.importOk");
+      if (await importData()) dataStatus = t("settings.importOk");
     } catch (e) {
       dataStatus = t("settings.importError", { error: String(e).replace(/^Error:\s*/, "") });
-    }
+    } finally { dataBusy = false; }
   }
 </script>
 
@@ -118,6 +132,9 @@
 
   <!-- Scrollable content -->
   <div class="flex-1 space-y-5 overflow-y-auto px-3 py-3">
+    {#if appState.settingsError}
+      <p role="alert" class="text-xs text-danger">{t("settings.saveError", {error: appState.settingsError})}</p>
+    {/if}
     <!-- General -->
     <section>
       <h2 class="mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-on-surface-faint">
@@ -129,6 +146,7 @@
         <span class="text-sm">{t("settings.autorun")}</span>
         <input
           type="checkbox"
+          disabled={appState.settingsPending > 0 || dataBusy}
           checked={appState.settings.autorun}
           onchange={onAutorunChange}
           class="h-4 w-4 cursor-pointer rounded border-input-border bg-input text-accent focus:ring-accent focus:ring-offset-0"
@@ -140,6 +158,7 @@
         <span class="text-sm">{t("settings.topmost")}</span>
         <input
           type="checkbox"
+          disabled={appState.settingsPending > 0 || dataBusy}
           checked={appState.settings.topmost}
           onchange={onTopmostChange}
           class="h-4 w-4 cursor-pointer rounded border-input-border bg-input text-accent focus:ring-accent focus:ring-offset-0"
@@ -158,6 +177,8 @@
         >
           <span class="text-sm">{t("settings.theme")}</span>
           <select
+            aria-label={t("settings.theme")}
+            disabled={appState.settingsPending > 0 || dataBusy}
             value={appState.settings.theme}
             onchange={onThemeChange}
             class="cursor-pointer rounded-md border border-input-border bg-input px-2 py-1 text-sm text-on-surface focus:border-input-focus focus:outline-none"
@@ -173,6 +194,8 @@
         >
           <span class="text-sm">{t("settings.language")}</span>
           <select
+            aria-label={t("settings.language")}
+            disabled={appState.settingsPending > 0 || dataBusy}
             value={appState.settings.locale}
             onchange={onLocaleChange}
             class="cursor-pointer rounded-md border border-input-border bg-input px-2 py-1 text-sm text-on-surface focus:border-input-focus focus:outline-none"
@@ -194,6 +217,7 @@
         <button
           type="button"
           onclick={onImport}
+          disabled={dataBusy || appState.settingsPending > 0}
           class="flex-1 rounded-lg border border-outline bg-card px-2.5 py-1.5 text-sm text-on-surface-dim transition hover:bg-card-hover hover:text-on-surface"
         >
           {t("settings.import")}
@@ -201,6 +225,7 @@
         <button
           type="button"
           onclick={onExport}
+          disabled={dataBusy || appState.settingsPending > 0}
           class="flex-1 rounded-lg border border-outline bg-card px-2.5 py-1.5 text-sm text-on-surface-dim transition hover:bg-card-hover hover:text-on-surface"
         >
           {t("settings.export")}
@@ -260,6 +285,7 @@
           <span class="text-sm">{t("settings.updates.autoCheck")}</span>
           <input
             type="checkbox"
+          disabled={appState.settingsPending > 0 || dataBusy}
             checked={!appState.settings.disableUpdateCheck}
             onchange={onAutoCheckChange}
             class="h-4 w-4 cursor-pointer rounded border-input-border bg-input text-accent focus:ring-accent focus:ring-offset-0"
@@ -279,12 +305,11 @@
           <span class="text-[11px] text-on-surface-faint">{appVersion ? `v${appVersion} · ` : ""}MIT</span>
         </div>
         <div class="text-xs text-on-surface-faint">
-          <!-- svelte-ignore a11y_missing_attribute a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-          <span
-            role="link"
+          <button
+            type="button"
             onclick={() => window.openExternal?.("https://github.com/DiHard/CopyNote")}
             class="cursor-pointer text-accent hover:underline"
-          >github.com/DiHard/CopyNote</span>
+          >github.com/DiHard/CopyNote</button>
         </div>
       </div>
     </section>

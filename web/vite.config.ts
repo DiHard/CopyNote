@@ -10,7 +10,7 @@ export default defineConfig({
     emptyOutDir: true,
     target: "es2022",
     // Inline everything into index.html so Go can feed it to webview
-    // directly via SetHtml — no HTTP server, no assets to fetch.
+    // over the local HTTP server with no separate assets to fetch.
     assetsInlineLimit: 100_000_000,
     cssCodeSplit: false,
     rollupOptions: {

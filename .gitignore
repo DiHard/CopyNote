@@ -16,6 +16,7 @@ web/.vite/
 # IDE / OS
 .vscode/
 .idea/
+.claude/settings.local.json
 .DS_Store
 Thumbs.db
 

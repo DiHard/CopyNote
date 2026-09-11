@@ -1,10 +1,10 @@
 package service
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -12,126 +12,100 @@ import (
 	"golang.org/x/sys/windows/registry"
 )
 
-// GetSettings returns the current user settings. If the settings
-// file does not exist yet, returns DefaultSettings (no error).
 func (s *Service) GetSettings() (model.Settings, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.loadSettingsLocked()
 }
 
-// SaveSettings persists the given settings to settings.json next to
-// the entries data file. The write is atomic (tmp + rename).
-// If the autorun flag changed, the Windows Registry Run key is
-// updated so the app starts (or stops starting) at user login.
+// Settings and entries share one snapshot, including during import.
 func (s *Service) SaveSettings(settings model.Settings) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := s.saveSettingsLocked(settings); err != nil {
+	if err := model.ValidateSettings(settings); err != nil {
 		return err
 	}
-	applyAutorun(settings.Autorun)
+	next := s.snapshotLocked()
+	next.Settings = &settings
+	return s.commitSettingsLocked(next)
+}
+
+func (s *Service) commitSettingsLocked(next model.Store) error {
+	previous, err := s.loadSettingsLocked()
+	if err != nil {
+		return err
+	}
+	changed := previous.Autorun != next.Settings.Autorun
+	if changed {
+		if err := s.setAutorun(next.Settings.Autorun); err != nil {
+			return fmt.Errorf("update autorun: %w", err)
+		}
+	}
+	if err := s.commitLocked(next); err != nil {
+		if changed {
+			if rollbackErr := s.setAutorun(previous.Autorun); rollbackErr != nil {
+				return errors.Join(err, fmt.Errorf("restore autorun: %w", rollbackErr))
+			}
+		}
+		return err
+	}
 	return nil
 }
 
 const autorunKeyPath = `Software\Microsoft\Windows\CurrentVersion\Run`
 const autorunValueName = "CopyNote"
 
-// applyAutorun creates or removes the CopyNote entry under
-// HKCU\Software\Microsoft\Windows\CurrentVersion\Run.
-// The value points to the currently running exe so the correct
-// binary is launched even if the user moves the file.
-func applyAutorun(enabled bool) {
-	k, err := registry.OpenKey(
-		registry.CURRENT_USER,
-		autorunKeyPath,
-		registry.SET_VALUE|registry.QUERY_VALUE,
-	)
+func applyAutorun(enabled bool) error {
+	k, _, err := registry.CreateKey(registry.CURRENT_USER, autorunKeyPath, registry.SET_VALUE|registry.QUERY_VALUE)
 	if err != nil {
-		return // silently ignore — can't write to registry
+		return err
 	}
 	defer k.Close()
-
 	if enabled {
 		exe, err := os.Executable()
 		if err != nil {
-			return
+			return err
 		}
-		_ = k.SetStringValue(autorunValueName, exe)
-	} else {
-		_ = k.DeleteValue(autorunValueName)
+		return k.SetStringValue(autorunValueName, `"`+exe+`"`)
 	}
+	err = k.DeleteValue(autorunValueName)
+	if errors.Is(err, registry.ErrNotExist) {
+		return nil
+	}
+	return err
 }
 
-// EnsureAutorunPath checks whether autorun is enabled and, if so,
-// verifies that the registry points to the current exe path. If the
-// exe has been moved (path differs), the registry value is silently
-// updated. Called once at startup — self-healing, ~1 ms, no UI.
+// Reconcile the external registry state after a move or interrupted settings save.
 func (s *Service) EnsureAutorunPath() {
-	s.mu.Lock()
-	settings, err := s.loadSettingsLocked()
-	s.mu.Unlock()
-	if err != nil || !settings.Autorun {
-		return
-	}
-
-	exe, err := os.Executable()
+	settings, err := s.GetSettings()
 	if err != nil {
+		log.Printf("load autorun preference: %v", err)
 		return
 	}
-
-	k, err := registry.OpenKey(
-		registry.CURRENT_USER,
-		autorunKeyPath,
-		registry.SET_VALUE|registry.QUERY_VALUE,
-	)
-	if err != nil {
-		return
-	}
-	defer k.Close()
-
-	current, _, err := k.GetStringValue(autorunValueName)
-	if err != nil || current != exe {
-		_ = k.SetStringValue(autorunValueName, exe)
+	if err := s.setAutorun(settings.Autorun); err != nil {
+		log.Printf("apply autorun: %v", err)
 	}
 }
 
-// settingsPath derives the settings file path from the entries file.
 func (s *Service) settingsPath() string {
 	return filepath.Join(filepath.Dir(s.path), "settings.json")
 }
 
 func (s *Service) loadSettingsLocked() (model.Settings, error) {
-	p := s.settingsPath()
-	raw, err := os.ReadFile(p)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return model.DefaultSettings(), nil
-		}
-		return model.Settings{}, fmt.Errorf("read %s: %w", p, err)
+	if s.store.Settings != nil {
+		return *s.store.Settings, nil
 	}
-	var settings model.Settings
-	if err := json.Unmarshal(raw, &settings); err != nil {
-		return model.Settings{}, fmt.Errorf("parse %s: %w", p, err)
+	// One-way migration: after the next successful commit data.json is authoritative.
+	raw, err := os.ReadFile(s.settingsPath())
+	if errors.Is(err, fs.ErrNotExist) {
+		return model.DefaultSettings(), nil
+	}
+	if err != nil {
+		return model.Settings{}, fmt.Errorf("read settings: %w", err)
+	}
+	settings, err := model.DecodeSettings(raw)
+	if err != nil {
+		return model.Settings{}, fmt.Errorf("parse settings: %w", err)
 	}
 	return settings, nil
-}
-
-func (s *Service) saveSettingsLocked(settings model.Settings) error {
-	p := s.settingsPath()
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-		return fmt.Errorf("mkdir: %w", err)
-	}
-	data, err := json.MarshalIndent(settings, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal settings: %w", err)
-	}
-	tmp := p + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return fmt.Errorf("write %s: %w", tmp, err)
-	}
-	if err := os.Rename(tmp, p); err != nil {
-		return fmt.Errorf("rename %s → %s: %w", tmp, p, err)
-	}
-	return nil
 }

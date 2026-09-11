@@ -88,8 +88,8 @@ type Tray struct {
 	hwnd      uintptr
 	showMsgID uint32
 	added     bool
-	ready     atomic.Bool  // true once WebView2 has finished loading
-	timerID   uintptr      // pulse timer (0 = not running)
+	ready     atomic.Bool // true once WebView2 has finished loading
+	timerID   uintptr     // pulse timer (0 = not running)
 
 	startOnce sync.Once
 	startErr  error
@@ -111,9 +111,9 @@ const (
 	cwUseDefault = 0x80000000
 
 	// Shell_NotifyIcon actions and flags
-	nimAdd    = 0x00000000
-	nimModify = 0x00000001
-	nimDelete = 0x00000002
+	nimAdd     = 0x00000000
+	nimModify  = 0x00000001
+	nimDelete  = 0x00000002
 	nifMessage = 0x00000001
 	nifIcon    = 0x00000002
 	nifTip     = 0x00000004
@@ -216,20 +216,20 @@ var (
 	modshell32  = windows.NewLazySystemDLL("shell32.dll")
 	modkernel32 = windows.NewLazySystemDLL("kernel32.dll")
 
-	procRegisterClassExW = moduser32.NewProc("RegisterClassExW")
-	procCreateWindowExW  = moduser32.NewProc("CreateWindowExW")
-	procDestroyWindow    = moduser32.NewProc("DestroyWindow")
-	procDefWindowProcW   = moduser32.NewProc("DefWindowProcW")
-	procGetMessageW      = moduser32.NewProc("GetMessageW")
-	procTranslateMessage = moduser32.NewProc("TranslateMessage")
-	procDispatchMessageW = moduser32.NewProc("DispatchMessageW")
-	procPostQuitMessage  = moduser32.NewProc("PostQuitMessage")
-	procPostMessageW     = moduser32.NewProc("PostMessageW")
-	procLoadIconW        = moduser32.NewProc("LoadIconW")
-	procLoadImageW       = moduser32.NewProc("LoadImageW")
-	procGetCursorPos     = moduser32.NewProc("GetCursorPos")
-	procSetTimer         = moduser32.NewProc("SetTimer")
-	procKillTimer        = moduser32.NewProc("KillTimer")
+	procRegisterClassExW   = moduser32.NewProc("RegisterClassExW")
+	procCreateWindowExW    = moduser32.NewProc("CreateWindowExW")
+	procDestroyWindow      = moduser32.NewProc("DestroyWindow")
+	procDefWindowProcW     = moduser32.NewProc("DefWindowProcW")
+	procGetMessageW        = moduser32.NewProc("GetMessageW")
+	procTranslateMessage   = moduser32.NewProc("TranslateMessage")
+	procDispatchMessageW   = moduser32.NewProc("DispatchMessageW")
+	procPostQuitMessage    = moduser32.NewProc("PostQuitMessage")
+	procPostMessageW       = moduser32.NewProc("PostMessageW")
+	procLoadIconW          = moduser32.NewProc("LoadIconW")
+	procLoadImageW         = moduser32.NewProc("LoadImageW")
+	procGetCursorPos       = moduser32.NewProc("GetCursorPos")
+	procSetTimer           = moduser32.NewProc("SetTimer")
+	procKillTimer          = moduser32.NewProc("KillTimer")
 	procGetIconInfo        = moduser32.NewProc("GetIconInfo")
 	procCreateIconIndirect = moduser32.NewProc("CreateIconIndirect")
 	procDestroyIcon        = moduser32.NewProc("DestroyIcon")
@@ -326,11 +326,11 @@ func (t *Tray) setup() error {
 	}
 
 	hwnd, _, createErr := procCreateWindowExW.Call(
-		0,                                 // dwExStyle
+		0,                                     // dwExStyle
 		uintptr(unsafe.Pointer(classNamePtr)), // lpClassName
 		uintptr(unsafe.Pointer(classNamePtr)), // lpWindowName
-		0,                                 // dwStyle
-		0, 0, 0, 0,                        // x, y, w, h
+		0,                                     // dwStyle
+		0, 0, 0, 0,                            // x, y, w, h
 		hwndMessage, // hWndParent (HWND_MESSAGE)
 		0,           // hMenu
 		hInstance,   // hInstance
@@ -669,11 +669,10 @@ func createAlphaIcon(srcIcon uintptr, alphaFrac float64) uintptr {
 
 	// Copy modified pixels into the new bitmap (flip rows for bottom-up).
 	stride := w * 4
-	dst := unsafe.Slice((*byte)(unsafe.Pointer(pBits)), len(pixels))
 	for row := 0; row < h; row++ {
 		srcOff := row * stride
 		dstOff := (h - 1 - row) * stride
-		copy(dst[dstOff:dstOff+stride], pixels[srcOff:srcOff+stride])
+		winutil.WriteNativeMemory(pBits+uintptr(dstOff), pixels[srcOff:srcOff+stride])
 	}
 
 	// Build a new icon from modified color bitmap + original mask.

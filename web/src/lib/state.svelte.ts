@@ -1,4 +1,5 @@
 import type { Entry, ModalState, UpdateInfo, UserSettings, ViewMode } from "./types";
+import { createTaskQueue } from "./taskQueue";
 import { api } from "./api";
 import { setLocale, systemLocale } from "./i18n";
 
@@ -22,6 +23,9 @@ export const state = $state<{
   loadError: string | null;
   view: ViewMode;
   settings: UserSettings;
+  settingsError: string | null;
+  settingsPending: number;
+  operationError: string | null;
   updateInfo: UpdateInfo | null;
   updateCheckStatus: UpdateCheckStatus;
 }>({
@@ -39,6 +43,9 @@ export const state = $state<{
     disableUpdateCheck: false,
     lastSeenUpdateVersion: "",
   },
+  settingsError: null,
+  settingsPending: 0,
+  operationError: null,
   updateInfo: null,
   updateCheckStatus: { kind: "idle" },
 });
@@ -136,11 +143,13 @@ export async function reorderEntries(orderedIds: string[]): Promise<void> {
     void refresh();
     return;
   }
+  state.operationError = null;
   state.entries = next;
   try {
     await api.reorder(orderedIds);
-  } catch {
-    void refresh();
+  } catch (error) {
+    await refresh();
+    state.operationError = String(error);
   }
 }
 
@@ -162,16 +171,8 @@ export function closeModal(): void {
 export function openSettings(): void {
   state.modal = null;
   state.view = "settings";
-  // Acknowledge the current update notification (if any) as soon as
-  // the user enters Settings. We update local state optimistically so
-  // the dot disappears immediately; the Go call is fire-and-forget.
   if (hasUnseenUpdate() && state.updateInfo) {
-    const v = state.updateInfo.version;
-    state.settings.lastSeenUpdateVersion = v;
-    void api.markUpdateSeen(v).catch(() => {
-      // best-effort — a failed save just means the dot may reappear
-      // after a restart, not a correctness problem.
-    });
+    void saveSettings({ lastSeenUpdateVersion: state.updateInfo.version }).catch(() => {});
   }
 }
 
@@ -181,20 +182,19 @@ export function closeSettings(): void {
 
 // ── Import / Export ──────────────────────────────────────────────
 
-export async function exportData(): Promise<void> {
-  await api.exportData();
+// Import/export and preference writes share a queue so snapshots cannot overwrite each other.
+const enqueueSettings = createTaskQueue();
+
+export function exportData(): Promise<boolean> {
+  return enqueueSettings(() => api.exportData());
 }
 
-export async function importData(): Promise<void> {
-  await api.importData();
-  // The Go side calls __refreshAfterImport via Eval after import
-  // succeeds, which triggers refresh + loadSettings below.
-}
-
-/** Called from Go after a successful import to reload everything. */
-export function refreshAfterImport(): void {
-  void refresh();
-  void loadSettings();
+export function importData(): Promise<boolean> {
+  return enqueueSettings(async () => {
+    const imported = await api.importData();
+    if (imported) await Promise.all([refresh(), loadSettings()]);
+    return imported;
+  });
 }
 
 // ── Settings ─────────────────────────────────────────────────────
@@ -202,31 +202,32 @@ export function refreshAfterImport(): void {
 export async function loadSettings(): Promise<void> {
   try {
     state.settings = await api.getSettings();
-  } catch {
-    // Silently fall back to defaults; settings UI will still render.
+    state.settingsError = null;
+  } catch (error) {
+    state.settingsError = String(error);
   }
   applyTheme(state.settings.theme);
   applyLocale(state.settings.locale);
-  // @ts-expect-error - injected by Go via webview.Bind
   window.applyTopmost?.(state.settings.topmost);
 }
 
-export async function saveSettings(
-  patch: Partial<UserSettings>,
-): Promise<void> {
-  const merged = { ...state.settings, ...patch };
-  await api.saveSettings(merged);
-  state.settings = merged;
-  if ("theme" in patch) {
-    applyTheme(merged.theme);
-  }
-  if ("locale" in patch) {
-    applyLocale(merged.locale);
-  }
-  if ("topmost" in patch) {
-    // @ts-expect-error - injected by Go via webview.Bind
-    window.applyTopmost?.(merged.topmost);
-  }
+export function saveSettings(patch: Partial<UserSettings>): Promise<void> {
+  state.settingsPending++;
+  return enqueueSettings(async () => {
+    state.settingsError = null;
+    // Read the latest successful state when this operation starts, not when queued.
+    const merged = { ...state.settings, ...patch };
+    try {
+      await api.saveSettings(merged);
+      state.settings = merged;
+      applyTheme(merged.theme);
+      applyLocale(merged.locale);
+      await window.applyTopmost?.(merged.topmost);
+    } catch (error) {
+      state.settingsError = String(error);
+      throw error;
+    }
+  }).finally(() => { state.settingsPending--; });
 }
 
 function applyLocale(locale: string): void {
@@ -280,9 +281,14 @@ function setFromMedia(isDark: boolean): void {
  * disableUpdateCheck preference on the Go side. Silently no-ops on
  * any error — update notifications are a nice-to-have, not critical.
  */
+let updateRequest = 0;
+
 export async function loadUpdateInfo(): Promise<void> {
+  const request = ++updateRequest;
   try {
-    state.updateInfo = await api.checkForUpdates();
+    const info = await api.checkForUpdates();
+    if (request !== updateRequest) return;
+    state.updateInfo = info;
     state.updateCheckStatus = state.updateInfo
       ? { kind: "available" }
       : { kind: "idle" };
@@ -298,14 +304,17 @@ export async function loadUpdateInfo(): Promise<void> {
  * show "checking / up to date / failed".
  */
 export async function forceCheckUpdateInfo(): Promise<void> {
+  const request = ++updateRequest;
   state.updateCheckStatus = { kind: "checking" };
   try {
     const info = await api.forceCheckForUpdates();
+    if (request !== updateRequest) return;
     state.updateInfo = info;
     state.updateCheckStatus = info
       ? { kind: "available" }
       : { kind: "upToDate" };
   } catch {
+    if (request !== updateRequest) return;
     state.updateCheckStatus = { kind: "failed" };
   }
 }

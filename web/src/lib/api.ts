@@ -16,18 +16,16 @@ declare global {
     resizeWindow: (contentHeight: number) => Promise<void>;
     getSettings: () => Promise<UserSettings>;
     saveSettings: (settings: UserSettings) => Promise<void>;
-    exportData: () => Promise<void>;
-    importData: () => Promise<void>;
+    exportData: () => Promise<boolean>;
+    importData: () => Promise<boolean>;
     openExternal: (url: string) => Promise<void>;
     notifyReady: () => Promise<void>;
     getVersion: () => Promise<string>;
     checkForUpdates: () => Promise<UpdateInfo | null>;
     forceCheckForUpdates: () => Promise<UpdateInfo | null>;
-    markUpdateSeen: (version: string) => Promise<void>;
+    applyTopmost: (enabled: boolean) => Promise<void>;
     /** Injected at runtime by Go for tray→settings navigation. */
     __openSettings?: () => void;
-    /** Injected at runtime by Go for post-import UI refresh. */
-    __refreshAfterImport?: () => void;
   }
 }
 
@@ -42,12 +40,10 @@ export const api = {
   copy: (id: string): Promise<Entry> => window.copy(id),
   getSettings: (): Promise<UserSettings> => window.getSettings(),
   saveSettings: (s: UserSettings): Promise<void> => window.saveSettings(s),
-  exportData: (): Promise<void> => window.exportData(),
-  importData: (): Promise<void> => window.importData(),
+  exportData: (): Promise<boolean> => window.exportData(),
+  importData: (): Promise<boolean> => window.importData(),
   getVersion: (): Promise<string> => window.getVersion(),
   checkForUpdates: (): Promise<UpdateInfo | null> => window.checkForUpdates(),
   forceCheckForUpdates: (): Promise<UpdateInfo | null> =>
     window.forceCheckForUpdates(),
-  markUpdateSeen: (version: string): Promise<void> =>
-    window.markUpdateSeen(version),
 };

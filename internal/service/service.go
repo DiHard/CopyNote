@@ -36,7 +36,9 @@ type Service struct {
 	// now is overridable for deterministic tests.
 	now func() time.Time
 	// writeText is overridable for tests; defaults to clipboard.WriteText.
-	writeText func(string) error
+	writeText  func(string) error
+	setAutorun func(bool) error
+	saveStore  func(string, model.Store) error
 }
 
 // New loads the store from path and returns a ready-to-use Service.
@@ -47,10 +49,12 @@ func New(path string) (*Service, error) {
 		return nil, fmt.Errorf("load store: %w", err)
 	}
 	return &Service{
-		path:      path,
-		store:     s,
-		now:       func() time.Time { return time.Now().UTC() },
-		writeText: clipboard.WriteText,
+		path:       path,
+		store:      s,
+		now:        func() time.Time { return time.Now().UTC() },
+		writeText:  clipboard.WriteText,
+		setAutorun: applyAutorun,
+		saveStore:  storage.Save,
 	}, nil
 }
 
@@ -71,12 +75,16 @@ func (s *Service) Create(label, value string) (model.Entry, error) {
 	if label == "" {
 		return model.Entry{}, ErrEmptyLabel
 	}
+	if err := model.ValidateEntry(label, value); err != nil {
+		return model.Entry{}, err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	now := s.now()
-	for i := range s.store.Entries {
-		s.store.Entries[i].Order++
+	next := s.snapshotLocked()
+	for i := range next.Entries {
+		next.Entries[i].Order++
 	}
 	entry := model.Entry{
 		ID:        model.NewUUID(),
@@ -86,8 +94,8 @@ func (s *Service) Create(label, value string) (model.Entry, error) {
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
-	s.store.Entries = append(s.store.Entries, entry)
-	if err := s.persistLocked(); err != nil {
+	next.Entries = append(next.Entries, entry)
+	if err := s.commitLocked(next); err != nil {
 		return model.Entry{}, err
 	}
 	return entry, nil
@@ -100,6 +108,9 @@ func (s *Service) Update(id, label, value string) (model.Entry, error) {
 	if label == "" {
 		return model.Entry{}, ErrEmptyLabel
 	}
+	if err := model.ValidateEntry(label, value); err != nil {
+		return model.Entry{}, err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -107,10 +118,11 @@ func (s *Service) Update(id, label, value string) (model.Entry, error) {
 	if idx < 0 {
 		return model.Entry{}, ErrNotFound
 	}
-	s.store.Entries[idx].Label = label
-	s.store.Entries[idx].Value = value
-	s.store.Entries[idx].UpdatedAt = s.now()
-	if err := s.persistLocked(); err != nil {
+	next := s.snapshotLocked()
+	next.Entries[idx].Label = label
+	next.Entries[idx].Value = value
+	next.Entries[idx].UpdatedAt = s.now()
+	if err := s.commitLocked(next); err != nil {
 		return model.Entry{}, err
 	}
 	return s.store.Entries[idx], nil
@@ -160,10 +172,11 @@ func (s *Service) Reorder(orderedIDs []string) error {
 			return ErrNotFound
 		}
 	}
-	for i := range s.store.Entries {
-		s.store.Entries[i].Order = idx[s.store.Entries[i].ID]
+	next := s.snapshotLocked()
+	for i := range next.Entries {
+		next.Entries[i].Order = idx[next.Entries[i].ID]
 	}
-	return s.persistLocked()
+	return s.commitLocked(next)
 }
 
 // Delete removes an entry and re-packs the order values of the
@@ -176,9 +189,13 @@ func (s *Service) Delete(id string) error {
 	if idx < 0 {
 		return ErrNotFound
 	}
-	s.store.Entries = append(s.store.Entries[:idx], s.store.Entries[idx+1:]...)
-	s.repackLocked()
-	return s.persistLocked()
+	next := s.snapshotLocked()
+	next.Entries = append(next.Entries[:idx], next.Entries[idx+1:]...)
+	sort.SliceStable(next.Entries, func(i, j int) bool { return next.Entries[i].Order < next.Entries[j].Order })
+	for i := range next.Entries {
+		next.Entries[i].Order = i
+	}
+	return s.commitLocked(next)
 }
 
 // findLocked returns the index of an entry by id, or -1 if absent.
@@ -192,21 +209,27 @@ func (s *Service) findLocked(id string) int {
 	return -1
 }
 
-// repackLocked renumbers entries so that order is 0, 1, 2… with no
-// gaps, based on the current order values. Must be called with s.mu held.
-func (s *Service) repackLocked() {
-	sort.SliceStable(s.store.Entries, func(i, j int) bool {
-		return s.store.Entries[i].Order < s.store.Entries[j].Order
-	})
-	for i := range s.store.Entries {
-		s.store.Entries[i].Order = i
-	}
+func (s *Service) snapshotLocked() model.Store {
+	next := s.store
+	next.Entries = append([]model.Entry{}, s.store.Entries...)
+	return next
 }
 
-// persistLocked flushes the in-memory store to disk. Must be called
-// with s.mu held.
-func (s *Service) persistLocked() error {
-	return storage.Save(s.path, s.store)
+// Publish only after the complete snapshot has reached disk.
+func (s *Service) commitLocked(next model.Store) error {
+	if next.Settings == nil {
+		settings, err := s.loadSettingsLocked()
+		if err != nil {
+			return err
+		}
+		next.Settings = &settings
+	}
+	next.Version = model.SchemaVersion
+	if err := s.saveStore(s.path, next); err != nil {
+		return err
+	}
+	s.store = next
+	return nil
 }
 
 // ── Import / Export ─────────────────────────────────────────────
@@ -214,9 +237,10 @@ func (s *Service) persistLocked() error {
 // backupFile is the combined structure written/read during export/import.
 // AppVersion is sourced from the single-source-of-truth version package.
 type backupFile struct {
-	AppVersion string         `json:"appVersion"`
-	Entries    []model.Entry  `json:"entries"`
-	Settings   model.Settings `json:"settings"`
+	FormatVersion int            `json:"formatVersion,omitempty"`
+	AppVersion    string         `json:"appVersion"`
+	Entries       []model.Entry  `json:"entries"`
+	Settings      model.Settings `json:"settings"`
 }
 
 // ExportData returns a JSON blob containing all entries and settings.
@@ -230,9 +254,10 @@ func (s *Service) ExportData() ([]byte, error) {
 	}
 
 	bf := backupFile{
-		AppVersion: version.Version,
-		Entries:    s.store.Entries,
-		Settings:   settings,
+		FormatVersion: 1,
+		AppVersion:    version.Version,
+		Entries:       s.store.Entries,
+		Settings:      settings,
 	}
 	data, err := json.MarshalIndent(bf, "", "  ")
 	if err != nil {
@@ -244,19 +269,39 @@ func (s *Service) ExportData() ([]byte, error) {
 // ImportData merges entries from a backup JSON blob and overwrites
 // settings. Duplicate entries (same label + value) are skipped.
 func (s *Service) ImportData(raw []byte) error {
-	var bf backupFile
-	if err := json.Unmarshal(raw, &bf); err != nil {
+	// Pointer fields distinguish missing/null values from a valid empty backup.
+	var input struct {
+		FormatVersion int             `json:"formatVersion"`
+		AppVersion    string          `json:"appVersion"`
+		Entries       *[]model.Entry  `json:"entries"`
+		Settings      json.RawMessage `json:"settings"`
+	}
+	if err := json.Unmarshal(raw, &input); err != nil {
 		return fmt.Errorf("invalid backup file: %w", err)
+	}
+	if input.AppVersion == "" || input.Entries == nil || len(input.Settings) == 0 || string(input.Settings) == "null" {
+		return errors.New("invalid backup: appVersion, entries and settings are required")
+	}
+	if input.FormatVersion < 0 || input.FormatVersion > 1 {
+		return errors.New("unsupported backup format version")
+	}
+	settings, err := model.DecodeSettings(input.Settings)
+	if err != nil {
+		return fmt.Errorf("invalid settings: %w", err)
+	}
+	entries := *input.Entries
+	for i := range entries {
+		entries[i].Label = strings.TrimSpace(entries[i].Label)
+		if err := model.ValidateEntry(entries[i].Label, entries[i].Value); err != nil {
+			return fmt.Errorf("entry %d: %w", i+1, err)
+		}
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Overwrite settings.
-	if err := s.saveSettingsLocked(bf.Settings); err != nil {
-		return fmt.Errorf("save settings: %w", err)
-	}
-	applyAutorun(bf.Settings.Autorun)
+	next := s.snapshotLocked()
+	next.Settings = &settings
 
 	// Build a set of existing label+value pairs for dedup.
 	type key struct{ label, value string }
@@ -275,12 +320,12 @@ func (s *Service) ImportData(raw []byte) error {
 
 	// Append non-duplicate entries with fresh IDs and sequential order.
 	now := s.now()
-	for _, e := range bf.Entries {
+	for _, e := range entries {
 		if existing[key{e.Label, e.Value}] {
 			continue
 		}
 		maxOrder++
-		s.store.Entries = append(s.store.Entries, model.Entry{
+		next.Entries = append(next.Entries, model.Entry{
 			ID:        model.NewUUID(),
 			Label:     e.Label,
 			Value:     e.Value,
@@ -291,5 +336,5 @@ func (s *Service) ImportData(raw []byte) error {
 		existing[key{e.Label, e.Value}] = true
 	}
 
-	return s.persistLocked()
+	return s.commitSettingsLocked(next)
 }
