@@ -21,13 +21,36 @@ import (
 	"copynote/internal/winutil"
 )
 
-// Visual constants.
+// Visual constants in 96-DPI pixels, scaled by popupMetricsFor.
 const (
 	popupItemHeight = 36
 	popupPadV       = 6
 	popupPadH       = 16
 	popupMinWidth   = 180
+	popupHoverInset = 4
+	popupFontHeight = 14
 )
+
+// popupMetrics holds the popup sizes in physical pixels for the DPI of
+// the monitor the popup opens on (the process is per-monitor DPI aware).
+type popupMetrics struct {
+	dpi                              uint32
+	itemHeight, padV, padH, minWidth int32
+	hoverInset, fontHeight           int32
+}
+
+func popupMetricsFor(dpi uint32) popupMetrics {
+	s := func(v int32) int32 { return winutil.ScaleForDPI(v, dpi) }
+	return popupMetrics{
+		dpi:        dpi,
+		itemHeight: s(popupItemHeight),
+		padV:       s(popupPadV),
+		padH:       s(popupPadH),
+		minWidth:   s(popupMinWidth),
+		hoverInset: s(popupHoverInset),
+		fontHeight: s(popupFontHeight),
+	}
+}
 
 // COLORREF values are 0x00BBGGRR.
 // Light theme (default).
@@ -87,31 +110,28 @@ const (
 
 	bkTransparent = 1
 
-	smCXScreen = 0
-	smCYScreen = 1
-
 	dwmaWindowCornerPreference = 33
 	dwmwcpRound                = 2
 
-	fwNormal           = 400
-	defaultCharset     = 1
-	clearTypeQuality   = 5
+	fwNormal         = 400
+	defaultCharset   = 1
+	clearTypeQuality = 5
 )
 
 var (
 	modgdi32  = windows.NewLazySystemDLL("gdi32.dll")
 	moddwmapi = windows.NewLazySystemDLL("dwmapi.dll")
 
-	procBeginPaint           = moduser32.NewProc("BeginPaint")
-	procEndPaint             = moduser32.NewProc("EndPaint")
-	procFillRect             = moduser32.NewProc("FillRect")
-	procDrawTextW            = moduser32.NewProc("DrawTextW")
-	procInvalidateRect       = moduser32.NewProc("InvalidateRect")
-	procGetClientRect        = moduser32.NewProc("GetClientRect")
-	procTrackMouseEvent      = moduser32.NewProc("TrackMouseEvent")
-	procGetSystemMetrics     = moduser32.NewProc("GetSystemMetrics")
-	procGetDC                = moduser32.NewProc("GetDC")
-	procReleaseDC            = moduser32.NewProc("ReleaseDC")
+	procBeginPaint       = moduser32.NewProc("BeginPaint")
+	procEndPaint         = moduser32.NewProc("EndPaint")
+	procFillRect         = moduser32.NewProc("FillRect")
+	procDrawTextW        = moduser32.NewProc("DrawTextW")
+	procInvalidateRect   = moduser32.NewProc("InvalidateRect")
+	procGetClientRect    = moduser32.NewProc("GetClientRect")
+	procTrackMouseEvent  = moduser32.NewProc("TrackMouseEvent")
+	procGetSystemMetrics = moduser32.NewProc("GetSystemMetrics")
+	procGetDC            = moduser32.NewProc("GetDC")
+	procReleaseDC        = moduser32.NewProc("ReleaseDC")
 
 	procCreateFontW          = modgdi32.NewProc("CreateFontW")
 	procDeleteObject         = modgdi32.NewProc("DeleteObject")
@@ -166,7 +186,9 @@ var (
 	popupOnPick   func(uint32)
 	popupTracking bool
 
+	popupM          = popupMetricsFor(winutil.BaseDPI)
 	popupFont       uintptr
+	popupFontDPI    uint32 // DPI popupFont was created for
 	popupBrushBg    uintptr
 	popupBrushHover uintptr
 )
@@ -175,6 +197,10 @@ var (
 // (x, y) with the given items. onPick is invoked from the popup's
 // WndProc on the same thread when the user clicks an item.
 func showCustomPopup(items []popupItem, x, y int32, onPick func(uint32)) {
+	mon := winutil.MonitorFromRect(winutil.Rect{Left: x, Top: y, Right: x + 1, Bottom: y + 1},
+		winutil.MONITOR_DEFAULTTONEAREST)
+	popupM = popupMetricsFor(winutil.DpiForMonitor(mon))
+
 	ensurePopupRegistered()
 	ensurePopupResources()
 
@@ -184,14 +210,15 @@ func showCustomPopup(items []popupItem, x, y int32, onPick func(uint32)) {
 
 	width, height := measurePopup(items)
 
-	// Adjust to keep on-screen — open above cursor if it would clip.
-	sw, _, _ := procGetSystemMetrics.Call(uintptr(smCXScreen))
-	sh, _, _ := procGetSystemMetrics.Call(uintptr(smCYScreen))
-	if x+int32(width) > int32(sw) {
-		x = int32(sw) - int32(width)
-	}
-	if y+int32(height) > int32(sh) {
-		y -= int32(height)
+	// Keep the popup on the cursor's monitor — open it above the cursor
+	// if it would run off the bottom edge.
+	if mb, ok := winutil.MonitorBounds(mon); ok {
+		if x+width > mb.Right {
+			x = mb.Right - width
+		}
+		if y+height > mb.Bottom {
+			y -= height
+		}
 	}
 
 	hInstance, _, _ := procGetModuleHandleW.Call(0)
@@ -259,9 +286,13 @@ func ensurePopupResources() {
 		popupBrushHover = 0
 	}
 
+	if popupFont != 0 && popupFontDPI != popupM.dpi {
+		_, _, _ = procDeleteObject.Call(popupFont)
+		popupFont = 0
+	}
 	if popupFont == 0 {
 		name, _ := windows.UTF16PtrFromString("Segoe UI")
-		nHeight := int32(-14)
+		nHeight := -popupM.fontHeight // negative: character height in pixels
 		h, _, _ := procCreateFontW.Call(
 			uintptr(uint32(nHeight)),
 			0, 0, 0,
@@ -274,6 +305,7 @@ func ensurePopupResources() {
 			uintptr(unsafe.Pointer(name)),
 		)
 		popupFont = h
+		popupFontDPI = popupM.dpi
 	}
 	bg, _, _ := procCreateSolidBrush.Call(uintptr(colorBg))
 	popupBrushBg = bg
@@ -296,13 +328,13 @@ func releasePopupResources() {
 	}
 }
 
-func measurePopup(items []popupItem) (int, int) {
+func measurePopup(items []popupItem) (int32, int32) {
 	hdc, _, _ := procGetDC.Call(0)
 	defer procReleaseDC.Call(0, hdc)
 
 	_, _, _ = procSelectObject.Call(hdc, popupFont)
 
-	maxW := popupMinWidth
+	maxW := popupM.minWidth
 	for _, it := range items {
 		u16, _ := windows.UTF16FromString(it.label)
 		// length excludes the null terminator
@@ -313,12 +345,12 @@ func measurePopup(items []popupItem) (int, int) {
 			uintptr(len(u16)-1),
 			uintptr(unsafe.Pointer(&sz)),
 		)
-		w := int(sz.cx) + popupPadH*2
+		w := sz.cx + popupM.padH*2
 		if w > maxW {
 			maxW = w
 		}
 	}
-	height := popupPadV*2 + popupItemHeight*len(items)
+	height := popupM.padV*2 + popupM.itemHeight*int32(len(items))
 	return maxW, height
 }
 
@@ -339,7 +371,7 @@ func popupWndProc(hwnd, msgID, wParam, lParam uintptr) uintptr {
 			popupTracking = true
 		}
 		y := int32(int16((lParam >> 16) & 0xFFFF))
-		idx := int(y-popupPadV) / popupItemHeight
+		idx := int((y - popupM.padV) / popupM.itemHeight)
 		if idx < 0 || idx >= len(popupItems) {
 			idx = -1
 		}
@@ -404,18 +436,18 @@ func paintPopup(hwnd uintptr) {
 	for i, it := range popupItems {
 		itemRc := rect{
 			left:   rc.left,
-			top:    rc.top + int32(popupPadV+i*popupItemHeight),
+			top:    rc.top + popupM.padV + int32(i)*popupM.itemHeight,
 			right:  rc.right,
-			bottom: rc.top + int32(popupPadV+(i+1)*popupItemHeight),
+			bottom: rc.top + popupM.padV + int32(i+1)*popupM.itemHeight,
 		}
 		if i == popupHovered {
 			hoverRc := itemRc
-			hoverRc.left += 4
-			hoverRc.right -= 4
+			hoverRc.left += popupM.hoverInset
+			hoverRc.right -= popupM.hoverInset
 			_, _, _ = procFillRect.Call(hdc, uintptr(unsafe.Pointer(&hoverRc)), popupBrushHover)
 		}
 		textRc := itemRc
-		textRc.left += popupPadH
+		textRc.left += popupM.padH
 		u16, _ := windows.UTF16FromString(it.label)
 		// DrawTextW: -1 means "string is null-terminated".
 		strLen := int32(-1)

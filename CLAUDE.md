@@ -131,12 +131,13 @@ All bridge calls return Promises. The Go side persists to disk on every mutation
 - **Auto-hide**: `WM_ACTIVATEAPP` wParam=0 moves off-screen after 300ms guard
 - **Toggle debounce**: LMB on tray within 150ms of auto-hide = stay hidden
 - **Slide animation**: show = slide up from below screen (200ms ease-out), hide = slide down (150ms ease-in)
-- **Anchor**: Bottom-right corner, 8px margin, compensates for DWM invisible border
+- **Anchor**: Bottom-right corner, 8 px margin (scaled for DPI), compensates for DWM invisible border
 - **Auto-resize**: Frontend measures DOM `scrollHeight` via `tick()` + `rAF`, instant expand / smooth shrink
+- **DPI**: the process is per-monitor DPI aware v2 (`winutil.EnablePerMonitorDPIAwareness` first thing in `main`, before any window exists). Window metrics (`windowWidth` 420, `trayCornerMargin` 8, `minWindowHeight` 80) and the heights from `resizeWindow` are CSS px, scaled with `winutil.ScaleForDPI`; WebView2 picks its rasterization scale itself. `WM_DPICHANGED` re-derives the size from the last CSS height (suggested rect ignored) and re-anchors a visible window; `showAndFocus` sizes the window for the tray monitor before the slide-in, because a parked (off-screen) window keeps its last DPI
 
 ### Tray System
 
-Runs on dedicated `runtime.LockOSThread()` goroutine. Custom popup menu (GDI-painted, not `TrackPopupMenu`) with dark/light theme support. Adaptive icon swaps between dark/light stroke on `WM_SETTINGCHANGE("ImmersiveColorSet")`. Pulse animation during loading (10 GDI-generated alpha frames). Menu items localized (EN/RU).
+Runs on dedicated `runtime.LockOSThread()` goroutine. Custom popup menu (GDI-painted, not `TrackPopupMenu`) with dark/light theme support; its metrics and font are scaled for the DPI of the monitor under the cursor (`popupMetricsFor`). Adaptive icon swaps between dark/light stroke on `WM_SETTINGCHANGE("ImmersiveColorSet")`. Pulse animation during loading (10 GDI-generated alpha frames). Menu items localized (EN/RU).
 
 ### Single Instance
 

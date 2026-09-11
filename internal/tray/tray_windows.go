@@ -39,6 +39,8 @@ func loadTrayIcon(hInstance uintptr) uintptr {
 	if !winutil.IsSystemLightTheme() {
 		resourceID = iconResourceLight
 	}
+	// The process is DPI aware, so this is the small-icon size for the
+	// system DPI (20 px at 125 %) — the size the tray draws, no stretching.
 	cx, _, _ := procGetSystemMetrics.Call(uintptr(smCxSmIcon))
 	cy, _, _ := procGetSystemMetrics.Call(uintptr(smCySmIcon))
 	hIcon, _, _ := procLoadImageW.Call(

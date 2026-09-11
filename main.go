@@ -41,6 +41,12 @@ var browserArgs = []string{
 func main() {
 	closeLog := initializeLogging()
 	defer closeLog()
+	// 0. Per-monitor DPI awareness has to be set before the first window
+	//    exists. Without it Windows bitmap-stretches the window on scaled
+	//    displays and the WebView2 text looks blurry.
+	if err := winutil.EnablePerMonitorDPIAwareness(); err != nil {
+		log.Printf("per-monitor DPI awareness: %v", err)
+	}
 	// 1. Single-instance lock. If another CopyNote is already running,
 	//    ask it to show its window and exit.
 	release, already, err := singleton.Acquire(`Local\dev.copynote.app.singleton`)
@@ -115,8 +121,8 @@ func main() {
 		DataPath:  dataPath,
 		WindowOptions: webview2.WindowOptions{
 			Title:  "CopyNote",
-			Width:  420,
-			Height: 640,
+			Width:  windowWidth,
+			Height: initialWindowHeight,
 		},
 	})
 	if w == nil {
@@ -131,6 +137,9 @@ func main() {
 	//     cold-start. The window will be moved to the tray corner
 	//     and shown later when the user clicks the tray icon.
 	parkOffScreen(hwnd)
+	// go-webview2 took the size in physical pixels; scale it for the DPI
+	// of the monitor the window now belongs to.
+	applyWindowSize(hwnd, winutil.DpiForWindow(hwnd))
 
 	updates := bindApplication(w, hwnd, svc)
 	defer updates.Close()
