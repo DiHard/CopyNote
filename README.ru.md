@@ -10,6 +10,13 @@
 
 [English version](README.md)
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/ru-dark.png">
+    <img src="docs/screenshots/ru-light.png" alt="Окно CopyNote со списком сохранённых фрагментов" width="492">
+  </picture>
+</p>
+
 ## Возможности
 
 - **Копирование в один клик** &mdash; нажмите на запись, и её значение окажется в буфере обмена

@@ -10,6 +10,13 @@ A lightweight Windows tray utility for storing and instantly copying frequently 
 
 [Русская версия / Russian version](README.ru.md)
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/en-dark.png">
+    <img src="docs/screenshots/en-light.png" alt="CopyNote window with a list of saved text snippets" width="492">
+  </picture>
+</p>
+
 ## Features
 
 - **One-click copy** &mdash; click any entry to copy its value to the clipboard
