@@ -11,12 +11,14 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jchv/go-webview2"
 
 	"copynote/internal/singleton"
 	"copynote/internal/tray"
+	"copynote/internal/updater"
 	"copynote/internal/winutil"
 )
 
@@ -31,6 +33,11 @@ var distFS embed.FS
 // Chromium switches passed to WebView2 to disable background services
 // that add startup latency on first navigation (Safe Browsing updater,
 // domain reliability telemetry, component updater, etc.).
+// singletonName is the single-instance mutex. A var so a test build can run
+// beside the real application (-X main.singletonName=...; the tray class and
+// show message names in internal/tray have the same override).
+var singletonName = `Local\dev.copynote.app.singleton`
+
 var browserArgs = []string{
 	"--disable-background-networking",
 	"--disable-component-update",
@@ -49,11 +56,12 @@ func main() {
 	}
 	// 1. Single-instance lock. If another CopyNote is already running,
 	//    ask it to show its window and exit.
-	release, already, err := singleton.Acquire(`Local\dev.copynote.app.singleton`)
+	release, already, err := singleton.Acquire(singletonName)
 	if err != nil {
 		fatalStartup("singleton: %v", err)
 	}
-	defer release()
+	releaseOnce := sync.OnceFunc(release)
+	defer releaseOnce()
 
 	if already {
 		// The wait covers a running instance that is still in its
@@ -61,6 +69,16 @@ func main() {
 		delivered := tray.ShowRunningInstance(15 * time.Second)
 		log.Printf("another instance is running; show request delivered: %v", delivered)
 		return
+	}
+
+	// 1b. Where this binary lives. Self-update swaps the file in place and
+	//     relaunches it; a download interrupted last time is discarded.
+	exePath, err := os.Executable()
+	if err != nil {
+		log.Printf("executable path: %v (self-update disabled)", err)
+		exePath = ""
+	} else {
+		updater.RemoveStaging(exePath)
 	}
 
 	// 2. Persistent WebView2 user-data folder in
@@ -96,7 +114,14 @@ func main() {
 	}
 
 	// 4. WebView2 picks up this env var before spawning msedgewebview2.exe.
-	os.Setenv("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", strings.Join(browserArgs, " "))
+	//    A value already in the environment is kept: it is the documented
+	//    WebView2 debugging hook (e.g. --remote-debugging-port=9222 to attach
+	//    DevTools or drive the UI over CDP in end-to-end tests).
+	args := browserArgs
+	if extra := os.Getenv("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"); extra != "" {
+		args = append(append([]string(nil), browserArgs...), extra)
+	}
+	os.Setenv("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", strings.Join(args, " "))
 
 	// 5. Loopback HTTP server serving the embedded frontend.
 	staticFS, err := fs.Sub(distFS, "web/dist")
@@ -141,7 +166,7 @@ func main() {
 	// of the monitor the window now belongs to.
 	applyWindowSize(hwnd, winutil.DpiForWindow(hwnd))
 
-	updates := bindApplication(w, hwnd, svc)
+	updates := bindApplication(w, hwnd, svc, exePath)
 	defer updates.Close()
 
 	// 8. Tray. Runs on a dedicated OS-locked goroutine; communicates
@@ -174,7 +199,18 @@ func main() {
 			return s.Locale
 		},
 	}
-	if err := w.Bind("notifyReady", trayCtrl.SetReady); err != nil {
+	if err := w.Bind("notifyReady", func() {
+		trayCtrl.SetReady()
+		if exePath != "" {
+			// The version replaced by a self-update may still be exiting and
+			// holding its file, so removal is retried for a while.
+			go func() {
+				if err := updater.RemovePrevious(exePath, time.Minute); err != nil {
+					log.Printf("remove previous version: %v", err)
+				}
+			}()
+		}
+	}); err != nil {
 		log.Fatal(err)
 	}
 
@@ -232,4 +268,12 @@ func main() {
 	// 11. Cleanup: tear down tray and wait for its goroutine to exit.
 	trayCtrl.Stop()
 	<-trayDone
+
+	// 12. A self-update was installed: free the single-instance mutex before
+	//     the replaced executable checks it, then start it.
+	if restartRequested.Load() && exePath != "" {
+		_ = ln.Close()
+		releaseOnce()
+		relaunch(exePath)
+	}
 }

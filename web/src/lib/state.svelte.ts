@@ -1,4 +1,4 @@
-import type { Entry, ModalState, UpdateInfo, UserSettings, ViewMode } from "./types";
+import type { Entry, ModalState, UpdateInfo, UpdateProgress, UserSettings, ViewMode } from "./types";
 import { createTaskQueue } from "./taskQueue";
 import { api } from "./api";
 import { setLocale, systemLocale } from "./i18n";
@@ -15,6 +15,15 @@ export type UpdateCheckStatus =
   | { kind: "available" }
   | { kind: "failed" };
 
+/** Where an in-app update currently is. Failure keeps the running version. */
+export type UpdateInstallStatus =
+  | { kind: "idle" }
+  | { kind: "downloading"; done: number; total: number }
+  | { kind: "verifying" }
+  | { kind: "applying" }
+  | { kind: "restarting" }
+  | { kind: "failed"; error: string };
+
 export const state = $state<{
   entries: Entry[];
   query: string;
@@ -28,6 +37,7 @@ export const state = $state<{
   operationError: string | null;
   updateInfo: UpdateInfo | null;
   updateCheckStatus: UpdateCheckStatus;
+  updateInstall: UpdateInstallStatus;
 }>({
   entries: [],
   query: "",
@@ -48,6 +58,7 @@ export const state = $state<{
   operationError: null,
   updateInfo: null,
   updateCheckStatus: { kind: "idle" },
+  updateInstall: { kind: "idle" },
 });
 
 /**
@@ -306,6 +317,7 @@ export async function loadUpdateInfo(): Promise<void> {
 export async function forceCheckUpdateInfo(): Promise<void> {
   const request = ++updateRequest;
   state.updateCheckStatus = { kind: "checking" };
+  if (state.updateInstall.kind === "failed") state.updateInstall = { kind: "idle" };
   try {
     const info = await api.forceCheckForUpdates();
     if (request !== updateRequest) return;
@@ -316,5 +328,73 @@ export async function forceCheckUpdateInfo(): Promise<void> {
   } catch {
     if (request !== updateRequest) return;
     state.updateCheckStatus = { kind: "failed" };
+  }
+}
+
+// ── Self-update ──────────────────────────────────────────────────
+
+export function isUpdateInstalling(): boolean {
+  const kind = state.updateInstall.kind;
+  return kind === "downloading" || kind === "verifying" || kind === "applying" || kind === "restarting";
+}
+
+/** How often download progress is polled from Go while installUpdate runs. */
+const PROGRESS_POLL_MS = 250;
+
+/**
+ * Download, verify and swap in the release shown in `state.updateInfo`,
+ * then restart the application. Progress is polled because the bridge
+ * only reports completion. On failure the running version is untouched,
+ * so the user can simply retry or download manually.
+ */
+export async function installUpdate(): Promise<void> {
+  const info = state.updateInfo;
+  if (!info?.selfUpdate || isUpdateInstalling()) return;
+  state.updateInstall = { kind: "downloading", done: 0, total: info.size };
+
+  let active = true;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const poll = async () => {
+    timer = null;
+    if (!active) return;
+    try {
+      const progress = await api.updateProgress();
+      if (active) applyInstallProgress(progress);
+    } catch {
+      // Progress is cosmetic; the install promise carries the result.
+    }
+    if (active) timer = setTimeout(() => void poll(), PROGRESS_POLL_MS);
+  };
+  timer = setTimeout(() => void poll(), PROGRESS_POLL_MS);
+  const stop = () => {
+    active = false;
+    if (timer !== null) clearTimeout(timer);
+  };
+
+  try {
+    await api.installUpdate();
+    stop();
+    state.updateInstall = { kind: "restarting" };
+    await api.restartApp();
+  } catch (error) {
+    stop();
+    state.updateInstall = { kind: "failed", error: String(error).replace(/^Error:\s*/, "") };
+  }
+}
+
+function applyInstallProgress(progress: UpdateProgress): void {
+  switch (progress.stage) {
+    case "download":
+      state.updateInstall = { kind: "downloading", done: progress.done, total: progress.total };
+      break;
+    case "verify":
+      state.updateInstall = { kind: "verifying" };
+      break;
+    case "apply":
+      state.updateInstall = { kind: "applying" };
+      break;
+    default:
+      // "" means Go has finished; the install promise decides the outcome.
+      break;
   }
 }

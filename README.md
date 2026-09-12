@@ -29,6 +29,7 @@ A lightweight Windows tray utility for storing and instantly copying frequently 
 - **Import / Export** &mdash; backup all entries and settings to a single JSON file, restore with merge (deduplication by label+value)
 - **Autorun** &mdash; optional start at Windows login (via Registry)
 - **Single instance** &mdash; launching again brings the existing window to front
+- **One-click updates** &mdash; Settings shows new releases; one click downloads the signed build, verifies the signature and restarts. No installer, no admin rights
 - **Adaptive tray icon** &mdash; auto-switches light/dark on theme change; pulse animation during startup
 - **Silent startup** &mdash; no visible window or taskbar icon during WebView2 initialization
 - **Portable** &mdash; single `.exe`, no installation required
@@ -42,6 +43,8 @@ A lightweight Windows tray utility for storing and instantly copying frequently 
 ## Quick start
 
 Download the latest `copynote.exe` from [Releases](https://github.com/DiHard/CopyNote/releases) and run it. That's it &mdash; no installer, no dependencies beyond WebView2.
+
+Later releases install from *Settings → Updates* with one click: the app checks GitHub Releases at startup (this can be turned off), downloads the new `copynote.exe` next to the running one, verifies its ed25519 signature and restarts itself.
 
 The app starts minimized to the system tray. Left-click the tray icon to open.
 

@@ -7,6 +7,8 @@
     exportData,
     importData,
     forceCheckUpdateInfo,
+    installUpdate,
+    isUpdateInstalling,
   } from "../state.svelte";
   import { t, availableLocales } from "../i18n";
   import type { UserSettings } from "../types";
@@ -78,6 +80,37 @@
   function openReleasePage() {
     if (appState.updateInfo) {
       window.openExternal?.(appState.updateInfo.url);
+    }
+  }
+
+  function onInstallUpdate() {
+    void installUpdate();
+  }
+
+  /** Download percentage, or null when no download with a known size is running. */
+  function downloadPercent(): number | null {
+    const status = appState.updateInstall;
+    if (status.kind !== "downloading" || status.total <= 0) return null;
+    return Math.min(100, Math.floor((status.done / status.total) * 100));
+  }
+
+  /** The update button doubles as the status line while an install runs. */
+  function installLabel(): string {
+    switch (appState.updateInstall.kind) {
+      case "downloading": {
+        const percent = downloadPercent();
+        return percent === null
+          ? t("settings.updates.downloading")
+          : t("settings.updates.downloadingPercent", { percent: String(percent) });
+      }
+      case "verifying":
+        return t("settings.updates.verifying");
+      case "applying":
+        return t("settings.updates.applying");
+      case "restarting":
+        return t("settings.updates.restarting");
+      default:
+        return t("settings.updates.install");
     }
   }
 
@@ -217,7 +250,7 @@
         <button
           type="button"
           onclick={onImport}
-          disabled={dataBusy || appState.settingsPending > 0}
+          disabled={dataBusy || appState.settingsPending > 0 || isUpdateInstalling()}
           class="flex-1 rounded-lg border border-outline bg-card px-2.5 py-1.5 text-sm text-on-surface-dim transition hover:bg-card-hover hover:text-on-surface"
         >
           {t("settings.import")}
@@ -225,7 +258,7 @@
         <button
           type="button"
           onclick={onExport}
-          disabled={dataBusy || appState.settingsPending > 0}
+          disabled={dataBusy || appState.settingsPending > 0 || isUpdateInstalling()}
           class="flex-1 rounded-lg border border-outline bg-card px-2.5 py-1.5 text-sm text-on-surface-dim transition hover:bg-card-hover hover:text-on-surface"
         >
           {t("settings.export")}
@@ -248,14 +281,48 @@
               <span class="text-sm">
                 {t("settings.updates.available", { version: appState.updateInfo.version })}
               </span>
-              <button
-                type="button"
-                onclick={openReleasePage}
-                class="shrink-0 rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-accent-text transition hover:bg-accent-hover"
-              >
-                {t("settings.updates.download")}
-              </button>
+              {#if appState.updateInfo.selfUpdate}
+                <!-- One click downloads, verifies and swaps the binary, then
+                     restarts. The label doubles as the status line. -->
+                <button
+                  type="button"
+                  onclick={onInstallUpdate}
+                  disabled={isUpdateInstalling() || dataBusy}
+                  class="shrink-0 rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-accent-text transition hover:bg-accent-hover disabled:opacity-60"
+                >
+                  {installLabel()}
+                </button>
+              {:else}
+                <!-- No signed binary in the release, or the exe folder is not
+                     writable: fall back to the release page. -->
+                <button
+                  type="button"
+                  onclick={openReleasePage}
+                  class="shrink-0 rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-accent-text transition hover:bg-accent-hover"
+                >
+                  {t("settings.updates.download")}
+                </button>
+              {/if}
             </div>
+            {#if downloadPercent() !== null}
+              <div
+                class="mt-1.5 h-1 overflow-hidden rounded-full bg-surface-hover"
+                role="progressbar"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow={downloadPercent()}
+              >
+                <div class="h-full rounded-full bg-accent transition-[width] duration-200" style:width="{downloadPercent()}%"></div>
+              </div>
+            {/if}
+            {#if appState.updateInstall.kind === "failed"}
+              <p role="alert" class="mt-1 text-[11px] text-danger">
+                {t("settings.updates.installFailed", { error: appState.updateInstall.error })}
+              </p>
+              <button type="button" onclick={openReleasePage} class="mt-0.5 text-[11px] text-accent hover:underline">
+                {t("settings.updates.manualDownload")}
+              </button>
+            {/if}
           </div>
         {/if}
 

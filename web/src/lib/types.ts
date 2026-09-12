@@ -25,12 +25,23 @@ export interface UserSettings {
   lastSeenUpdateVersion: string;
 }
 
-/** Matches Go updater.ReleaseInfo JSON shape. */
+/** Matches Go updater.ReleaseInfo JSON shape plus the bridge's selfUpdate flag. */
 export interface UpdateInfo {
   version: string;     // "1.0.2" (no leading v)
   name: string;        // release title
   url: string;         // release page URL
   publishedAt: string; // RFC3339
+  /** Byte size of the release binary; 0 when the release has no binary asset. */
+  size: number;
+  /** True when this installation can download, verify and swap the binary itself. */
+  selfUpdate: boolean;
+}
+
+/** Matches the Go updateProgress JSON shape polled during installUpdate. */
+export interface UpdateProgress {
+  stage: "" | "download" | "verify" | "apply";
+  done: number;
+  total: number;
 }
 
 /** Which top-level view is active. */

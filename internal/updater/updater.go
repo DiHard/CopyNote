@@ -1,11 +1,11 @@
 // Package updater checks GitHub Releases for a newer version of the
-// application. It does not download or install anything — it only
-// reports whether an update is available so the UI can surface a
-// notification and link the user to the release page.
+// application and, when the release ships a signed binary, downloads,
+// verifies and installs it in place (see install.go and apply.go).
 //
 // The check is a single unauthenticated HTTP GET to GitHub's public
 // releases API. Anonymous rate limit is 60 requests/hour per IP, which
-// is well above what a single user produces.
+// is well above what a single user produces. Asset downloads are served
+// from GitHub's CDN and do not count against that limit.
 package updater
 
 import (
@@ -24,30 +24,63 @@ import (
 // non-prerelease release for the repository. Pre-releases are excluded
 // automatically, which is the desired behavior — beta builds should
 // not trigger update notifications for stable users.
-const releasesURL = "https://api.github.com/repos/DiHard/CopyNote/releases/latest"
+//
+// A var rather than a const so an end-to-end test build can point the
+// updater at a local server:
+//
+//	go build -ldflags "-X copynote/internal/updater.releasesURL=http://127.0.0.1:18080/latest" .
+var releasesURL = "https://api.github.com/repos/DiHard/CopyNote/releases/latest"
 
 // requestTimeout bounds the HTTP request so a slow network never
 // blocks startup for long. The check runs in a background goroutine,
 // but a tight cap keeps resource usage predictable.
 const requestTimeout = 5 * time.Second
 
+// Release asset names. Assets are looked up by exact name, so the release
+// process must upload the binary and its detached signature under these.
+const (
+	AssetName          = "copynote.exe"
+	SignatureAssetName = "copynote.exe.sig"
+)
+
 // ReleaseInfo is the subset of the GitHub release payload we surface
-// to the UI. All fields are plain strings so the struct marshals
-// cleanly across the Go ↔ JS bridge.
+// to the UI. Fields marshal across the Go ↔ JS bridge; the asset URLs
+// stay on the Go side.
 type ReleaseInfo struct {
 	Version     string `json:"version"`     // e.g. "1.0.2" (no leading v)
 	Name        string `json:"name"`        // release title
 	URL         string `json:"url"`         // release page (html_url)
 	PublishedAt string `json:"publishedAt"` // RFC3339 timestamp
+	// Size is the byte length of the release binary, 0 when the release
+	// carries no binary asset.
+	Size int64 `json:"size"`
+	// DownloadURL and SignatureURL point at the release binary and its
+	// detached signature. Empty when the release lacks either asset; the
+	// UI then falls back to opening the release page.
+	DownloadURL  string `json:"-"`
+	SignatureURL string `json:"-"`
+}
+
+// Installable reports whether the release ships everything a self-update
+// needs: the binary and its signature.
+func (r *ReleaseInfo) Installable() bool {
+	return r != nil && r.DownloadURL != "" && r.SignatureURL != ""
 }
 
 // githubRelease mirrors the fields we consume from the GitHub API.
 // Everything else in the payload is ignored.
 type githubRelease struct {
-	TagName     string `json:"tag_name"`
-	Name        string `json:"name"`
-	HTMLURL     string `json:"html_url"`
-	PublishedAt string `json:"published_at"`
+	TagName     string        `json:"tag_name"`
+	Name        string        `json:"name"`
+	HTMLURL     string        `json:"html_url"`
+	PublishedAt string        `json:"published_at"`
+	Assets      []githubAsset `json:"assets"`
+}
+
+type githubAsset struct {
+	Name               string `json:"name"`
+	BrowserDownloadURL string `json:"browser_download_url"`
+	Size               int64  `json:"size"`
 }
 
 // CheckLatest queries GitHub and returns a ReleaseInfo when a newer
@@ -70,22 +103,11 @@ func checkLatest(ctx context.Context, client *http.Client, endpoint, currentVers
 	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	resp, err := get(ctx, client, endpoint, "application/vnd.github+json", userAgent(currentVersion))
 	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
-	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "CopyNote/"+currentVersion+" (+https://github.com/DiHard/CopyNote)")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("http: %w", err)
+		return nil, err
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("http status %d", resp.StatusCode)
-	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // cap at 1 MB
 	if err != nil {
@@ -106,12 +128,48 @@ func checkLatest(ctx context.Context, client *http.Client, endpoint, currentVers
 		return nil, nil
 	}
 
-	return &ReleaseInfo{
+	info := &ReleaseInfo{
 		Version:     latest,
 		Name:        rel.Name,
 		URL:         rel.HTMLURL,
 		PublishedAt: rel.PublishedAt,
-	}, nil
+	}
+	for _, asset := range rel.Assets {
+		switch asset.Name {
+		case AssetName:
+			info.DownloadURL = asset.BrowserDownloadURL
+			info.Size = asset.Size
+		case SignatureAssetName:
+			info.SignatureURL = asset.BrowserDownloadURL
+		}
+	}
+	return info, nil
+}
+
+// userAgent identifies the running version to GitHub; the repository URL
+// is what GitHub asks unauthenticated clients to include.
+func userAgent(currentVersion string) string {
+	return "CopyNote/" + currentVersion + " (+https://github.com/DiHard/CopyNote)"
+}
+
+// get performs a GET and returns the response only on HTTP 200.
+func get(ctx context.Context, client *http.Client, url, accept, ua string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("Accept", accept)
+	req.Header.Set("User-Agent", ua)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("http: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, fmt.Errorf("http status %d", resp.StatusCode)
+	}
+	return resp, nil
 }
 
 // IsNewer reports whether latest is a strictly higher semver than

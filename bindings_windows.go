@@ -1,11 +1,9 @@
 package main
 
 import (
-	"context"
 	"copynote/internal/bridge"
 	"copynote/internal/service"
 	"copynote/internal/storage"
-	"copynote/internal/updater"
 	"copynote/internal/version"
 	"copynote/internal/winutil"
 	"fmt"
@@ -14,7 +12,7 @@ import (
 	"os"
 )
 
-func bindApplication(w webview2.WebView, hwnd uintptr, svc *service.Service) *bridge.Async {
+func bindApplication(w webview2.WebView, hwnd uintptr, svc *service.Service, exePath string) *bridge.Async {
 	// 7. Bind CRUD bridge methods.
 	mustBind := func(name string, fn any) {
 		if err := w.Bind(name, fn); err != nil {
@@ -48,25 +46,10 @@ func bindApplication(w webview2.WebView, hwnd uintptr, svc *service.Service) *br
 		return version.Version
 	})
 
+	// Update checks and the self-update flow run on background workers;
+	// see update_windows.go.
 	updates := bridge.NewAsync(w)
-	mustAsync := func(name string, fn func(context.Context) (any, error)) {
-		if err := updates.Bind(name, fn); err != nil {
-			log.Fatalf("bind %s: %v", name, err)
-		}
-	}
-	mustAsync("checkForUpdates", func(ctx context.Context) (any, error) {
-		settings, err := svc.GetSettings()
-		if err != nil {
-			return nil, err
-		}
-		if settings.DisableUpdateCheck {
-			return nil, nil
-		}
-		return updater.CheckLatest(ctx, version.Version)
-	})
-	mustAsync("forceCheckForUpdates", func(ctx context.Context) (any, error) {
-		return updater.CheckLatest(ctx, version.Version)
-	})
+	bindUpdates(w, updates, svc, exePath)
 
 	mustBind("applyTopmost", func(enabled bool) {
 		topmostEnabled.Store(enabled)

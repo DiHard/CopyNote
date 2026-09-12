@@ -16,6 +16,7 @@ func TestCheckLatestResponses(t *testing.T) {
 		wantError   bool
 	}{
 		{"newer", `{"tag_name":"v1.3.0","html_url":"https://github.com/DiHard/CopyNote/releases/tag/v1.3.0"}`, 200, "1.3.0", false},
+		{"newer with assets", `{"tag_name":"v1.3.0","assets":[{"name":"copynote.exe","browser_download_url":"https://dl.example/copynote.exe","size":7627776},{"name":"copynote.exe.sig","browser_download_url":"https://dl.example/copynote.exe.sig","size":89},{"name":"other.zip","browser_download_url":"https://dl.example/other.zip","size":1}]}`, 200, "1.3.0", false},
 		{"same", `{"tag_name":"v1.2.0"}`, 200, "", false},
 		{"older", `{"tag_name":"v1.1.0"}`, 200, "", false},
 		{"rate limit", `{}`, 429, "", true},
@@ -65,5 +66,38 @@ func TestVersionComparison(t *testing.T) {
 		if got := IsNewer(tc.current, tc.latest); got != tc.want {
 			t.Errorf("IsNewer(%q,%q)=%v", tc.current, tc.latest, got)
 		}
+	}
+}
+
+func TestCheckLatestReleaseAssets(t *testing.T) {
+	serve := func(body string) (*httptest.Server, func()) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, body) }))
+		return srv, srv.Close
+	}
+
+	signed, closeSigned := serve(`{"tag_name":"v1.3.0","assets":[
+		{"name":"copynote.exe","browser_download_url":"https://dl.example/copynote.exe","size":7627776},
+		{"name":"copynote.exe.sig","browser_download_url":"https://dl.example/copynote.exe.sig","size":89},
+		{"name":"other.zip","browser_download_url":"https://dl.example/other.zip","size":1}]}`)
+	defer closeSigned()
+	info, err := checkLatest(context.Background(), signed.Client(), signed.URL, "1.2.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.Installable() || info.DownloadURL != "https://dl.example/copynote.exe" || info.SignatureURL != "https://dl.example/copynote.exe.sig" || info.Size != 7627776 {
+		t.Fatalf("assets: %#v", info)
+	}
+
+	unsigned, closeUnsigned := serve(`{"tag_name":"v1.3.0","assets":[{"name":"copynote.exe","browser_download_url":"https://dl.example/copynote.exe","size":7627776}]}`)
+	defer closeUnsigned()
+	info, err = checkLatest(context.Background(), unsigned.Client(), unsigned.URL, "1.2.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Installable() || info.DownloadURL == "" || info.SignatureURL != "" {
+		t.Fatalf("release without signature: %#v", info)
+	}
+	if (*ReleaseInfo)(nil).Installable() {
+		t.Fatal("nil release reported installable")
 	}
 }

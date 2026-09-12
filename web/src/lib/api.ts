@@ -2,7 +2,7 @@
 // Each function returns a promise that rejects with an Error whose message
 // matches the Go error returned by the bound method.
 
-import type { Entry, UpdateInfo, UserSettings } from "./types";
+import type { Entry, UpdateInfo, UpdateProgress, UserSettings } from "./types";
 
 declare global {
   interface Window {
@@ -23,6 +23,12 @@ declare global {
     getVersion: () => Promise<string>;
     checkForUpdates: () => Promise<UpdateInfo | null>;
     forceCheckForUpdates: () => Promise<UpdateInfo | null>;
+    /** Downloads, verifies and swaps in the release from the last check. */
+    installUpdate: () => Promise<{ version: string }>;
+    /** Snapshot of the running install; polled while installUpdate is pending. */
+    updateProgress: () => Promise<UpdateProgress>;
+    /** Quits and relaunches the replaced executable; only valid after installUpdate. */
+    restartApp: () => Promise<void>;
     applyTopmost: (enabled: boolean) => Promise<void>;
     /** Injected at runtime by Go for tray→settings navigation. */
     __openSettings?: () => void;
@@ -46,4 +52,7 @@ export const api = {
   checkForUpdates: (): Promise<UpdateInfo | null> => window.checkForUpdates(),
   forceCheckForUpdates: (): Promise<UpdateInfo | null> =>
     window.forceCheckForUpdates(),
+  installUpdate: (): Promise<{ version: string }> => window.installUpdate(),
+  updateProgress: (): Promise<UpdateProgress> => window.updateProgress(),
+  restartApp: (): Promise<void> => window.restartApp(),
 };
