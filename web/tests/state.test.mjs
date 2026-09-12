@@ -393,3 +393,43 @@ test("showing the window again clears last session's search and view", async () 
   assert.equal(app.state.view, "main", "closing from Settings must not reopen there");
   assert.equal(app.state.operationError, null);
 });
+
+test("the first entry teaches copying before it warns about Downloads", async () => {
+  const app = await setup({
+    getInstallLocation: async () => location(),
+    list: async () => [],
+    create: async (label, value) => ({id: "1", label, value, order: 0}),
+    copy: async () => null,
+  });
+  await app.loadInstallLocation();
+  await app.refresh();
+
+  await app.createEntry("Email", "me@example.com");
+  assert.equal(app.state.showFirstCopyHint, true, "the hint appears when it can first be tried");
+  assert.equal(app.shouldShowRelocateBanner(), false, "the warning must not drown it");
+
+  await app.copyEntry("1");
+  assert.equal(app.state.showFirstCopyHint, false, "a successful copy retires the hint");
+  assert.equal(app.shouldShowRelocateBanner(), true, "and the banner takes its turn");
+});
+
+test("an entry added to a list that already had some shows no hint", async () => {
+  const app = await setup({
+    list: async () => [anEntry],
+    create: async (label, value) => ({id: "2", label, value, order: 0}),
+  });
+  await app.refresh();
+  await app.createEntry("Second", "value");
+  assert.equal(app.state.showFirstCopyHint, false, "existing users are not taught again");
+});
+
+test("the empty-search action prefills the form with what was typed", async () => {
+  const app = await setup({list: async () => [anEntry]});
+  await app.refresh();
+
+  app.openCreate();
+  assert.deepEqual(app.state.modal, {kind: "create", label: ""});
+
+  app.openCreateFromSearch("  ИНН для ООО  ");
+  assert.deepEqual(app.state.modal, {kind: "create", label: "ИНН для ООО"}, "trimmed");
+});

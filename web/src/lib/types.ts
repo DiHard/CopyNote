@@ -9,7 +9,9 @@ export interface Entry {
 
 export type ModalState =
   | null
-  | { kind: "create" }
+  /** `label` prefills the form — the empty-search action offers to save
+   *  whatever was typed. Empty for a plain "new entry" click. */
+  | { kind: "create"; label: string }
   | { kind: "edit"; entry: Entry }
   | { kind: "delete"; entry: Entry };
 

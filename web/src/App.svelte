@@ -216,7 +216,7 @@
     </main>
 
     {#if showModal && appState.modal?.kind === "create"}
-      <EntryModal />
+      <EntryModal initialLabel={appState.modal.label} />
     {:else if showModal && appState.modal?.kind === "edit"}
       <EntryModal entry={appState.modal.entry} />
     {:else if showModal && appState.modal?.kind === "delete"}

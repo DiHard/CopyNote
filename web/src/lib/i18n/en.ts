@@ -10,9 +10,14 @@ export const en: Record<string, string> = {
   // EntryList
   "list.loading": "Loading\u2026",
   "list.error": "Failed to load: {error}",
-  "list.empty": "No entries yet",
+  "list.empty": "Nothing saved yet",
+  "list.empty.what": "Save what you type over and over: email addresses, account details, reply templates.",
   "list.empty.add": "Add your first entry",
+  "list.empty.tray": "The app lives in the tray. If you cannot see it, click the ⌃ arrow next to the clock.",
+  "list.firstCopyHint": "Click a card and its text goes to the clipboard. Or type a few letters in the search box and press Enter.",
+  "list.firstCopyHint.dismiss": "Dismiss",
   "list.noMatch": "Nothing matches your search",
+  "list.noMatch.create": "Create “{query}”",
 
   // EntryCard
   "card.copy": "Click to copy",

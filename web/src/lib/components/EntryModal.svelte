@@ -5,12 +5,13 @@
   import { closeModal, createEntry, updateEntry } from "../state.svelte";
   import { t } from "../i18n";
 
-  let { entry }: { entry?: Entry } = $props();
+  let { entry, initialLabel = "" }: { entry?: Entry; initialLabel?: string } =
+    $props();
 
   const isEdit = $derived(!!entry);
 
   /* svelte-ignore state_referenced_locally */
-  let label = $state(entry?.label ?? "");
+  let label = $state(entry?.label ?? initialLabel);
   /* svelte-ignore state_referenced_locally */
   let value = $state(entry?.value ?? "");
   let error = $state<string | null>(null);

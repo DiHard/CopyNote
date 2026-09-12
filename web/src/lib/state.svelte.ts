@@ -50,6 +50,11 @@ export const state = $state<{
   /** Session-only: "remind me later" was clicked, so the banner is gone
    *  now regardless of whether the write has landed yet. */
   relocateSnoozeClicked: boolean;
+  /** Session-only: the user just filled an empty list, so the hint about
+   *  clicking a card is worth showing — that is the first moment it can
+   *  actually be tried. Deliberately not persisted: no settings field to
+   *  migrate, and installations that already have entries never see it. */
+  showFirstCopyHint: boolean;
 }>({
   entries: [],
   query: "",
@@ -77,6 +82,7 @@ export const state = $state<{
   installLocation: null,
   relocate: { kind: "idle" },
   relocateSnoozeClicked: false,
+  showFirstCopyHint: false,
 });
 
 /**
@@ -120,6 +126,7 @@ export async function createEntry(
   label: string,
   value: string,
 ): Promise<Entry> {
+  const wasEmpty = state.entries.length === 0;
   const created = await api.create(label, value);
   // Server sets order=0 for the new entry and shifts existing ones.
   // Mirror locally: bump all existing orders by 1, prepend the new entry.
@@ -127,6 +134,7 @@ export async function createEntry(
     created,
     ...state.entries.map((e) => ({ ...e, order: e.order + 1 })),
   ];
+  if (wasEmpty) state.showFirstCopyHint = true;
   return created;
 }
 
@@ -151,6 +159,12 @@ export async function deleteEntry(id: string): Promise<void> {
 
 export async function copyEntry(id: string): Promise<void> {
   await api.copy(id);
+  // The hint has done its job the moment a copy succeeds.
+  state.showFirstCopyHint = false;
+}
+
+export function dismissFirstCopyHint(): void {
+  state.showFirstCopyHint = false;
 }
 
 /**
@@ -213,8 +227,15 @@ export async function reorderEntries(orderedIds: string[]): Promise<void> {
   }
 }
 
+// Two functions rather than one with a default argument: both call sites
+// pass this straight to `onclick`, which would hand it a MouseEvent.
 export function openCreate(): void {
-  state.modal = { kind: "create" };
+  state.modal = { kind: "create", label: "" };
+}
+
+/** "Nothing found" offers to save what was typed, so the form starts filled. */
+export function openCreateFromSearch(query: string): void {
+  state.modal = { kind: "create", label: query.trim() };
 }
 export function openEdit(entry: Entry): void {
   state.modal = { kind: "edit", entry };
@@ -491,6 +512,10 @@ export function shouldShowRelocateBanner(): boolean {
     canOfferRelocate() &&
     !state.settings.relocatePromptDismissed &&
     !relocateSnoozed() &&
+    // The first entry is also when the "click a card to copy" hint appears.
+    // Stacking a disk-cleanup warning on top of the one lesson the app ever
+    // teaches would drown it; the banner waits for the hint to retire.
+    !state.showFirstCopyHint &&
     state.entries.length >= RELOCATE_BANNER_MIN_ENTRIES
   );
 }
