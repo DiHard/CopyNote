@@ -235,10 +235,9 @@
           class="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-input-border bg-input text-accent focus:ring-accent focus:ring-offset-0"
         />
       </label>
-      <!-- Both remaining preferences here carry a real trade-off, so both
-           get an explanation: this one is the tray flyout covering the
-           window versus a heavier drop shadow. Without naming both sides
-           there is no way to choose. -->
+      <!-- Reads as a pair with the toggle above: turn hiding off and this is
+           what keeps the window in front of the app being filled in. Both
+           carry a real trade-off, so both name it — here a heavier shadow. -->
       <label
         class="mt-1.5 flex cursor-pointer items-start justify-between gap-3 rounded-lg border border-outline bg-card px-2.5 py-2"
       >
