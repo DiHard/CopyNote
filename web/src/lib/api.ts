@@ -32,6 +32,8 @@ declare global {
     /** Quits and relaunches the replaced executable; only valid after installUpdate. */
     restartApp: () => Promise<void>;
     applyTopmost: (enabled: boolean) => Promise<void>;
+    /** Whether losing focus parks the window off-screen. */
+    applyAutoHide: (enabled: boolean) => Promise<void>;
     /** Where the running executable lives and whether that is permanent. */
     getInstallLocation: () => Promise<InstallLocation>;
     /** Shell folder browser; resolves to "" when the user cancels. */

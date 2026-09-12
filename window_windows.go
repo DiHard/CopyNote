@@ -37,6 +37,9 @@ var (
 	activationLossHideNS atomic.Int64
 	windowHidden         atomic.Bool // true = window is parked off-screen
 	topmostEnabled       atomic.Bool // user preference for always-on-top
+	// autoHideDisabled keeps the window on screen when another program takes
+	// focus. Stored inverted so the zero value is the default behaviour.
+	autoHideDisabled atomic.Bool
 )
 
 // hideGuardWindow is the minimum time after a show during which we
@@ -157,7 +160,10 @@ func installSubclass(hwnd uintptr, tr *tray.Tray) {
 			moveOffScreen(h)
 			return 0
 		case winutil.WM_ACTIVATEAPP:
-			if wParam == 0 {
+			// The user can turn this off to keep the window up while working
+			// in another program; it is then closed only on purpose (the ✕,
+			// Escape, or the tray icon).
+			if wParam == 0 && !autoHideDisabled.Load() {
 				elapsed := time.Now().UnixNano() - lastShownNS.Load()
 				if elapsed > int64(hideGuardWindow) && !windowHidden.Load() {
 					activationLossHideNS.Store(time.Now().UnixNano())

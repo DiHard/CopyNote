@@ -127,6 +127,7 @@ func main() {
 	//     first showAndFocus call.
 	if s, err := svc.GetSettings(); err == nil {
 		topmostEnabled.Store(s.Topmost)
+		autoHideDisabled.Store(s.DisableAutoHide)
 	} else {
 		topmostEnabled.Store(true) // default
 	}

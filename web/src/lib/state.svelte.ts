@@ -63,6 +63,7 @@ export const state = $state<{
     locale: "system",
     topmost: true,
     disableUpdateCheck: false,
+    disableAutoHide: false,
     relocatePromptDismissed: false,
     relocateRemindAfter: "",
     lastSeenUpdateVersion: "",
@@ -268,6 +269,7 @@ export async function loadSettings(): Promise<void> {
   applyTheme(state.settings.theme);
   applyLocale(state.settings.locale);
   window.applyTopmost?.(state.settings.topmost);
+  window.applyAutoHide?.(!state.settings.disableAutoHide);
 }
 
 export function saveSettings(patch: Partial<UserSettings>): Promise<void> {
@@ -282,6 +284,7 @@ export function saveSettings(patch: Partial<UserSettings>): Promise<void> {
       applyTheme(merged.theme);
       applyLocale(merged.locale);
       await window.applyTopmost?.(merged.topmost);
+      await window.applyAutoHide?.(!merged.disableAutoHide);
     } catch (error) {
       state.settingsError = String(error);
       throw error;

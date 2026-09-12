@@ -44,6 +44,8 @@ export const en: Record<string, string> = {
   "settings.back": "Back",
   "settings.general": "General",
   "settings.autorun": "Run at startup",
+  "settings.autohide": "Hide when clicking outside",
+  "settings.autohide.hint": "Turn this off to keep the window up while you work in another program. Close it with the ✕, Esc, or the tray icon.",
   "settings.topmost": "Above the hidden icons panel",
   "settings.topmost.hint": "Otherwise it covers a window opened from it. Turning this off also removes the heavy shadow.",
   "settings.appearance": "Appearance",

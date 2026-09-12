@@ -57,6 +57,13 @@
     savePreference({ topmost: checked }, e);
   }
 
+  // Inverted against the persisted `disableAutoHide` so the label can be
+  // positive, same as the update-check toggle below.
+  function onAutoHideChange(e: Event) {
+    const checked = (e.target as HTMLInputElement).checked;
+    savePreference({ disableAutoHide: !checked }, e, true);
+  }
+
   function onThemeChange(e: Event) {
     const value = (e.target as HTMLSelectElement).value as
       | "light"
@@ -211,10 +218,27 @@
           class="h-4 w-4 cursor-pointer rounded border-input-border bg-input text-accent focus:ring-accent focus:ring-offset-0"
         />
       </label>
-      <!-- The only preference here with a real trade-off, so it is the only
-           one carrying an explanation: off means the tray flyout can cover
-           the window, on means a heavier drop shadow. Without naming both
-           sides there is no way to choose. -->
+      <label
+        class="mt-1.5 flex cursor-pointer items-start justify-between gap-3 rounded-lg border border-outline bg-card px-2.5 py-2"
+      >
+        <span class="min-w-0">
+          <span class="block text-sm">{t("settings.autohide")}</span>
+          <span class="mt-0.5 block text-[11px] leading-snug text-on-surface-dim"
+            >{t("settings.autohide.hint")}</span
+          >
+        </span>
+        <input
+          type="checkbox"
+          disabled={appState.settingsPending > 0 || dataBusy}
+          checked={!appState.settings.disableAutoHide}
+          onchange={onAutoHideChange}
+          class="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-input-border bg-input text-accent focus:ring-accent focus:ring-offset-0"
+        />
+      </label>
+      <!-- Both remaining preferences here carry a real trade-off, so both
+           get an explanation: this one is the tray flyout covering the
+           window versus a heavier drop shadow. Without naming both sides
+           there is no way to choose. -->
       <label
         class="mt-1.5 flex cursor-pointer items-start justify-between gap-3 rounded-lg border border-outline bg-card px-2.5 py-2"
       >

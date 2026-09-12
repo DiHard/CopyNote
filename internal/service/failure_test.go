@@ -225,3 +225,35 @@ func TestSettingsRegistryFailureDoesNotPersistPreference(t *testing.T) {
 		t.Fatal("preference saved despite registry failure")
 	}
 }
+
+// storage.decode unmarshals data.json straight into model.Store, so a
+// *Settings gets Go's zero value for every key the file does not carry —
+// DefaultSettings never runs on this path. Any preference whose default is
+// "on" therefore has to be stored inverted, or every existing installation
+// silently loses it on upgrade. This pins that down for the window's
+// auto-hide, which is the newest such field.
+func TestSettingsAbsentFromAnOlderFileKeepDefaultBehaviour(t *testing.T) {
+	dir := testutil.TempDir(t)
+	path := filepath.Join(dir, "data.json")
+	// A data.json exactly as v2.1.0 wrote it: no auto-hide key at all.
+	older := `{"version":2,"entries":[],"settings":{"autorun":true,"theme":"system",` +
+		`"locale":"system","topmost":true,"disableUpdateCheck":false,` +
+		`"relocatePromptDismissed":false,"lastSeenUpdateVersion":"2.1.0"}}`
+	if err := os.WriteFile(path, []byte(older), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := New(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings, err := s.GetSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.DisableAutoHide {
+		t.Error("an upgrade must not stop the window hiding on focus loss")
+	}
+	if !settings.Topmost {
+		t.Error("keys the file does carry must survive")
+	}
+}

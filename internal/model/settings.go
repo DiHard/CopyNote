@@ -28,6 +28,12 @@ type Settings struct {
 	Locale                  string `json:"locale"`  // "en" | "ru" | "system"
 	Topmost                 bool   `json:"topmost"` // keep window above all others
 	DisableUpdateCheck      bool   `json:"disableUpdateCheck"`
+	// DisableAutoHide keeps the window on screen when another program takes
+	// focus, instead of parking it off-screen. Inverted like the field above
+	// for the same reason: storage.decode unmarshals into a zero Settings, so
+	// a key missing from an older data.json must mean the default — and the
+	// default is that the window hides.
+	DisableAutoHide bool `json:"disableAutoHide"`
 	LastSeenUpdateVersion   string `json:"lastSeenUpdateVersion"`
 	RelocatePromptDismissed bool   `json:"relocatePromptDismissed"`
 	// RelocateRemindAfter is an RFC3339 instant before which the move

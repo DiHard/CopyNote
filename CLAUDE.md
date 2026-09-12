@@ -124,6 +124,7 @@ Go functions are exposed to JavaScript via `webview.Bind()`:
 | `window.updateProgress()` | in-memory snapshot | `{stage, done, total}` polled by the UI while installUpdate runs |
 | `window.restartApp()` | Terminate → main relaunches | Only after a successful install: releases the mutex, starts the new exe, posts SHOW |
 | `window.applyTopmost(enabled)` | Win32 dispatch | Apply window stacking preference |
+| `window.applyAutoHide(enabled)` | `autoHideDisabled` atomic | Whether losing focus parks the window off-screen |
 | `window.getInstallLocation()` | relocate.IsPermanent | Where the exe lives and whether that is a program folder |
 | `window.pickInstallFolder(title)` | SHBrowseForFolderW | Folder picker; `""` when cancelled |
 | `window.relocateApp(dir)` | relocate.CopyTo + restart | Copy the exe to `dir` (`""` = default) and restart from there |
@@ -141,7 +142,7 @@ All bridge calls return Promises. The Go side persists to disk on every mutation
 - **Reset on show**: every path that puts the window on screen evals `window.__onShow()` (`notifyShown` in main.go). The window is parked, never destroyed, so without it reopening would show last session's search query — and, if the user closed from Settings, the settings view. `resetForShow` clears the query, view and stale operation error, then focus goes to the search box. An open modal short-circuits the whole thing: it may hold an edit the user was pulled away from, and discarding that to tidy the view would be worse than a stale search box. `toggleVisibility` returns whether it actually showed, so a toggle that *hid* the window does not fire it. For the tray's Settings item, `__onShow` is evaluated before `__openSettings` so the latter wins.
 - **Show on a user launch**: starting the exe by hand surfaces the window as soon as the UI is ready; a Windows sign-in does not. `applyAutorun` appends `service.AutostartFlag` (`--autostart`) to the `Run` value, `startedByAutorun` looks for it, and `tray.ShowOnStart` carries the answer. `EnsureAutorunPath` rewrites the registry value on every start, so installations made before the flag existed migrate themselves. A relaunch after an update or a move passes no arguments and therefore also shows the window — which is what those flows already asked for separately
 - **No SW_HIDE**: visibility managed via off-screen positioning to prevent WebView2 renderer throttling
-- **Auto-hide**: `WM_ACTIVATEAPP` wParam=0 moves off-screen after 300ms guard
+- **Auto-hide**: `WM_ACTIVATEAPP` wParam=0 moves off-screen after 300ms guard, unless `settings.disableAutoHide` is set — then the window stays up until the ✕, Escape or the tray icon closes it
 - **Toggle debounce**: LMB on tray within 150ms of auto-hide = stay hidden
 - **Slide animation**: show = slide up from below screen (200ms ease-out), hide = slide down (150ms ease-in)
 - **Anchor**: Bottom-right corner, 8 px margin (scaled for DPI), compensates for DWM invisible border
@@ -204,6 +205,8 @@ A downloaded `copynote.exe` normally stays in `%USERPROFILE%\Downloads`. That is
 | Legacy settings | `%APPDATA%\CopyNote\settings.json` | Read only until first successful migration |
 | WebView2 cache | `%LOCALAPPDATA%\CopyNote\WebView2\` | Browser cache |
 | Export backup | User-chosen path | `{formatVersion, appVersion, entries[], settings}` |
+
+⚠ **A new setting whose default is "on" must be stored inverted.** `storage.decode` unmarshals `data.json` straight into `model.Store`, and `Settings` is a pointer — so every key absent from the file keeps Go's zero value and `DefaultSettings()` never runs on that path. Add `Foo bool` defaulting to true and every existing installation silently gets `false` on upgrade. Hence `DisableUpdateCheck` and `DisableAutoHide`: the field is negative, the UI label is positive, and `savePreference(..., inverted = true)` keeps the checkbox rollback honest. `TestSettingsAbsentFromAnOlderFileKeepDefaultBehaviour` pins this down.
 
 Writes prepare a separate snapshot, flush `.tmp`, preserve the previous valid data as `.bak`, then replace via MoveFileEx. Memory changes only after success. Schema 1 and legacy settings migrate on the next save. Import commits entries and settings together. Older executables should not be used after migration.
 

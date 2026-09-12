@@ -21,6 +21,9 @@ export interface UserSettings {
   topmost: boolean;
   /** Inverted: true disables the update check. Default is false (enabled). */
   disableUpdateCheck: boolean;
+  /** Inverted: true keeps the window on screen when another program takes
+   *  focus. Default is false — the window hides. */
+  disableAutoHide: boolean;
   /** Hides the banner offering to move the exe into a program folder for
    *  good. The action itself stays available in Settings. */
   relocatePromptDismissed: boolean;
