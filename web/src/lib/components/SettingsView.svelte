@@ -159,9 +159,12 @@
   }
 </script>
 
-<div class="flex h-full flex-col bg-surface text-on-surface">
+<!-- Same shape as the main view: one viewport tall, only the body scrolls.
+     h-full here resolved against a parent with no height, so the settings
+     list used to push its own header off the top of the window. -->
+<div data-shell class="flex h-screen flex-col bg-surface text-on-surface">
   <!-- Header -->
-  <div class="flex items-center gap-1.5 border-b border-outline bg-surface-alt px-2.5 py-2">
+  <div class="flex shrink-0 items-center gap-1.5 border-b border-outline bg-surface-alt px-2.5 py-2">
     <button
       type="button"
       onclick={closeSettings}
@@ -186,7 +189,8 @@
   </div>
 
   <!-- Scrollable content -->
-  <div class="flex-1 space-y-5 overflow-y-auto px-3 py-3">
+  <div data-scroller class="min-h-0 flex-1 overflow-y-auto">
+   <div data-scroll-content class="space-y-5 px-3 py-3">
     {#if appState.settingsError}
       <p role="alert" class="text-xs text-danger">{t("settings.saveError", {error: appState.settingsError})}</p>
     {/if}
@@ -450,5 +454,6 @@
         <p role="alert" class="mt-1 text-[11px] text-danger">{folderError}</p>
       {/if}
     </section>
+   </div>
   </div>
 </div>

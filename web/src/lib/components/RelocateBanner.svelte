@@ -23,9 +23,9 @@
   });
 </script>
 
-<!-- mt-3 matches the list's own px-3 py-3, and the gap below comes from that
-     same padding — so the banner sits on the same 12 px rhythm as the cards. -->
-<div class="mx-3 mt-3 rounded-lg border border-outline bg-card px-2.5 py-2">
+<!-- Sits inside the list's own px-3 py-3, so it needs no inset of its own —
+     just the 12 px gap to the first card, matching the list's rhythm. -->
+<div class="mb-3 rounded-lg border border-outline bg-card px-2.5 py-2">
   <div class="flex items-start gap-2">
     <svg
       xmlns="http://www.w3.org/2000/svg"

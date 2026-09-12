@@ -34,7 +34,7 @@
 </script>
 
 <header
-  class="flex items-center gap-1.5 border-b border-outline bg-surface-alt px-2.5 py-1.5"
+  class="flex shrink-0 items-center gap-1.5 border-b border-outline bg-surface-alt px-2.5 py-1.5"
   style="-webkit-app-region: drag"
 >
   <span class="shrink-0 text-xs font-semibold text-on-surface">{t("app.title")}</span>
