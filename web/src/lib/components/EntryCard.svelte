@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Entry } from "../types";
   import { openEdit, openDelete, copyEntry } from "../state.svelte";
-  import { moveCardFocus } from "../focus";
+  import { moveCardFocus, focusCardAt, focusLastCard } from "../focus";
   import { t } from "../i18n";
   import { onDestroy } from "svelte";
 
@@ -10,15 +10,20 @@
     isDragging = false,
     dragInProgress = false,
     dragDisabled = false,
+    tabbable = false,
     onDragPointerDown,
     onMoveByKey,
+    onFocused,
   }: {
     entry: Entry;
     isDragging?: boolean;
     dragInProgress?: boolean;
     dragDisabled?: boolean;
+    /** Roving tabindex: the whole list is one Tab stop, and this is it. */
+    tabbable?: boolean;
     onDragPointerDown?: (e: PointerEvent) => void;
     onMoveByKey?: (dir: -1 | 1) => void;
+    onFocused?: () => void;
   } = $props();
 
   type CopyState = "idle" | "copied" | "failed";
@@ -44,10 +49,31 @@
   }
 
   function onKeyDown(e: KeyboardEvent) {
+    // The row's own actions are out of the Tab order, so they get the keys a
+    // Windows user already expects. Announced via aria-keyshortcuts below.
+    if (e.key === "F2") {
+      e.preventDefault();
+      openEdit(entry);
+      return;
+    }
+    if (e.key === "Delete") {
+      e.preventDefault();
+      openDelete(entry);
+      return;
+    }
+    if (e.key === "Home") {
+      e.preventDefault();
+      focusCardAt(0);
+      return;
+    }
+    if (e.key === "End") {
+      e.preventDefault();
+      focusLastCard();
+      return;
+    }
     if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
     const dir = e.key === "ArrowDown" ? 1 : -1;
-    // Ctrl moves the entry, a plain arrow moves the focus. Tab still walks
-    // every control in the row; the arrows are the fast path past them.
+    // Ctrl moves the entry, a plain arrow moves the focus.
     if (e.ctrlKey) {
       if (dragDisabled) return;
       e.preventDefault();
@@ -76,6 +102,8 @@
   <button
     type="button"
     data-card-focus
+    tabindex={tabbable ? 0 : -1}
+    onfocus={() => onFocused?.()}
     onclick={onCopy}
     onkeydown={onKeyDown}
     title={t("card.copy")}
@@ -100,12 +128,16 @@
       ? 'pointer-events-none opacity-0'
       : ''}"
   >
+    <!-- Out of the Tab order so the list costs one stop, not three; the key
+         is announced instead. -->
     <button
       type="button"
+      tabindex="-1"
+      aria-keyshortcuts="F2"
       title={t("card.edit")}
       aria-label={t("card.edit")}
       onclick={() => openEdit(entry)}
-      class="rounded p-1 text-on-surface-dim hover:bg-surface-hover hover:text-on-surface"
+      class="rounded p-1 text-on-surface-dim hover:bg-surface-hover hover:text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -127,10 +159,12 @@
     </button>
     <button
       type="button"
+      tabindex="-1"
+      aria-keyshortcuts="Delete"
       title={t("card.delete")}
       aria-label={t("card.delete")}
       onclick={() => openDelete(entry)}
-      class="rounded p-1 text-on-surface-dim hover:bg-danger-dim hover:text-danger"
+      class="rounded p-1 text-on-surface-dim hover:bg-danger-dim hover:text-danger focus:outline-none focus-visible:ring-2 focus-visible:ring-danger"
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"

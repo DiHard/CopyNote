@@ -44,6 +44,16 @@
   // While dragging we render `dragOrder`; otherwise `filtered`.
   const renderList = $derived<Entry[]>(dragOrder ?? filtered);
 
+  // ── Roving tabindex ──────────────────────────────────────────────
+  // The list is one Tab stop, not three per entry: only the card that last
+  // had focus is tabbable, and the arrows move between them. Tabbing out and
+  // back therefore returns to where the user was, and a filter that removes
+  // that entry falls back to the top of the list.
+  let activeId = $state<string | null>(null);
+  const tabbableId = $derived(
+    renderList.some((e) => e.id === activeId) ? activeId : (renderList[0]?.id ?? null),
+  );
+
   // ── Handlers ─────────────────────────────────────────────────────
   function onCardPointerDown(e: PointerEvent, id: string): void {
     if (!canDrag) return;
@@ -279,8 +289,10 @@
               isDragging={entry.id === draggingId}
               dragInProgress={draggingId !== null}
               dragDisabled={!canDrag}
+              tabbable={entry.id === tabbableId}
               onDragPointerDown={(e) => onCardPointerDown(e, entry.id)}
               onMoveByKey={(dir) => onKeyboardMove(entry.id, dir)}
+              onFocused={() => (activeId = entry.id)}
             />
           </div>
         {/each}

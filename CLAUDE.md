@@ -263,7 +263,9 @@ The app is a "copy one thing and get out of the way" utility, so the whole loop 
 
 - **Escape**: Clear a non-empty search → close modal → close settings → hide window (cascading). Header's handler `preventDefault`s the clear, and App's global handler bails on `e.defaultPrevented`, which is how the cascade stays in order.
 - **Enter** in the search box: `copyTopMatch()` copies the first *filtered* entry and hides the window. Nothing matching, or a failed clipboard write, leaves the window up with the error shown.
-- **↓ / ↑**: move focus between cards (`lib/focus.ts`). ↓ from the search box enters the list, ↑ from the first card returns to it, and the last card does not wrap. Tab still walks every control in every row — the arrows are the fast path past the three tab stops each card costs.
+- **↓ / ↑**: move focus between cards (`lib/focus.ts`). ↓ from the search box enters the list, ↑ from the first card returns to it, and the last card does not wrap. **Home / End** jump to the ends.
+- **The list is a single Tab stop.** Roving tabindex: only the card that last had focus is tabbable (`tabbableId` in EntryList), so Tab out and back returns to where the user was, and a filter that hides that entry falls back to the top. Row actions are `tabindex="-1"` — twenty entries used to cost sixty Tab presses.
+- **F2 / Delete** on the focused card edit and delete it — Windows conventions, since those buttons left the Tab order. Both carry `aria-keyshortcuts` so a screen reader announces them, and both are listed in Settings → Клавиши, which is the only place a sighted user can discover them.
 - **Ctrl + ↑ / ↓** on a focused card: move the entry itself. Disabled while a search filter is active, since the visible order is not the stored one.
 - **Enter** in modal form: Submit (create/edit)
 - **Tab**: Navigates copy/edit/delete controls; modal focus is trapped and restored on close.

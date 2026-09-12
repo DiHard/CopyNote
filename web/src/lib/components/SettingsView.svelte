@@ -28,6 +28,16 @@
     }
   });
 
+  // Key names are the same in every locale; only what they do is translated.
+  const shortcuts = () => [
+    { keys: "Enter", what: t("settings.keys.enter") },
+    { keys: "↑ ↓", what: t("settings.keys.arrows") },
+    { keys: "Ctrl + ↑ ↓", what: t("settings.keys.move") },
+    { keys: "F2", what: t("settings.keys.edit") },
+    { keys: "Delete", what: t("settings.keys.delete") },
+    { keys: "Esc", what: t("settings.keys.escape") },
+  ];
+
   const themeOptions = () => [
     { value: "system", label: t("settings.theme.system") },
     { value: "light", label: t("settings.theme.light") },
@@ -416,6 +426,29 @@
             class="h-4 w-4 cursor-pointer rounded border-input-border bg-input text-accent focus:ring-accent focus:ring-offset-0"
           />
         </label>
+      </div>
+    </section>
+
+    <!-- Keyboard. The row actions left the Tab order, so their keys have to
+         be written down somewhere the user can find them. -->
+    <section>
+      <h2 class="mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-on-surface-faint">
+        {t("settings.keys")}
+      </h2>
+      <div class="overflow-hidden rounded-lg border border-outline bg-card">
+        {#each shortcuts() as s, i}
+          <div
+            class="flex items-baseline justify-between gap-3 px-2.5 py-1.5 {i > 0
+              ? 'border-t border-outline'
+              : ''}"
+          >
+            <span class="min-w-0 text-[13px] text-on-surface-dim">{s.what}</span>
+            <kbd
+              class="shrink-0 rounded border border-outline bg-surface px-1.5 py-0.5 text-[11px] text-on-surface"
+              >{s.keys}</kbd
+            >
+          </div>
+        {/each}
       </div>
     </section>
 

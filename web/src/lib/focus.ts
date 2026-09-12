@@ -25,6 +25,10 @@ export function focusCardAt(index: number): void {
   all[Math.max(0, Math.min(index, all.length - 1))].focus();
 }
 
+export function focusLastCard(): void {
+  focusCardAt(cards().length - 1);
+}
+
 /**
  * Moves focus `delta` cards from the one that has it. Stepping off the top
  * returns to the search box, which is where the user came from; stepping off
