@@ -72,6 +72,8 @@ export const en: Record<string, string> = {
   "settings.updates.restarting": "Restarting…",
   "settings.updates.installFailed": "Update failed: {error}",
   "settings.updates.manualDownload": "Download manually",
+  "settings.openFolder": "Open app folder",
+  "settings.openFolderError": "Could not open the folder: {error}",
   "settings.about": "About",
   "settings.saveError": "Could not load or save settings: {error}",
   "operation.error": "Operation failed: {error}",

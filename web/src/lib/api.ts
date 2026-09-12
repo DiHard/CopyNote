@@ -19,6 +19,8 @@ declare global {
     exportData: () => Promise<boolean>;
     importData: () => Promise<boolean>;
     openExternal: (url: string) => Promise<void>;
+    /** Opens the folder the running copynote.exe sits in, in Explorer. */
+    openAppFolder: () => Promise<void>;
     notifyReady: () => Promise<void>;
     getVersion: () => Promise<string>;
     checkForUpdates: () => Promise<UpdateInfo | null>;
@@ -48,6 +50,7 @@ export const api = {
   saveSettings: (s: UserSettings): Promise<void> => window.saveSettings(s),
   exportData: (): Promise<boolean> => window.exportData(),
   importData: (): Promise<boolean> => window.importData(),
+  openAppFolder: (): Promise<void> => window.openAppFolder(),
   getVersion: (): Promise<string> => window.getVersion(),
   checkForUpdates: (): Promise<UpdateInfo | null> => window.checkForUpdates(),
   forceCheckForUpdates: (): Promise<UpdateInfo | null> =>

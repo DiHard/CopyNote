@@ -135,6 +135,19 @@
       dataStatus = t("settings.importError", { error: String(e).replace(/^Error:\s*/, "") });
     } finally { dataBusy = false; }
   }
+
+  let folderError = $state<string | null>(null);
+
+  async function onOpenAppFolder() {
+    folderError = null;
+    try {
+      await api.openAppFolder();
+    } catch (e) {
+      folderError = t("settings.openFolderError", {
+        error: String(e).replace(/^Error:\s*/, ""),
+      });
+    }
+  }
 </script>
 
 <div class="flex h-full flex-col bg-surface text-on-surface">
@@ -379,6 +392,18 @@
           >github.com/DiHard/CopyNote</button>
         </div>
       </div>
+      <!-- The app is portable: this folder holds the exe, and a self-update
+           leaves its .old fallback here too. -->
+      <button
+        type="button"
+        onclick={onOpenAppFolder}
+        class="mt-1.5 w-full rounded-lg border border-outline bg-card px-2.5 py-1.5 text-sm text-on-surface-dim transition hover:bg-card-hover hover:text-on-surface"
+      >
+        {t("settings.openFolder")}
+      </button>
+      {#if folderError}
+        <p role="alert" class="mt-1 text-[11px] text-danger">{folderError}</p>
+      {/if}
     </section>
   </div>
 </div>

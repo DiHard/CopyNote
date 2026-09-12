@@ -114,6 +114,7 @@ Go functions are exposed to JavaScript via `webview.Bind()`:
 | `window.exportData()` | svc.ExportData → SaveFileDialog | Export entries+settings to JSON |
 | `window.importData()` | OpenFileDialog → svc.ImportData | Import from JSON, merge entries |
 | `window.openExternal(url)` | ShellExecuteW | Open URL in default browser |
+| `window.openAppFolder()` | ShellExecuteW on `filepath.Dir(exePath)` | Open the folder holding the running exe in Explorer |
 | `window.notifyReady()` | trayCtrl.SetReady | Stop tray pulse, enable LMB, honour a deferred second-launch show |
 | `window.getVersion()` | version.Version | App version string (no leading `v`) |
 | `window.checkForUpdates()` | updater.CheckLatest | Background check, honors disableUpdateCheck |

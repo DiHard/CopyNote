@@ -72,6 +72,8 @@ export const ru: Record<string, string> = {
   "settings.updates.restarting": "\u041F\u0435\u0440\u0435\u0437\u0430\u043F\u0443\u0441\u043A\u2026",
   "settings.updates.installFailed": "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0431\u043D\u043E\u0432\u0438\u0442\u044C: {error}",
   "settings.updates.manualDownload": "\u0421\u043A\u0430\u0447\u0430\u0442\u044C \u0432\u0440\u0443\u0447\u043D\u0443\u044E",
+  "settings.openFolder": "Открыть папку с приложением",
+  "settings.openFolderError": "Не удалось открыть папку: {error}",
   "settings.about": "\u041E \u043F\u0440\u043E\u0433\u0440\u0430\u043C\u043C\u0435",
   "settings.saveError": "Не удалось загрузить или сохранить настройки: {error}",
   "operation.error": "Не удалось выполнить операцию: {error}",

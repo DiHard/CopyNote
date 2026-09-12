@@ -278,11 +278,29 @@ func MessageBox(text string, question bool) bool {
 	return result == 6 // IDYES
 }
 
+// shellOpen asks the shell to open a target with its default handler: a URL
+// in the browser, a directory in Explorer. ShellExecuteW reports success as
+// a return value greater than 32.
+func shellOpen(target string) uintptr {
+	t16, _ := windows.UTF16PtrFromString(target)
+	open, _ := windows.UTF16PtrFromString("open")
+	result, _, _ := procShellExecuteW.Call(0, uintptr(unsafe.Pointer(open)), uintptr(unsafe.Pointer(t16)), 0, 0, 1)
+	return result
+}
+
 // OpenURL opens a URL in the user's default browser via ShellExecuteW.
 func OpenURL(url string) {
-	u16, _ := windows.UTF16PtrFromString(url)
-	open, _ := windows.UTF16PtrFromString("open")
-	procShellExecuteW.Call(0, uintptr(unsafe.Pointer(open)), uintptr(unsafe.Pointer(u16)), 0, 0, 1)
+	shellOpen(url)
+}
+
+// OpenFolder opens a directory in Explorer. Unlike OpenURL it reports
+// failure, so a caller can tell the user why nothing appeared: the folder
+// may have been moved or deleted while the app was running.
+func OpenFolder(path string) error {
+	if result := shellOpen(path); result <= 32 {
+		return fmt.Errorf("open %s: ShellExecuteW code %d", path, result)
+	}
+	return nil
 }
 
 // SetWindowBackgroundColor sets the window class background brush

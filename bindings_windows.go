@@ -6,10 +6,12 @@ import (
 	"copynote/internal/storage"
 	"copynote/internal/version"
 	"copynote/internal/winutil"
+	"errors"
 	"fmt"
 	"github.com/jchv/go-webview2"
 	"log"
 	"os"
+	"path/filepath"
 )
 
 func bindApplication(w webview2.WebView, hwnd uintptr, svc *service.Service, exePath string) *bridge.Async {
@@ -40,6 +42,15 @@ func bindApplication(w webview2.WebView, hwnd uintptr, svc *service.Service, exe
 
 	mustBind("openExternal", func(url string) {
 		winutil.OpenURL(url)
+	})
+
+	// The app is portable, and a self-update leaves its .old fallback next to
+	// the exe, so the folder is worth a way in from the UI.
+	mustBind("openAppFolder", func() error {
+		if exePath == "" {
+			return errors.New("executable path is unavailable")
+		}
+		return winutil.OpenFolder(filepath.Dir(exePath))
 	})
 
 	mustBind("getVersion", func() string {
