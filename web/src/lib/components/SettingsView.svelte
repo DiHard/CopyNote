@@ -211,16 +211,25 @@
           class="h-4 w-4 cursor-pointer rounded border-input-border bg-input text-accent focus:ring-accent focus:ring-offset-0"
         />
       </label>
+      <!-- The only preference here with a real trade-off, so it is the only
+           one carrying an explanation: off means the tray flyout can cover
+           the window, on means a heavier drop shadow. Without naming both
+           sides there is no way to choose. -->
       <label
-        class="mt-1.5 flex cursor-pointer items-center justify-between rounded-lg border border-outline bg-card px-2.5 py-2"
+        class="mt-1.5 flex cursor-pointer items-start justify-between gap-3 rounded-lg border border-outline bg-card px-2.5 py-2"
       >
-        <span class="text-sm">{t("settings.topmost")}</span>
+        <span class="min-w-0">
+          <span class="block text-sm">{t("settings.topmost")}</span>
+          <span class="mt-0.5 block text-[11px] leading-snug text-on-surface-dim"
+            >{t("settings.topmost.hint")}</span
+          >
+        </span>
         <input
           type="checkbox"
           disabled={appState.settingsPending > 0 || dataBusy}
           checked={appState.settings.topmost}
           onchange={onTopmostChange}
-          class="h-4 w-4 cursor-pointer rounded border-input-border bg-input text-accent focus:ring-accent focus:ring-offset-0"
+          class="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-input-border bg-input text-accent focus:ring-accent focus:ring-offset-0"
         />
       </label>
     </section>
