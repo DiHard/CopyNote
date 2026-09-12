@@ -27,3 +27,6 @@ Thumbs.db
 # Release signing (private key lives outside the repo; .sig is a release asset)
 *.sig
 *.key
+
+# Sample snippet sets used for screenshots and manual testing, not shipped
+/demo-data*.json

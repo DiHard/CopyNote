@@ -101,8 +101,10 @@ chore: релиз vX.Y.Z
 
 <1–3 строки на русском, что в этом релизе. Для патча — одна строка.>
 
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
 ```
+
+The `Co-Authored-By` line must match whatever attribution the current session specifies — that guidance is authoritative and replaces the name shown above. The example goes stale every time the model changes; `v2.1.0` shipped while this file still named a model two versions old.
 
 Pass via HEREDOC (see CLAUDE.md style and the global Bash-tool rules).
 
