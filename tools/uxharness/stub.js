@@ -47,11 +47,12 @@
     disableAutoHide: false,
     relocatePromptDismissed: false,
     relocateRemindAfter: "",
+    hotkey: "",
     lastSeenUpdateVersion: "",
   };
 
   // Spies, for asserting that a binding was called at all.
-  const calls = { resizeWindow: [], hide: 0, copy: [], topmost: [], autoHide: [] };
+  const calls = { resizeWindow: [], hide: 0, copy: [], topmost: [], autoHide: [], hotkey: [] };
   window.__harness = { calls, get entries() { return copy(); } };
 
   // ── Entries ──────────────────────────────────────────────────────
@@ -95,6 +96,14 @@
   };
   window.applyTopmost = (v) => { calls.topmost.push(v); return reply(); };
   window.applyAutoHide = (v) => { calls.autoHide.push(v); return reply(); };
+  // ?hotkeytaken makes Windows refuse the combination, so the error path in
+  // Settings can be seen without actually occupying a shortcut.
+  window.applyHotkey = (spec) => {
+    calls.hotkey.push(spec);
+    return flags.has("hotkeytaken")
+      ? Promise.reject(new Error("register " + spec + ": Hot key is already registered."))
+      : reply();
+  };
 
   // ── Settings and data ────────────────────────────────────────────
   window.getSettings = () => reply({ ...settings });

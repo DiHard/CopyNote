@@ -125,6 +125,7 @@ Go functions are exposed to JavaScript via `webview.Bind()`:
 | `window.restartApp()` | Terminate → main relaunches | Only after a successful install: releases the mutex, starts the new exe, posts SHOW |
 | `window.applyTopmost(enabled)` | Win32 dispatch | Apply window stacking preference |
 | `window.applyAutoHide(enabled)` | `autoHideDisabled` atomic | Whether losing focus parks the window off-screen |
+| `window.applyHotkey(spec)` | trayCtrl.SetHotkey | Register the global shortcut on the tray thread; rejects with Windows' own text when refused |
 | `window.getInstallLocation()` | relocate.IsPermanent | Where the exe lives and whether that is a program folder |
 | `window.pickInstallFolder(title)` | SHBrowseForFolderW | Folder picker; `""` when cancelled |
 | `window.relocateApp(dir)` | relocate.CopyTo + restart | Copy the exe to `dir` (`""` = default) and restart from there |
@@ -158,6 +159,12 @@ Runs on dedicated `runtime.LockOSThread()` goroutine. Custom popup menu (GDI-pai
 **Nothing asked for during the cold start is dropped.** Left click, the popup's *Open* and *Settings*, a second exe launch and `ShowOnStart` all funnel into one `pending` slot (`pendingShow` / `pendingSettings`, tray thread only) that `msgSetReady` drains once `notifyReady` arrives. Sliding out a blank window mid-cold-start looks like a crash and silently ignoring the click looks like a dead icon, so the request waits instead. A second left click keeps the queued request as a show rather than toggling it off — there is no window on screen for the user to be toggling.
 
 The hover text says `CopyNote — загрузка…` during the cold start and `CopyNote — нажмите, чтобы открыть` afterwards; it is the only place the app ever explains what the icon does. Because it is localized, `saveSettings` calls `tray.RefreshTip()` — the tray is therefore constructed *before* `bindApplication`, which takes it as an argument.
+
+**Global hotkey.** `RegisterHotKey` delivers `WM_HOTKEY` to the thread owning the window, so registration lives on the tray thread against its message-only window (id 1, `MOD_NOREPEAT` so holding the keys opens the window once). `OnHotkey` toggles like a left click, and during the cold start it queues into the same `pending` slot. `Tray.SetHotkey` reaches the tray thread with a **blocking `SendMessage`** and reads the Win32 error code out of the return value — safe because the tray loop never waits on the UI thread — so the caller learns whether Windows accepted the combination.
+- The preference (`settings.hotkey`) is stored the way the user sees it, `"Ctrl+Alt+N"`, and parsed by `internal/hotkey`. **`""` means the built-in default, not "disabled"** — the zero-value trap again, since an older `data.json` has no such key — and `"off"` disables it. A combination without a modifier is rejected: it would take a bare keystroke away from every program.
+- Default is Ctrl+Alt+N: free on a stock Windows 11 (checked with a `RegisterHotKey` probe; Win+V and Win+Shift+V are taken by the OS), and rarely an in-app shortcut, unlike Ctrl+Shift+V which is "paste as plain text" nearly everywhere. On AltGr layouts (German, Polish, Czech) AltGr is Ctrl+Alt, so any Ctrl+Alt+letter would fire while typing — irrelevant for Russian and US layouts.
+- The frontend registers first and persists only if Windows accepted, so a stored shortcut is never one that does not work. `loadSettings` re-applies the stored value: the tray already registered it at startup, but that is the only way a conflict detected back then reaches the Settings screen.
+- Capture builds the combination from `KeyboardEvent.code`, not `.key` — under Ctrl+Alt on a Russian layout `.key` is Cyrillic. The accepted set in `SettingsView.keyNameFrom` must mirror `hotkey.virtualKey`.
 
 ### Single Instance
 

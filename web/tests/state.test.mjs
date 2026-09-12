@@ -433,3 +433,50 @@ test("the empty-search action prefills the form with what was typed", async () =
   app.openCreateFromSearch("  ИНН для ООО  ");
   assert.deepEqual(app.state.modal, {kind: "create", label: "ИНН для ООО"}, "trimmed");
 });
+
+test("a shortcut Windows accepts is stored", async () => {
+  const saved = [];
+  const app = await setup({
+    applyHotkey: async () => {},
+    saveSettings: async settings => { saved.push(settings.hotkey); },
+  });
+  await app.applyHotkey("Ctrl+Shift+F5");
+  assert.equal(app.state.hotkeyError, null);
+  assert.equal(app.state.settings.hotkey, "Ctrl+Shift+F5");
+  assert.deepEqual(saved, ["Ctrl+Shift+F5"]);
+});
+
+test("a shortcut Windows refuses is reported and never stored", async () => {
+  const saved = [];
+  const app = await setup({
+    applyHotkey: async () => { throw new Error("Hot key is already registered."); },
+    saveSettings: async settings => { saved.push(settings.hotkey); },
+  });
+  await app.applyHotkey("Ctrl+Alt+N");
+  assert.deepEqual(
+    app.state.hotkeyError,
+    {combo: "Ctrl+Alt+N", taken: true, detail: "Hot key is already registered"},
+    "the ordinary refusal is recognised; the Error: prefix and trailing period are gone",
+  );
+  assert.deepEqual(saved, [], "a shortcut that does not work must not be persisted");
+  assert.equal(app.state.settings.hotkey, "", "the previous preference stays in place");
+});
+
+test("an unexpected hotkey failure keeps Windows' wording and names the default", async () => {
+  const app = await setup({
+    applyHotkey: async () => { throw new Error("Error: Access is denied."); },
+  });
+  await app.applyHotkey("");
+  assert.deepEqual(
+    app.state.hotkeyError,
+    {combo: "Ctrl+Alt+N", taken: false, detail: "Access is denied"},
+    "an empty preference is reported as the default combination, never as a blank",
+  );
+});
+
+test("the empty preference is shown as the default combination", async () => {
+  const app = await setup();
+  assert.equal(app.hotkeyLabel(), app.DEFAULT_HOTKEY, "an older data.json has no hotkey key at all");
+  app.state.settings = {...app.state.settings, hotkey: "Ctrl+Shift+F5"};
+  assert.equal(app.hotkeyLabel(), "Ctrl+Shift+F5");
+});

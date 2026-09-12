@@ -10,6 +10,10 @@
     installUpdate,
     isUpdateInstalling,
     canOfferRelocate,
+    applyHotkey,
+    hotkeyLabel,
+    DEFAULT_HOTKEY,
+    HOTKEY_OFF,
     relocateApp,
     relocateAppTo,
   } from "../state.svelte";
@@ -27,6 +31,44 @@
       appVersion = "";
     }
   });
+
+  // ── Global hotkey capture ────────────────────────────────────────
+  let capturing = $state(false);
+
+  /**
+   * Built from `event.code`, not `event.key`: under Ctrl+Alt on a Russian
+   * layout `key` is a Cyrillic letter, and the Go parser only knows the
+   * physical keys. The set here mirrors hotkey.virtualKey exactly.
+   */
+  function keyNameFrom(e: KeyboardEvent): string | null {
+    const c = e.code;
+    if (/^Key[A-Z]$/.test(c)) return c.slice(3);
+    if (/^Digit[0-9]$/.test(c)) return c.slice(5);
+    if (/^F([1-9]|1[0-9]|2[0-4])$/.test(c)) return c;
+    const named = ["Space", "Insert", "Delete", "Home", "End", "PageUp", "PageDown", "Backquote"];
+    return named.includes(c) ? c : null;
+  }
+
+  function onCaptureKeydown(e: KeyboardEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.key === "Escape") {
+      capturing = false;
+      return;
+    }
+    const key = keyNameFrom(e);
+    // Modifiers alone, or a key the app cannot register: keep waiting rather
+    // than storing something that would fail.
+    if (!key) return;
+    const mods: string[] = [];
+    if (e.ctrlKey) mods.push("Ctrl");
+    if (e.altKey) mods.push("Alt");
+    if (e.shiftKey) mods.push("Shift");
+    if (e.metaKey) mods.push("Win");
+    if (mods.length === 0) return;
+    capturing = false;
+    void applyHotkey([...mods, key].join("+"));
+  }
 
   // Key names are the same in every locale; only what they do is translated.
   const shortcuts = () => [
@@ -245,6 +287,64 @@
           class="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-input-border bg-input text-accent focus:ring-accent focus:ring-offset-0"
         />
       </label>
+      <!-- The one control here that Windows can refuse, so it reports back. -->
+      <div class="mt-1.5 rounded-lg border border-outline bg-card px-2.5 py-2">
+        <div class="flex items-start justify-between gap-3">
+          <span class="min-w-0">
+            <span class="block text-sm">{t("settings.hotkey")}</span>
+            <span class="mt-0.5 block text-[11px] leading-snug text-on-surface-dim"
+              >{t("settings.hotkey.hint")}</span
+            >
+          </span>
+          <button
+            type="button"
+            onclick={() => (capturing = !capturing)}
+            onkeydown={capturing ? onCaptureKeydown : undefined}
+            disabled={appState.settingsPending > 0 || dataBusy}
+            class="shrink-0 rounded-md border px-2 py-1 text-[11px] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60 {capturing
+              ? 'border-accent bg-accent-soft text-accent'
+              : 'border-outline bg-surface text-on-surface hover:bg-surface-hover'}"
+          >
+            {capturing
+              ? t("settings.hotkey.press")
+              : appState.settings.hotkey === HOTKEY_OFF
+                ? t("settings.hotkey.off")
+                : hotkeyLabel()}
+          </button>
+        </div>
+        <div class="mt-1 flex items-baseline gap-3">
+          {#if appState.settings.hotkey !== HOTKEY_OFF}
+            <button
+              type="button"
+              onclick={() => void applyHotkey(HOTKEY_OFF)}
+              class="text-[11px] text-on-surface-dim transition hover:text-on-surface"
+            >
+              {t("settings.hotkey.disable")}
+            </button>
+          {:else}
+            <button
+              type="button"
+              onclick={() => void applyHotkey(DEFAULT_HOTKEY)}
+              class="text-[11px] text-accent transition hover:underline"
+            >
+              {t("settings.hotkey.enable", { keys: DEFAULT_HOTKEY })}
+            </button>
+          {/if}
+        </div>
+        {#if appState.hotkeyError}
+          <!-- The ordinary refusal gets a plain sentence; Windows' own wording
+               only surfaces for the rare failure that is something else. -->
+          <p role="alert" class="mt-1 text-[11px] leading-snug text-danger">
+            {appState.hotkeyError.taken
+              ? t("settings.hotkey.taken", { combo: appState.hotkeyError.combo })
+              : t("settings.hotkey.failed", {
+                  combo: appState.hotkeyError.combo,
+                  error: appState.hotkeyError.detail,
+                })}
+          </p>
+        {/if}
+      </div>
+
       <!-- Reads as a pair with the toggle above: turn hiding off and this is
            what keeps the window in front of the app being filled in. Both
            carry a real trade-off, so both name it — here a heavier shadow. -->

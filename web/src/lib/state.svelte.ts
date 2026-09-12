@@ -55,6 +55,13 @@ export const state = $state<{
    *  actually be tried. Deliberately not persisted: no settings field to
    *  migrate, and installations that already have entries never see it. */
   showFirstCopyHint: boolean;
+  /** Why Windows refused the global shortcut, if it did. Unlike the other
+   *  preferences this one can fail outside the app's control. `taken` is the
+   *  ordinary case — another program owns the combination — and gets a plain
+   *  sentence; anything else falls back to Windows' own wording in `detail`.
+   *  Kept structured rather than as a finished string so a language switch
+   *  re-renders it. */
+  hotkeyError: { combo: string; taken: boolean; detail: string } | null;
 }>({
   entries: [],
   query: "",
@@ -71,6 +78,7 @@ export const state = $state<{
     disableAutoHide: false,
     relocatePromptDismissed: false,
     relocateRemindAfter: "",
+    hotkey: "",
     lastSeenUpdateVersion: "",
   },
   settingsError: null,
@@ -83,7 +91,53 @@ export const state = $state<{
   relocate: { kind: "idle" },
   relocateSnoozeClicked: false,
   showFirstCopyHint: false,
+  hotkeyError: null,
 });
+
+/** The combination Go falls back to when the preference is empty. */
+export const DEFAULT_HOTKEY = "Ctrl+Alt+N";
+export const HOTKEY_OFF = "off";
+
+/** What to print for the stored preference. */
+export function hotkeyLabel(): string {
+  const h = state.settings.hotkey;
+  return h === "" ? DEFAULT_HOTKEY : h;
+}
+
+/**
+ * Registers the combination first and only stores it once Windows accepted
+ * it — persisting a shortcut that does not work would leave the user with a
+ * setting that lies. Another program owning the combination is the ordinary
+ * failure here, not an exception.
+ */
+/**
+ * Turns whatever the bridge threw into something Settings can phrase. The
+ * combination comes from what was asked for, never from the error text — an
+ * empty preference means the default and must not print as a blank.
+ */
+export function describeHotkeyError(
+  spec: string,
+  error: unknown,
+): { combo: string; taken: boolean; detail: string } {
+  const detail = String(error).replace(/^(Error:\s*)+/, "").replace(/\.\s*$/, "");
+  return {
+    combo: spec.trim() === "" ? DEFAULT_HOTKEY : spec,
+    // ERROR_HOTKEY_ALREADY_REGISTERED is the refusal people actually hit.
+    taken: /already registered/i.test(detail),
+    detail,
+  };
+}
+
+export async function applyHotkey(spec: string): Promise<void> {
+  state.hotkeyError = null;
+  try {
+    await api.applyHotkey(spec);
+  } catch (error) {
+    state.hotkeyError = describeHotkeyError(spec, error);
+    return;
+  }
+  await saveSettings({ hotkey: spec }).catch(() => {});
+}
 
 /**
  * True when there is an update available AND the user has not yet
@@ -291,6 +345,12 @@ export async function loadSettings(): Promise<void> {
   applyLocale(state.settings.locale);
   window.applyTopmost?.(state.settings.topmost);
   window.applyAutoHide?.(!state.settings.disableAutoHide);
+  // The tray already registered this at startup; re-applying is cheap and is
+  // the only way a conflict detected back then reaches the Settings screen,
+  // where the user can actually do something about it.
+  window.applyHotkey?.(state.settings.hotkey).catch((error) => {
+    state.hotkeyError = describeHotkeyError(state.settings.hotkey, error);
+  });
 }
 
 export function saveSettings(patch: Partial<UserSettings>): Promise<void> {

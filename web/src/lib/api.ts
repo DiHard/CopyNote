@@ -34,6 +34,8 @@ declare global {
     applyTopmost: (enabled: boolean) => Promise<void>;
     /** Whether losing focus parks the window off-screen. */
     applyAutoHide: (enabled: boolean) => Promise<void>;
+    /** Registers the global shortcut; rejects when Windows refuses it. */
+    applyHotkey: (spec: string) => Promise<void>;
     /** Where the running executable lives and whether that is permanent. */
     getInstallLocation: () => Promise<InstallLocation>;
     /** Shell folder browser; resolves to "" when the user cancels. */
@@ -79,4 +81,5 @@ export const api = {
     window.relocateApp(targetDir),
   dismissRelocatePrompt: (): Promise<void> => window.dismissRelocatePrompt(),
   snoozeRelocatePrompt: (): Promise<string> => window.snoozeRelocatePrompt(),
+  applyHotkey: (spec: string): Promise<void> => window.applyHotkey(spec),
 };

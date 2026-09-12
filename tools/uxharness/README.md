@@ -42,6 +42,7 @@ Appended to the URL:
 | `?many` | 30 entries — list scrolling and the window-height clamp |
 | `?downloads` | exe in Downloads — the relocate banner |
 | `?update` | a signed release is available — the in-app update flow |
+| `?hotkeytaken` | Windows refuses every global shortcut — the Settings error path |
 
 `window.__harness.calls` records what the UI asked the bridge to do
 (`resizeWindow` heights, `hide` count, copied ids, topmost/auto-hide values).
@@ -73,6 +74,13 @@ Confirmed the hard way, in the Claude Code browser pane:
 Before calling anything a regression, serve the previous bundle
 (`git show HEAD:web/dist/index.html > /tmp/old.html`) through the same stub
 and compare.
+
+**What the stub cannot show.** It fakes the bridge's answers, not the Go
+state behind them. Anything decided in Go — which global shortcut is really
+registered after Windows refuses a new one, what the tray does during a cold
+start, the window's actual size and position — needs code review or a real
+run. The hotkey's restore-on-refusal path was found by review for exactly
+this reason: here, a refused combination looks perfectly fine.
 
 Layout measurements — `getBoundingClientRect`, `scrollHeight`, computed
 styles, tab order, contrast ratios — stay trustworthy throughout. Those are

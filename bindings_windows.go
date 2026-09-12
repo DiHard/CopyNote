@@ -80,6 +80,13 @@ func bindApplication(w webview2.WebView, hwnd uintptr, svc *service.Service, exe
 		autoHideDisabled.Store(!enabled)
 	})
 
+	// Unlike the other preferences this one can be refused by Windows — the
+	// combination may already belong to another program — so the error goes
+	// back to the UI instead of into the log.
+	mustBind("applyHotkey", func(setting string) error {
+		return tr.SetHotkey(setting)
+	})
+
 	mustBind("applyTopmost", func(enabled bool) {
 		topmostEnabled.Store(enabled)
 		w.Dispatch(func() {

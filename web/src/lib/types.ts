@@ -32,6 +32,9 @@ export interface UserSettings {
   /** RFC3339 instant before which that banner stays hidden; "" when no
    *  snooze is running. Unlike the flag above, this one expires. */
   relocateRemindAfter: string;
+  /** Global shortcut as the user sees it ("Ctrl+Alt+N"). "" means the
+   *  built-in default, "off" disables it. */
+  hotkey: string;
   /** Last release version acknowledged by the user. */
   lastSeenUpdateVersion: string;
 }

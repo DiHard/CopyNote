@@ -165,6 +165,15 @@ func PostMessage(hwnd uintptr, msg uint32, wParam, lParam uintptr) bool {
 	return r != 0
 }
 
+// SendMessage → LRESULT SendMessageW(HWND, UINT, WPARAM, LPARAM).
+// Unlike PostMessage this blocks until the target window's thread has
+// handled the message, so the caller can read a result out of the return
+// value. Only safe towards a thread that cannot be waiting on the caller.
+func SendMessage(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
+	r, _, _ := procSendMessageW.Call(hwnd, uintptr(msg), wParam, lParam)
+	return r
+}
+
 // RegisterWindowMessage returns a system-wide message ID for the given
 // name. The same name yields the same ID across processes — used as a
 // lightweight IPC channel for the single-instance show command.
