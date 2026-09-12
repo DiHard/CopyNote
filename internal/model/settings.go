@@ -30,6 +30,10 @@ type Settings struct {
 	DisableUpdateCheck      bool   `json:"disableUpdateCheck"`
 	LastSeenUpdateVersion   string `json:"lastSeenUpdateVersion"`
 	RelocatePromptDismissed bool   `json:"relocatePromptDismissed"`
+	// RelocateRemindAfter is an RFC3339 instant before which the move
+	// banner stays hidden; "" means no snooze is running. Unlike the
+	// permanent dismissal above, this one wears off on its own.
+	RelocateRemindAfter string `json:"relocateRemindAfter"`
 }
 
 // DefaultSettings returns the initial settings for a fresh install.

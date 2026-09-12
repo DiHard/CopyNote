@@ -398,3 +398,31 @@ func TestService_ReloadsExistingFile(t *testing.T) {
 		t.Errorf("reload failed: %#v", list)
 	}
 }
+
+func TestSnoozeRelocatePrompt_PersistsAnExpiringInstant(t *testing.T) {
+	s, _, clock := newTestService(t)
+
+	until, err := s.SnoozeRelocatePrompt()
+	if err != nil {
+		t.Fatalf("SnoozeRelocatePrompt: %v", err)
+	}
+	deadline, err := time.Parse(time.RFC3339, until)
+	if err != nil {
+		t.Fatalf("returned instant is not RFC3339: %v", err)
+	}
+	if want := clock.Add(relocateSnoozeFor); !deadline.Equal(want) {
+		t.Errorf("snooze until %v, want %v", deadline, want)
+	}
+
+	// The banner reads the stored value, so it has to match what was returned.
+	settings, err := s.GetSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.RelocateRemindAfter != until {
+		t.Errorf("stored %q, returned %q", settings.RelocateRemindAfter, until)
+	}
+	if settings.RelocatePromptDismissed {
+		t.Error("a snooze must not set the permanent dismissal")
+	}
+}

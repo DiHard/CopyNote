@@ -9,7 +9,9 @@
     loadUpdateInfo,
     loadInstallLocation,
     shouldShowRelocateBanner,
+    resetForShow,
   } from "./lib/state.svelte";
+  import { focusSearch } from "./lib/focus";
   import { t } from "./lib/i18n";
   import Header from "./lib/components/Header.svelte";
   import EntryList from "./lib/components/EntryList.svelte";
@@ -18,8 +20,24 @@
   import SettingsView from "./lib/components/SettingsView.svelte";
   import RelocateBanner from "./lib/components/RelocateBanner.svelte";
 
+  /**
+   * Go calls this every time the window comes back on screen. A modal is
+   * left completely alone: it may hold an edit the user was pulled away
+   * from mid-sentence, and discarding that to tidy the view would be worse
+   * than a stale search box.
+   */
+  async function onWindowShown() {
+    if (appState.modal) return;
+    resetForShow();
+    // The settings view may have just been swapped out; the search box does
+    // not exist until Svelte has flushed.
+    await tick();
+    focusSearch();
+  }
+
   onMount(async () => {
     window.__openSettings = openSettings;
+    window.__onShow = onWindowShown;
     await Promise.all([refresh(), loadSettings()]);
     // Signal Go that the UI is ready — stops tray icon pulse
     // and enables LMB click.
@@ -33,6 +51,7 @@
 
   onDestroy(() => {
     delete window.__openSettings;
+    delete window.__onShow;
   });
 
   // ── Auto-resize window to fit content ──────────────────────────
@@ -90,6 +109,7 @@
     void appState.loading;
     void appState.installLocation;
     void appState.settings.relocatePromptDismissed;
+    void appState.relocateSnoozeClicked;
     void appState.relocate;
     const modal = appState.modal;
 

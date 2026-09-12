@@ -39,8 +39,13 @@ declare global {
     /** Copies the exe into targetDir ("" = default) and restarts from there. */
     relocateApp: (targetDir: string) => Promise<string>;
     dismissRelocatePrompt: () => Promise<void>;
+    /** Hides the move banner for a while; resolves to the RFC3339 instant
+     *  Go stored, so the duration lives in one place only. */
+    snoozeRelocatePrompt: () => Promise<string>;
     /** Injected at runtime by Go for tray→settings navigation. */
     __openSettings?: () => void;
+    /** Called by Go each time the window comes back on screen. */
+    __onShow?: () => void;
   }
 }
 
@@ -71,4 +76,5 @@ export const api = {
   relocateApp: (targetDir: string): Promise<string> =>
     window.relocateApp(targetDir),
   dismissRelocatePrompt: (): Promise<void> => window.dismissRelocatePrompt(),
+  snoozeRelocatePrompt: (): Promise<string> => window.snoozeRelocatePrompt(),
 };

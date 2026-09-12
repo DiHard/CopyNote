@@ -47,6 +47,9 @@ export const state = $state<{
   updateInstall: UpdateInstallStatus;
   installLocation: InstallLocation | null;
   relocate: RelocateStatus;
+  /** Session-only: "remind me later" was clicked, so the banner is gone
+   *  now regardless of whether the write has landed yet. */
+  relocateSnoozeClicked: boolean;
 }>({
   entries: [],
   query: "",
@@ -61,6 +64,7 @@ export const state = $state<{
     topmost: true,
     disableUpdateCheck: false,
     relocatePromptDismissed: false,
+    relocateRemindAfter: "",
     lastSeenUpdateVersion: "",
   },
   settingsError: null,
@@ -71,6 +75,7 @@ export const state = $state<{
   updateInstall: { kind: "idle" },
   installLocation: null,
   relocate: { kind: "idle" },
+  relocateSnoozeClicked: false,
 });
 
 /**
@@ -145,6 +150,37 @@ export async function deleteEntry(id: string): Promise<void> {
 
 export async function copyEntry(id: string): Promise<void> {
   await api.copy(id);
+}
+
+/**
+ * Copies whatever the current filter puts at the top of the list — the
+ * "type a few letters, press Enter" path. Resolves false when nothing
+ * matches or the clipboard write failed, so the caller can leave the window
+ * open instead of hiding it on a no-op.
+ */
+export async function copyTopMatch(): Promise<boolean> {
+  const [first] = filterEntries(state.entries, state.query);
+  if (!first) return false;
+  try {
+    await copyEntry(first.id);
+    state.operationError = null;
+    return true;
+  } catch (error) {
+    state.operationError = String(error).replace(/^Error:\s*/, "");
+    return false;
+  }
+}
+
+/**
+ * The window is parked off-screen rather than destroyed, so reopening it
+ * would otherwise show last session's search query and, if the user closed
+ * from Settings, the settings view. Called from Go every time the window
+ * comes back on screen.
+ */
+export function resetForShow(): void {
+  state.query = "";
+  state.view = "main";
+  state.operationError = null;
 }
 
 /**
@@ -429,10 +465,31 @@ export function canOfferRelocate(): boolean {
   return loc !== null && loc.canRelocate && !loc.permanent;
 }
 
-/** The banner additionally respects a dismissal; Settings does not, so
- *  dismissing never locks the user out of the action. */
+/** How many entries the user must have before the banner is worth showing.
+ *  Raise it to hold the warning back further. */
+const RELOCATE_BANNER_MIN_ENTRIES = 1;
+
+/** True while "remind me later" is in effect — either the click just
+ *  happened and the write may still be in flight, or the instant Go stored
+ *  has not passed yet. An unparseable value counts as no snooze, so a
+ *  corrupted setting shows the banner rather than hiding it forever. */
+function relocateSnoozed(): boolean {
+  if (state.relocateSnoozeClicked) return true;
+  const until = Date.parse(state.settings.relocateRemindAfter);
+  return Number.isFinite(until) && Date.now() < until;
+}
+
+/** The banner waits for the list to have something in it: the first thing a
+ *  new user sees should explain what the app is for, not warn that Windows
+ *  might delete it. It also respects both ways of saying no. Settings
+ *  applies none of this, so nothing here locks the user out of the action. */
 export function shouldShowRelocateBanner(): boolean {
-  return canOfferRelocate() && !state.settings.relocatePromptDismissed;
+  return (
+    canOfferRelocate() &&
+    !state.settings.relocatePromptDismissed &&
+    !relocateSnoozed() &&
+    state.entries.length >= RELOCATE_BANNER_MIN_ENTRIES
+  );
 }
 
 /** Copies the executable and restarts from the new location. Resolves
@@ -467,11 +524,25 @@ export async function relocateAppTo(pickerTitle: string): Promise<void> {
   await relocateApp(dir);
 }
 
+/** "Don't offer again" — permanent, and the only one of the two that the
+ *  user can never undo from the banner itself. */
 export async function dismissRelocatePrompt(): Promise<void> {
   // Mirror locally first so the banner goes away even if the write fails.
   state.settings = { ...state.settings, relocatePromptDismissed: true };
   try {
     await api.dismissRelocatePrompt();
+  } catch (error) {
+    state.settingsError = String(error);
+  }
+}
+
+/** "Remind me later" — Go owns how long "later" is and returns the instant
+ *  it persisted. A failed write only means the banner is back next launch. */
+export async function snoozeRelocatePrompt(): Promise<void> {
+  state.relocateSnoozeClicked = true;
+  try {
+    const until = await api.snoozeRelocatePrompt();
+    state.settings = { ...state.settings, relocateRemindAfter: until };
   } catch (error) {
     state.settingsError = String(error);
   }

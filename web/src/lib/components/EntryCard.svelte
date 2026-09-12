@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Entry } from "../types";
   import { openEdit, openDelete, copyEntry } from "../state.svelte";
+  import { moveCardFocus } from "../focus";
   import { t } from "../i18n";
   import { onDestroy } from "svelte";
 
@@ -43,14 +44,18 @@
   }
 
   function onKeyDown(e: KeyboardEvent) {
-    if (!e.ctrlKey || dragDisabled) return;
-    if (e.key === "ArrowUp") {
+    if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+    const dir = e.key === "ArrowDown" ? 1 : -1;
+    // Ctrl moves the entry, a plain arrow moves the focus. Tab still walks
+    // every control in the row; the arrows are the fast path past them.
+    if (e.ctrlKey) {
+      if (dragDisabled) return;
       e.preventDefault();
-      onMoveByKey?.(-1);
-    } else if (e.key === "ArrowDown") {
-      e.preventDefault();
-      onMoveByKey?.(1);
+      onMoveByKey?.(dir);
+      return;
     }
+    e.preventDefault();
+    moveCardFocus(dir);
   }
 
   onDestroy(() => {
@@ -67,8 +72,10 @@
     ? 'opacity-60 shadow-lg ring-2 ring-accent/40'
     : ''}"
 >
+  <!-- data-card-focus: the element arrow keys walk between; see lib/focus.ts -->
   <button
     type="button"
+    data-card-focus
     onclick={onCopy}
     onkeydown={onKeyDown}
     title={t("card.copy")}

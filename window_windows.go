@@ -390,17 +390,21 @@ func dwmInvisibleBorder(hwnd uintptr, wr winutil.Rect) (right, bottom int32) {
 // the click on the tray icon is what caused that activation loss in
 // the first place, and the user's intent is clearly to hide, not to
 // immediately re-open.
-func toggleVisibility(hwnd uintptr) {
+// toggleVisibility reports whether the window ended up on screen, so the
+// caller knows whether the frontend needs its "the window just appeared"
+// notification.
+func toggleVisibility(hwnd uintptr) (shown bool) {
 	if t := activationLossHideNS.Load(); t != 0 {
 		if time.Since(time.Unix(0, t)) < toggleDebounce {
 			activationLossHideNS.Store(0)
-			return
+			return false
 		}
 		activationLossHideNS.Store(0)
 	}
 	if !windowHidden.Load() {
 		moveOffScreen(hwnd)
-		return
+		return false
 	}
 	showAndFocus(hwnd)
+	return true
 }

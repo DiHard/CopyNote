@@ -4,6 +4,7 @@
     relocateApp,
     relocateAppTo,
     dismissRelocatePrompt,
+    snoozeRelocatePrompt,
   } from "../state.svelte";
   import { t } from "../i18n";
   import Spinner from "./Spinner.svelte";
@@ -77,13 +78,28 @@
         >
           {t("relocate.choose")}
         </button>
+      </div>
+
+      <!-- Two ways of saying no: one that comes back in a week, one that
+           does not come back at all. They get their own row because four
+           controls do not fit across 420 px, and the gap between them is
+           wide enough that the permanent one is not a slip of the mouse. -->
+      <div class="mt-1.5 flex items-center gap-4">
+        <button
+          type="button"
+          onclick={() => void snoozeRelocatePrompt()}
+          disabled={moving}
+          class="text-[11px] text-on-surface-dim transition hover:text-on-surface disabled:opacity-60"
+        >
+          {t("relocate.later")}
+        </button>
         <button
           type="button"
           onclick={() => void dismissRelocatePrompt()}
           disabled={moving}
-          class="ml-auto text-[11px] text-on-surface-faint transition hover:text-on-surface-dim disabled:opacity-60"
+          class="text-[11px] text-on-surface-dim transition hover:text-on-surface disabled:opacity-60"
         >
-          {t("relocate.later")}
+          {t("relocate.never")}
         </button>
       </div>
     </div>
