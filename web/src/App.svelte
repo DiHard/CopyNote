@@ -7,6 +7,8 @@
     openSettings,
     closeSettings,
     loadUpdateInfo,
+    loadInstallLocation,
+    shouldShowRelocateBanner,
   } from "./lib/state.svelte";
   import { t } from "./lib/i18n";
   import Header from "./lib/components/Header.svelte";
@@ -14,6 +16,7 @@
   import EntryModal from "./lib/components/EntryModal.svelte";
   import ConfirmModal from "./lib/components/ConfirmModal.svelte";
   import SettingsView from "./lib/components/SettingsView.svelte";
+  import RelocateBanner from "./lib/components/RelocateBanner.svelte";
 
   onMount(async () => {
     window.__openSettings = openSettings;
@@ -24,6 +27,8 @@
     // Background update check — fire-and-forget, runs after the UI is
     // already interactive so it never blocks startup.
     void loadUpdateInfo();
+    // Where the exe lives decides whether the relocate banner shows.
+    void loadInstallLocation();
   });
 
   onDestroy(() => {
@@ -83,6 +88,9 @@
     void appState.entries;
     void appState.query;
     void appState.loading;
+    void appState.installLocation;
+    void appState.settings.relocatePromptDismissed;
+    void appState.relocate;
     const modal = appState.modal;
 
     const view = appState.view;
@@ -147,6 +155,9 @@
   {:else}
     <main class="flex flex-col bg-surface text-on-surface">
       <Header />
+      {#if shouldShowRelocateBanner()}
+        <RelocateBanner />
+      {/if}
       {#if appState.operationError}
         <p role="alert" class="px-3 text-xs text-danger">{t("operation.error", {error: appState.operationError})}</p>
       {/if}

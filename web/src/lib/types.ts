@@ -21,6 +21,9 @@ export interface UserSettings {
   topmost: boolean;
   /** Inverted: true disables the update check. Default is false (enabled). */
   disableUpdateCheck: boolean;
+  /** Hides the banner offering to move the exe into a program folder.
+   *  The action itself stays available in Settings. */
+  relocatePromptDismissed: boolean;
   /** Last release version acknowledged by the user. */
   lastSeenUpdateVersion: string;
 }
@@ -35,6 +38,18 @@ export interface UpdateInfo {
   size: number;
   /** True when this installation can download, verify and swap the binary itself. */
   selfUpdate: boolean;
+}
+
+/** Matches the Go installLocation JSON shape. */
+export interface InstallLocation {
+  path: string;       // the running executable
+  dir: string;        // the folder holding it
+  /** True when dir is already a program folder, which hides the offer. */
+  permanent: boolean;
+  /** Where the one-click move puts it; "" when LOCALAPPDATA is unset. */
+  defaultDir: string;
+  /** False when the executable path could not be resolved at startup. */
+  canRelocate: boolean;
 }
 
 /** Matches the Go updateProgress JSON shape polled during installUpdate. */

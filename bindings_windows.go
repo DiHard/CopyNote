@@ -14,7 +14,7 @@ import (
 	"path/filepath"
 )
 
-func bindApplication(w webview2.WebView, hwnd uintptr, svc *service.Service, exePath string) *bridge.Async {
+func bindApplication(w webview2.WebView, hwnd uintptr, svc *service.Service, exePath, dataDir string) *bridge.Async {
 	// 7. Bind CRUD bridge methods.
 	mustBind := func(name string, fn any) {
 		if err := w.Bind(name, fn); err != nil {
@@ -61,6 +61,9 @@ func bindApplication(w webview2.WebView, hwnd uintptr, svc *service.Service, exe
 	// see update_windows.go.
 	updates := bridge.NewAsync(w)
 	bindUpdates(w, updates, svc, exePath)
+
+	// Moving the executable out of a download folder; see relocate_windows.go.
+	bindRelocate(w, svc, hwnd, exePath, dataDir)
 
 	mustBind("applyTopmost", func(enabled bool) {
 		topmostEnabled.Store(enabled)
