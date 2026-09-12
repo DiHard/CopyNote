@@ -9,10 +9,14 @@
     forceCheckUpdateInfo,
     installUpdate,
     isUpdateInstalling,
+    canOfferRelocate,
+    relocateApp,
+    relocateAppTo,
   } from "../state.svelte";
   import { t, availableLocales } from "../i18n";
   import type { UserSettings } from "../types";
   import { api } from "../api";
+  import Spinner from "./Spinner.svelte";
 
   let appVersion = $state("");
 
@@ -134,6 +138,24 @@
     } catch (e) {
       dataStatus = t("settings.importError", { error: String(e).replace(/^Error:\s*/, "") });
     } finally { dataBusy = false; }
+  }
+
+  let folderError = $state<string | null>(null);
+
+  const relocating = $derived(appState.relocate.kind === "moving");
+  const relocateError = $derived(
+    appState.relocate.kind === "failed" ? appState.relocate.error : null,
+  );
+
+  async function onOpenAppFolder() {
+    folderError = null;
+    try {
+      await api.openAppFolder();
+    } catch (e) {
+      folderError = t("settings.openFolderError", {
+        error: String(e).replace(/^Error:\s*/, ""),
+      });
+    }
   }
 </script>
 
@@ -379,6 +401,54 @@
           >github.com/DiHard/CopyNote</button>
         </div>
       </div>
+      {#if canOfferRelocate()}
+        <!-- Running from a download folder: offer to put it somewhere that
+             survives a disk cleanup. Unlike the banner this ignores the
+             dismissal, so dismissing never hides the action for good. -->
+        <button
+          type="button"
+          onclick={() => void relocateApp()}
+          disabled={relocating || dataBusy || isUpdateInstalling()}
+          class="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-lg border border-outline bg-card px-2.5 py-1.5 text-sm text-on-surface-dim transition hover:bg-card-hover hover:text-on-surface disabled:opacity-60"
+        >
+          {#if relocating}<Spinner class="h-3.5 w-3.5" />{/if}
+          {relocating ? t("relocate.moving") : t("relocate.settings")}
+        </button>
+        <div class="mt-1 flex items-baseline justify-between gap-2">
+          <!-- While the move runs, where it is now matters less than the fact
+               that the window is about to close itself. -->
+          <p class="min-w-0 truncate text-[11px] text-on-surface-faint" title={appState.installLocation?.dir ?? ""}>
+            {relocating
+              ? t("relocate.willRestart")
+              : t("relocate.currently", { dir: appState.installLocation?.dir ?? "" })}
+          </p>
+          <button
+            type="button"
+            onclick={() => void relocateAppTo(t("relocate.pickTitle"))}
+            disabled={relocating}
+            class="shrink-0 text-[11px] text-accent transition hover:underline disabled:opacity-60"
+          >
+            {t("relocate.choose")}
+          </button>
+        </div>
+        {#if relocateError}
+          <p role="alert" class="mt-1 text-[11px] text-danger">
+            {t("relocate.failed", { error: relocateError })}
+          </p>
+        {/if}
+      {/if}
+      <!-- The app is portable: this folder holds the exe, and a self-update
+           leaves its .old fallback here too. -->
+      <button
+        type="button"
+        onclick={onOpenAppFolder}
+        class="mt-1.5 w-full rounded-lg border border-outline bg-card px-2.5 py-1.5 text-sm text-on-surface-dim transition hover:bg-card-hover hover:text-on-surface"
+      >
+        {t("settings.openFolder")}
+      </button>
+      {#if folderError}
+        <p role="alert" class="mt-1 text-[11px] text-danger">{folderError}</p>
+      {/if}
     </section>
   </div>
 </div>

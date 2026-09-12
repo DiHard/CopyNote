@@ -6,13 +6,15 @@ import (
 	"copynote/internal/storage"
 	"copynote/internal/version"
 	"copynote/internal/winutil"
+	"errors"
 	"fmt"
 	"github.com/jchv/go-webview2"
 	"log"
 	"os"
+	"path/filepath"
 )
 
-func bindApplication(w webview2.WebView, hwnd uintptr, svc *service.Service, exePath string) *bridge.Async {
+func bindApplication(w webview2.WebView, hwnd uintptr, svc *service.Service, exePath, dataDir string) *bridge.Async {
 	// 7. Bind CRUD bridge methods.
 	mustBind := func(name string, fn any) {
 		if err := w.Bind(name, fn); err != nil {
@@ -42,6 +44,15 @@ func bindApplication(w webview2.WebView, hwnd uintptr, svc *service.Service, exe
 		winutil.OpenURL(url)
 	})
 
+	// The app is portable, and a self-update leaves its .old fallback next to
+	// the exe, so the folder is worth a way in from the UI.
+	mustBind("openAppFolder", func() error {
+		if exePath == "" {
+			return errors.New("executable path is unavailable")
+		}
+		return winutil.OpenFolder(filepath.Dir(exePath))
+	})
+
 	mustBind("getVersion", func() string {
 		return version.Version
 	})
@@ -50,6 +61,9 @@ func bindApplication(w webview2.WebView, hwnd uintptr, svc *service.Service, exe
 	// see update_windows.go.
 	updates := bridge.NewAsync(w)
 	bindUpdates(w, updates, svc, exePath)
+
+	// Moving the executable out of a download folder; see relocate_windows.go.
+	bindRelocate(w, svc, hwnd, exePath, dataDir)
 
 	mustBind("applyTopmost", func(enabled bool) {
 		topmostEnabled.Store(enabled)

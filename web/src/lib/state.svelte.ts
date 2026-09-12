@@ -1,4 +1,4 @@
-import type { Entry, ModalState, UpdateInfo, UpdateProgress, UserSettings, ViewMode } from "./types";
+import type { Entry, InstallLocation, ModalState, UpdateInfo, UpdateProgress, UserSettings, ViewMode } from "./types";
 import { createTaskQueue } from "./taskQueue";
 import { api } from "./api";
 import { setLocale, systemLocale } from "./i18n";
@@ -24,6 +24,13 @@ export type UpdateInstallStatus =
   | { kind: "restarting" }
   | { kind: "failed"; error: string };
 
+/** Where the "move me somewhere permanent" action is. A move ends with
+ * the process restarting, so "moving" has no success state to return to. */
+export type RelocateStatus =
+  | { kind: "idle" }
+  | { kind: "moving" }
+  | { kind: "failed"; error: string };
+
 export const state = $state<{
   entries: Entry[];
   query: string;
@@ -38,6 +45,8 @@ export const state = $state<{
   updateInfo: UpdateInfo | null;
   updateCheckStatus: UpdateCheckStatus;
   updateInstall: UpdateInstallStatus;
+  installLocation: InstallLocation | null;
+  relocate: RelocateStatus;
 }>({
   entries: [],
   query: "",
@@ -51,6 +60,7 @@ export const state = $state<{
     locale: "system",
     topmost: true,
     disableUpdateCheck: false,
+    relocatePromptDismissed: false,
     lastSeenUpdateVersion: "",
   },
   settingsError: null,
@@ -59,6 +69,8 @@ export const state = $state<{
   updateInfo: null,
   updateCheckStatus: { kind: "idle" },
   updateInstall: { kind: "idle" },
+  installLocation: null,
+  relocate: { kind: "idle" },
 });
 
 /**
@@ -396,5 +408,71 @@ function applyInstallProgress(progress: UpdateProgress): void {
     default:
       // "" means Go has finished; the install promise decides the outcome.
       break;
+  }
+}
+
+// ── Install location ───────────────────────────────────
+
+export async function loadInstallLocation(): Promise<void> {
+  try {
+    state.installLocation = await api.getInstallLocation();
+  } catch {
+    // Nothing to offer if we cannot tell where we are running from.
+    state.installLocation = null;
+  }
+}
+
+/** True while the executable sits outside a program folder. Drives both
+ *  the banner and the Settings button. */
+export function canOfferRelocate(): boolean {
+  const loc = state.installLocation;
+  return loc !== null && loc.canRelocate && !loc.permanent;
+}
+
+/** The banner additionally respects a dismissal; Settings does not, so
+ *  dismissing never locks the user out of the action. */
+export function shouldShowRelocateBanner(): boolean {
+  return canOfferRelocate() && !state.settings.relocatePromptDismissed;
+}
+
+/** Copies the executable and restarts from the new location. Resolves
+ *  only if the move failed — on success this window goes away. */
+export async function relocateApp(targetDir = ""): Promise<void> {
+  if (state.relocate.kind === "moving") return;
+  state.relocate = { kind: "moving" };
+  try {
+    await api.relocateApp(targetDir);
+  } catch (error) {
+    state.relocate = {
+      kind: "failed",
+      error: String(error).replace(/^Error:\s*/, ""),
+    };
+  }
+}
+
+/** Asks for a folder first; a cancelled dialog changes nothing. */
+export async function relocateAppTo(pickerTitle: string): Promise<void> {
+  if (state.relocate.kind === "moving") return;
+  let dir = "";
+  try {
+    dir = await api.pickInstallFolder(pickerTitle);
+  } catch (error) {
+    state.relocate = {
+      kind: "failed",
+      error: String(error).replace(/^Error:\s*/, ""),
+    };
+    return;
+  }
+  if (!dir) return;
+  await relocateApp(dir);
+}
+
+export async function dismissRelocatePrompt(): Promise<void> {
+  // Mirror locally first so the banner goes away even if the write fails.
+  state.settings = { ...state.settings, relocatePromptDismissed: true };
+  try {
+    await api.dismissRelocatePrompt();
+  } catch (error) {
+    state.settingsError = String(error);
   }
 }

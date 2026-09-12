@@ -17,13 +17,19 @@ import (
 // acknowledged by the user (by opening the Settings view). When the
 // remote latest differs from this value, the notification dot on the
 // gear icon reappears.
+//
+// RelocatePromptDismissed silences the banner offering to move the
+// executable into a permanent folder. Zero-value means "not yet asked",
+// so an existing installation sees the offer once. It only hides the
+// banner: the action stays reachable from Settings.
 type Settings struct {
-	Autorun               bool   `json:"autorun"`
-	Theme                 string `json:"theme"`   // "light" | "dark" | "system"
-	Locale                string `json:"locale"`  // "en" | "ru" | "system"
-	Topmost               bool   `json:"topmost"` // keep window above all others
-	DisableUpdateCheck    bool   `json:"disableUpdateCheck"`
-	LastSeenUpdateVersion string `json:"lastSeenUpdateVersion"`
+	Autorun                 bool   `json:"autorun"`
+	Theme                   string `json:"theme"`   // "light" | "dark" | "system"
+	Locale                  string `json:"locale"`  // "en" | "ru" | "system"
+	Topmost                 bool   `json:"topmost"` // keep window above all others
+	DisableUpdateCheck      bool   `json:"disableUpdateCheck"`
+	LastSeenUpdateVersion   string `json:"lastSeenUpdateVersion"`
+	RelocatePromptDismissed bool   `json:"relocatePromptDismissed"`
 }
 
 // DefaultSettings returns the initial settings for a fresh install.

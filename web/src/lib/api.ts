@@ -2,7 +2,7 @@
 // Each function returns a promise that rejects with an Error whose message
 // matches the Go error returned by the bound method.
 
-import type { Entry, UpdateInfo, UpdateProgress, UserSettings } from "./types";
+import type { Entry, InstallLocation, UpdateInfo, UpdateProgress, UserSettings } from "./types";
 
 declare global {
   interface Window {
@@ -19,6 +19,8 @@ declare global {
     exportData: () => Promise<boolean>;
     importData: () => Promise<boolean>;
     openExternal: (url: string) => Promise<void>;
+    /** Opens the folder the running copynote.exe sits in, in Explorer. */
+    openAppFolder: () => Promise<void>;
     notifyReady: () => Promise<void>;
     getVersion: () => Promise<string>;
     checkForUpdates: () => Promise<UpdateInfo | null>;
@@ -30,6 +32,13 @@ declare global {
     /** Quits and relaunches the replaced executable; only valid after installUpdate. */
     restartApp: () => Promise<void>;
     applyTopmost: (enabled: boolean) => Promise<void>;
+    /** Where the running executable lives and whether that is permanent. */
+    getInstallLocation: () => Promise<InstallLocation>;
+    /** Shell folder browser; resolves to "" when the user cancels. */
+    pickInstallFolder: (title: string) => Promise<string>;
+    /** Copies the exe into targetDir ("" = default) and restarts from there. */
+    relocateApp: (targetDir: string) => Promise<string>;
+    dismissRelocatePrompt: () => Promise<void>;
     /** Injected at runtime by Go for tray→settings navigation. */
     __openSettings?: () => void;
   }
@@ -48,6 +57,7 @@ export const api = {
   saveSettings: (s: UserSettings): Promise<void> => window.saveSettings(s),
   exportData: (): Promise<boolean> => window.exportData(),
   importData: (): Promise<boolean> => window.importData(),
+  openAppFolder: (): Promise<void> => window.openAppFolder(),
   getVersion: (): Promise<string> => window.getVersion(),
   checkForUpdates: (): Promise<UpdateInfo | null> => window.checkForUpdates(),
   forceCheckForUpdates: (): Promise<UpdateInfo | null> =>
@@ -55,4 +65,10 @@ export const api = {
   installUpdate: (): Promise<{ version: string }> => window.installUpdate(),
   updateProgress: (): Promise<UpdateProgress> => window.updateProgress(),
   restartApp: (): Promise<void> => window.restartApp(),
+  getInstallLocation: (): Promise<InstallLocation> => window.getInstallLocation(),
+  pickInstallFolder: (title: string): Promise<string> =>
+    window.pickInstallFolder(title),
+  relocateApp: (targetDir: string): Promise<string> =>
+    window.relocateApp(targetDir),
+  dismissRelocatePrompt: (): Promise<void> => window.dismissRelocatePrompt(),
 };

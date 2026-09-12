@@ -16,6 +16,7 @@ import (
 
 	"github.com/jchv/go-webview2"
 
+	"copynote/internal/relocate"
 	"copynote/internal/singleton"
 	"copynote/internal/tray"
 	"copynote/internal/updater"
@@ -166,7 +167,7 @@ func main() {
 	// of the monitor the window now belongs to.
 	applyWindowSize(hwnd, winutil.DpiForWindow(hwnd))
 
-	updates := bindApplication(w, hwnd, svc, exePath)
+	updates := bindApplication(w, hwnd, svc, exePath, filepath.Dir(dataFile))
 	defer updates.Close()
 
 	// 8. Tray. Runs on a dedicated OS-locked goroutine; communicates
@@ -207,6 +208,13 @@ func main() {
 			go func() {
 				if err := updater.RemovePrevious(exePath, time.Minute); err != nil {
 					log.Printf("remove previous version: %v", err)
+				}
+			}()
+			// A move left the executable behind in its old folder; the
+			// process that started this one may still be holding it.
+			go func() {
+				if err := relocate.RunPendingCleanup(filepath.Dir(dataFile), exePath, time.Minute); err != nil {
+					log.Printf("clean up moved executable: %v", err)
 				}
 			}()
 		}
@@ -269,11 +277,18 @@ func main() {
 	trayCtrl.Stop()
 	<-trayDone
 
-	// 12. A self-update was installed: free the single-instance mutex before
-	//     the replaced executable checks it, then start it.
-	if restartRequested.Load() && exePath != "" {
-		_ = ln.Close()
-		releaseOnce()
-		relaunch(exePath)
+	// 12. A self-update was installed, or the executable was moved: free
+	//     the single-instance mutex before the file we are about to start
+	//     checks it, then start it.
+	if restartRequested.Load() {
+		target := exePath
+		if moved := relaunchTarget.Load(); moved != nil && *moved != "" {
+			target = *moved
+		}
+		if target != "" {
+			_ = ln.Close()
+			releaseOnce()
+			relaunch(target)
+		}
 	}
 }

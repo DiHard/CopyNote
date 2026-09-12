@@ -77,6 +77,9 @@ var (
 	procSetClassLongPtrW             = moduser32.NewProc("SetClassLongPtrW")
 	procCreateSolidBrush             = windows.NewLazySystemDLL("gdi32.dll").NewProc("CreateSolidBrush")
 	procShellExecuteW                = windows.NewLazySystemDLL("shell32.dll").NewProc("ShellExecuteW")
+	procSHBrowseForFolderW           = windows.NewLazySystemDLL("shell32.dll").NewProc("SHBrowseForFolderW")
+	procSHGetPathFromIDListW         = windows.NewLazySystemDLL("shell32.dll").NewProc("SHGetPathFromIDListW")
+	procCoTaskMemFree                = windows.NewLazySystemDLL("ole32.dll").NewProc("CoTaskMemFree")
 	procRegisterWindowMessageW       = moduser32.NewProc("RegisterWindowMessageW")
 	procGetWindowLongPtrW            = moduser32.NewProc("GetWindowLongPtrW")
 	procSetWindowLongPtrW            = moduser32.NewProc("SetWindowLongPtrW")
@@ -278,11 +281,29 @@ func MessageBox(text string, question bool) bool {
 	return result == 6 // IDYES
 }
 
+// shellOpen asks the shell to open a target with its default handler: a URL
+// in the browser, a directory in Explorer. ShellExecuteW reports success as
+// a return value greater than 32.
+func shellOpen(target string) uintptr {
+	t16, _ := windows.UTF16PtrFromString(target)
+	open, _ := windows.UTF16PtrFromString("open")
+	result, _, _ := procShellExecuteW.Call(0, uintptr(unsafe.Pointer(open)), uintptr(unsafe.Pointer(t16)), 0, 0, 1)
+	return result
+}
+
 // OpenURL opens a URL in the user's default browser via ShellExecuteW.
 func OpenURL(url string) {
-	u16, _ := windows.UTF16PtrFromString(url)
-	open, _ := windows.UTF16PtrFromString("open")
-	procShellExecuteW.Call(0, uintptr(unsafe.Pointer(open)), uintptr(unsafe.Pointer(u16)), 0, 0, 1)
+	shellOpen(url)
+}
+
+// OpenFolder opens a directory in Explorer. Unlike OpenURL it reports
+// failure, so a caller can tell the user why nothing appeared: the folder
+// may have been moved or deleted while the app was running.
+func OpenFolder(path string) error {
+	if result := shellOpen(path); result <= 32 {
+		return fmt.Errorf("open %s: ShellExecuteW code %d", path, result)
+	}
+	return nil
 }
 
 // SetWindowBackgroundColor sets the window class background brush
@@ -432,6 +453,53 @@ func OpenFileDialog(hwnd uintptr, filter string) (string, bool) {
 		return "", false
 	}
 	return windows.UTF16ToString(fileBuf), true
+}
+
+// browseInfoW is BROWSEINFOW from shlobj_core.h.
+type browseInfoW struct {
+	hwndOwner    uintptr
+	pidlRoot     uintptr
+	displayName  *uint16
+	title        *uint16
+	flags        uint32
+	callback     uintptr
+	lParam       uintptr
+	image        int32
+}
+
+const (
+	bifReturnOnlyFSDirs = 0x0001
+	bifNewDialogStyle   = 0x0040
+)
+
+// PickFolder opens the shell folder browser and returns the chosen
+// directory, or ("", false) when the user cancels. bifNewDialogStyle asks
+// for the resizable dialog with a New Folder button; it needs the calling
+// thread to be COM-initialised, which the WebView2 UI thread already is.
+func PickFolder(hwnd uintptr, title string) (string, bool) {
+	title16, err := windows.UTF16PtrFromString(title)
+	if err != nil {
+		return "", false
+	}
+	display := make([]uint16, 260)
+	bi := browseInfoW{
+		hwndOwner:   hwnd,
+		displayName: &display[0],
+		title:       title16,
+		flags:       bifReturnOnlyFSDirs | bifNewDialogStyle,
+	}
+	pidl, _, _ := procSHBrowseForFolderW.Call(uintptr(unsafe.Pointer(&bi)))
+	if pidl == 0 {
+		return "", false // cancelled
+	}
+	defer procCoTaskMemFree.Call(pidl)
+
+	path := make([]uint16, windows.MAX_LONG_PATH)
+	ok, _, _ := procSHGetPathFromIDListW.Call(pidl, uintptr(unsafe.Pointer(&path[0])))
+	if ok == 0 {
+		return "", false // a virtual folder with no filesystem path
+	}
+	return windows.UTF16ToString(path), true
 }
 
 // IsSystemLightTheme reports whether Windows is currently using a

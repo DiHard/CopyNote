@@ -30,6 +30,25 @@ func (s *Service) SaveSettings(settings model.Settings) error {
 	return s.commitSettingsLocked(next)
 }
 
+// UpdateSettings applies mutate to the stored settings under the service
+// lock. Preferences changed by Go rather than by the settings form go
+// through here so a concurrent save cannot clobber them.
+func (s *Service) UpdateSettings(mutate func(*model.Settings)) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	settings, err := s.loadSettingsLocked()
+	if err != nil {
+		return err
+	}
+	mutate(&settings)
+	if err := model.ValidateSettings(settings); err != nil {
+		return err
+	}
+	next := s.snapshotLocked()
+	next.Settings = &settings
+	return s.commitSettingsLocked(next)
+}
+
 func (s *Service) commitSettingsLocked(next model.Store) error {
 	previous, err := s.loadSettingsLocked()
 	if err != nil {

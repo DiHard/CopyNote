@@ -158,3 +158,108 @@ test("a release without a signed binary is never installed in-app", async () => 
   await app.installUpdate();
   assert.equal(app.state.updateInstall.kind, "idle");
 });
+
+// String.raw keeps the Windows separators literal without doubling them.
+const DOWNLOADS = String.raw`C:\Users\x\Downloads`;
+const PROGRAMS = String.raw`C:\Users\x\AppData\Local\Programs\CopyNote`;
+const PORTABLE = String.raw`D:\PortableApps\CopyNote`;
+
+const location = (over = {}) => ({
+  path: DOWNLOADS + String.raw`\copynote.exe`,
+  dir: DOWNLOADS,
+  permanent: false,
+  defaultDir: PROGRAMS,
+  canRelocate: true,
+  ...over,
+});
+
+test("the move offer follows where the executable actually lives", async () => {
+  const settled = await setup({getInstallLocation: async () => location({permanent: true, dir: PROGRAMS})});
+  await settled.loadInstallLocation();
+  assert.equal(settled.canOfferRelocate(), false, "a program folder needs no move");
+  assert.equal(settled.shouldShowRelocateBanner(), false);
+
+  const loose = await setup({getInstallLocation: async () => location()});
+  await loose.loadInstallLocation();
+  assert.equal(loose.canOfferRelocate(), true);
+  assert.equal(loose.shouldShowRelocateBanner(), true);
+});
+
+test("an unknown executable path offers nothing", async () => {
+  const app = await setup({getInstallLocation: async () => location({canRelocate: false, path: "", dir: ""})});
+  await app.loadInstallLocation();
+  assert.equal(app.canOfferRelocate(), false);
+
+  const broken = await setup({getInstallLocation: async () => {throw new Error("no bridge");}});
+  await broken.loadInstallLocation();
+  assert.equal(broken.state.installLocation, null);
+  assert.equal(broken.canOfferRelocate(), false);
+});
+
+test("dismissing hides the banner but keeps the action in settings", async () => {
+  let dismissed = 0;
+  const app = await setup({
+    getInstallLocation: async () => location(),
+    dismissRelocatePrompt: async () => {dismissed++;},
+  });
+  await app.loadInstallLocation();
+  await app.dismissRelocatePrompt();
+  assert.equal(dismissed, 1);
+  assert.equal(app.shouldShowRelocateBanner(), false, "banner is gone");
+  assert.equal(app.canOfferRelocate(), true, "settings must not lose the action");
+});
+
+test("a failed move is reported and leaves the button usable", async () => {
+  const app = await setup({
+    getInstallLocation: async () => location(),
+    relocateApp: async () => {throw new Error("access is denied");},
+  });
+  await app.loadInstallLocation();
+  await app.relocateApp();
+  assert.equal(app.state.relocate.kind, "failed");
+  assert.match(app.state.relocate.error, /access is denied/);
+  assert.doesNotMatch(app.state.relocate.error, /^Error:/, "the Error: prefix is stripped");
+  // Still offered, so the user can retry rather than being stuck.
+  assert.equal(app.canOfferRelocate(), true);
+});
+
+test("a cancelled folder picker moves nothing", async () => {
+  const moves = [];
+  const app = await setup({
+    getInstallLocation: async () => location(),
+    pickInstallFolder: async () => "",
+    relocateApp: async dir => {moves.push(dir); return dir;},
+  });
+  await app.loadInstallLocation();
+  await app.relocateAppTo("pick a folder");
+  assert.deepEqual(moves, [], "cancelling must not start a move");
+  assert.equal(app.state.relocate.kind, "idle");
+});
+
+test("a chosen folder is the one the move targets", async () => {
+  const moves = [];
+  const app = await setup({
+    getInstallLocation: async () => location(),
+    pickInstallFolder: async () => PORTABLE,
+    relocateApp: async dir => {moves.push(dir); return dir + String.raw`\copynote.exe`;},
+  });
+  await app.loadInstallLocation();
+  await app.relocateAppTo("pick a folder");
+  assert.deepEqual(moves, [PORTABLE]);
+});
+
+test("a second click cannot start a move while one is running", async () => {
+  const gate = deferred();
+  let calls = 0;
+  const app = await setup({
+    getInstallLocation: async () => location(),
+    relocateApp: async () => {calls++; await gate.promise; return "moved";},
+  });
+  await app.loadInstallLocation();
+  const first = app.relocateApp();
+  await Promise.resolve();
+  await app.relocateApp();
+  assert.equal(calls, 1, "the running move is not restarted");
+  gate.resolve();
+  await first;
+});

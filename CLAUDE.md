@@ -37,6 +37,7 @@ CopyNote/
 │   ├── clipboard/    # Win32 clipboard (CF_UNICODETEXT, no cgo)
 │   ├── singleton/    # Named mutex for single-instance enforcement
 │   ├── tray/         # System tray icon + custom GDI popup menu
+│   ├── relocate/     # Move the exe out of Downloads into a program folder
 │   ├── updater/      # GitHub Releases check + signed in-place self-update
 │   └── winutil/      # Shared Win32 wrappers (ShowWindow, DWM, registry…)
 │
@@ -114,6 +115,7 @@ Go functions are exposed to JavaScript via `webview.Bind()`:
 | `window.exportData()` | svc.ExportData → SaveFileDialog | Export entries+settings to JSON |
 | `window.importData()` | OpenFileDialog → svc.ImportData | Import from JSON, merge entries |
 | `window.openExternal(url)` | ShellExecuteW | Open URL in default browser |
+| `window.openAppFolder()` | ShellExecuteW on `filepath.Dir(exePath)` | Open the folder holding the running exe in Explorer |
 | `window.notifyReady()` | trayCtrl.SetReady | Stop tray pulse, enable LMB, honour a deferred second-launch show |
 | `window.getVersion()` | version.Version | App version string (no leading `v`) |
 | `window.checkForUpdates()` | updater.CheckLatest | Background check, honors disableUpdateCheck |
@@ -122,6 +124,10 @@ Go functions are exposed to JavaScript via `webview.Bind()`:
 | `window.updateProgress()` | in-memory snapshot | `{stage, done, total}` polled by the UI while installUpdate runs |
 | `window.restartApp()` | Terminate → main relaunches | Only after a successful install: releases the mutex, starts the new exe, posts SHOW |
 | `window.applyTopmost(enabled)` | Win32 dispatch | Apply window stacking preference |
+| `window.getInstallLocation()` | relocate.IsPermanent | Where the exe lives and whether that is a program folder |
+| `window.pickInstallFolder(title)` | SHBrowseForFolderW | Folder picker; `""` when cancelled |
+| `window.relocateApp(dir)` | relocate.CopyTo + restart | Copy the exe to `dir` (`""` = default) and restart from there |
+| `window.dismissRelocatePrompt()` | svc.UpdateSettings | Silence the relocate banner |
 
 All bridge calls return Promises. The Go side persists to disk on every mutation.
 
@@ -161,6 +167,18 @@ Signing: `go run ./tools/signrelease -generate` creates the key pair once (priva
 Antivirus heuristics may flag an exe that replaces itself. Mitigations: user-initiated installs only, the signature check, and keeping the download beside the exe rather than in `%TEMP%`.
 
 End-to-end check without touching a real installation: build the "old" exe with `-X copynote/internal/version.Version=2.0.0 -X copynote/internal/updater.releasesURL=http://127.0.0.1:18080/latest`, build the "new" exe with `Version=2.0.1` and sign it with `go run ./tools/signrelease -version 2.0.1 <new.exe>`, serve `/latest` (GitHub-shaped JSON with both assets) plus the two files locally, and give **both** builds the same instance-name overrides (`-X main.singletonName=... -X copynote/internal/tray.trayClassName=... -X copynote/internal/tray.showMessageName=...`) so they can run beside the daily CopyNote. Start the old exe with `APPDATA`/`LOCALAPPDATA` pointing at scratch folders (isolated data, log and WebView2 cache) and `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222`, then drive `window.forceCheckForUpdates()`, `window.installUpdate()` and `window.restartApp()` over the Chrome DevTools Protocol; afterwards `window.getVersion()` on port 9222 must report the new version and `<exe>.old` must disappear within a minute.
+
+### Moving the executable
+
+A downloaded `copynote.exe` normally stays in `%USERPROFILE%\Downloads`. That is a folder Windows Storage Sense can empty, and the autorun entry points straight at it, so the app offers to move itself into `%LOCALAPPDATA%\Programs\CopyNote` (no elevation needed). `internal/relocate` holds the logic, `relocate_windows.go` the bindings.
+
+- **When it is offered**: `relocate.IsPermanent` checks whether the exe folder sits under `%LOCALAPPDATA%\Programs`, `%ProgramFiles%` or `%ProgramFiles(x86)%`. The banner above the entry list also honours `settings.relocatePromptDismissed`; the Settings button ignores it, so dismissing never hides the action for good. A folder the user picked themselves is not recognised as permanent — the Settings button stays, which is harmless.
+- **The move**: copy (not `MoveFile`) into the target under a temporary name, then rename into place — `Downloads` may sit on another volume, and a half-written exe must never be startable. The name is normalised to `copynote.exe`, so a browser’s `copynote (1).exe` stops multiplying.
+- **The original is never deleted by the process doing the move.** It writes `%APPDATA%\CopyNote\pending-cleanup` naming the old file, relaunches the copy, and the new process deletes it (with retries — the old one may still be exiting). If the copy fails to start, the user still has a working executable.
+- **The marker is untrusted input**: `safeToDelete` accepts only an absolute path to a `copynote*.exe`, never the running image. A stray marker cannot turn the next start into an arbitrary delete.
+- **Autorun needs no special handling**: the relaunched copy runs `EnsureAutorunPath`, which rewrites `HKCU\...\Run` from its own `os.Executable()`.
+
+⚠ **Test instances share the real registry.** The `-X` overrides isolate the mutex, tray class and SHOW message, and `APPDATA`/`LOCALAPPDATA` isolate the data — but the `Run` value name `CopyNote` is a `const` and is not isolated. A test instance whose isolated settings have `autorun: false` **deletes the real installation’s autorun entry** on startup through `EnsureAutorunPath`. Launching the real app once restores it.
 
 ## Data Persistence
 
