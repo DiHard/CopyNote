@@ -23,3 +23,7 @@ Thumbs.db
 # Build artifacts
 *.syso
 /build/
+
+# Release signing (private key lives outside the repo; .sig is a release asset)
+*.sig
+*.key

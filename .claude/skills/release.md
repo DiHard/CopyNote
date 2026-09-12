@@ -32,6 +32,7 @@ Run these in parallel where possible. Stop and ask the user if any check fails �
 - `go test ./...` — must pass.
   - Known: `TestCopy_EmptyValueIsAllowed` is broken on `main` independent of this skill. If it's the only failure, surface it and ask whether to proceed.
 - `gh auth status` — must be authenticated.
+- Signing key present: `Test-Path "$env:USERPROFILE\.copynote-release\signing.key"` is `True` (or `COPYNOTE_SIGNING_KEY` is set). Without it the binary cannot be signed and the in-app updater will only offer a manual download for this version.
 
 ## Step 2 — Bump version
 
@@ -71,12 +72,17 @@ For the first release of a major or minor (e.g. `v2.0.0`, `v1.5.0`), consider a 
 ```bash
 cd web && npm install && npm run build && cd ..
 go build -ldflags="-H=windowsgui -s -w" -o copynote.exe .
+go run ./tools/signrelease copynote.exe
+go run ./tools/signrelease -verify copynote.exe
 ```
+
+Sign **after** the final build — any rebuild changes the bytes and invalidates `copynote.exe.sig`. The signature covers the version from `version.go`, so Step 2 must already be done.
 
 Verify:
 - `web/dist/index.html` updated (it's committed because `//go:embed` bakes it in).
 - `copynote.exe` exists at repo root (~7 MB).
 - `ls -la copynote.exe` shows recent timestamp.
+- `copynote.exe.sig` exists next to the binary and `-verify` printed `is valid`.
 
 If icons changed since the last release, also rebuild them per `CLAUDE.md` §Build Commands. Skip otherwise — they almost never change.
 
@@ -87,7 +93,7 @@ Stage exactly these files:
 - `release-notes-vX.Y.Z.md`
 - `web/dist/index.html`
 
-Do NOT stage `copynote.exe` (it's `*.exe` in `.gitignore` and will be attached to the GitHub Release in Step 7, not tracked in git).
+Do NOT stage `copynote.exe` or `copynote.exe.sig` (both are gitignored and are attached to the GitHub Release in Step 7, not tracked in git).
 
 Commit message (Russian, per project rules):
 ```
@@ -112,23 +118,26 @@ Annotated tag (`-a`), not lightweight — GitHub Releases need annotated tags fo
 ## Step 7 — Create GitHub Release with the binary
 
 ```bash
-gh release create vX.Y.Z copynote.exe \
+gh release create vX.Y.Z copynote.exe copynote.exe.sig \
   --title "vX.Y.Z" \
   --notes-file release-notes-vX.Y.Z.md
 ```
+
+Both asset names are fixed: the in-app updater looks up `copynote.exe` and `copynote.exe.sig` by exact name (`updater.AssetName`, `updater.SignatureAssetName`). Renaming or omitting either makes existing installations fall back to a manual download.
 
 For an "initial-of-major-minor" with a tagline, use `--title "vX.Y.Z — <tagline>"` instead.
 
 ## Step 8 — Verify and report
 
-- `gh release view vX.Y.Z` — confirm page exists, `copynote.exe` is attached, notes render correctly.
+- `gh release view vX.Y.Z` — confirm page exists, `copynote.exe` **and** `copynote.exe.sig` are attached, notes render correctly.
 - Output the release URL to the user: `https://github.com/DiHard/CopyNote/releases/tag/vX.Y.Z`.
 - One-sentence end-of-turn summary (Russian): что выпустили и куда выложено.
 
 ## Recovery — if something went wrong
 
 - **Wrong content shipped in `vX.Y.Z`**: do NOT delete the published GitHub Release (users may already have downloaded). Bump to `vX.Y.Z+1` and ship a corrected one. Add an `### Internal` line in the new notes pointing back at the issue.
-- **Tag pushed but `gh release create` failed**: rerun `gh release create vX.Y.Z copynote.exe --title ... --notes-file ...` against the existing tag.
+- **`.sig` missing or invalid on a published release**: run `go run ./tools/signrelease copynote.exe` on the *same* binary that was uploaded (do not rebuild), then `gh release upload vX.Y.Z copynote.exe.sig --clobber`. Until then the in-app updater offers only the manual download.
+- **Tag pushed but `gh release create` failed**: rerun `gh release create vX.Y.Z copynote.exe copynote.exe.sig --title ... --notes-file ...` against the existing tag.
 - **Tag wrong locally only (not pushed)**: `git tag -d vX.Y.Z` and redo from Step 6. Pushed tag — see next.
 - **Tag pushed but release not yet created and you want to redo**: ask the user before `git push --delete origin vX.Y.Z`. Force-deleting a tag is a shared-state action; explicit confirmation required.
 

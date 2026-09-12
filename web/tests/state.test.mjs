@@ -97,3 +97,64 @@ test("late automatic update result cannot overwrite a manual check", async () =>
   assert.equal(app.state.updateInfo.version,"2.0.0");
   assert.equal(app.state.updateCheckStatus.kind,"available");
 });
+
+const signedRelease = {version:"2.1.0",name:"Release",url:"https://example.com",publishedAt:"",size:100,selfUpdate:true};
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+test("installing an update follows Go progress, then restarts", async () => {
+  const install = deferred();
+  let progress = {stage:"download", done:50, total:100};
+  const restarts = [];
+  const app = await setup({
+    forceCheckForUpdates: async () => signedRelease,
+    installUpdate: () => install.promise,
+    updateProgress: async () => progress,
+    restartApp: async () => { restarts.push(true); },
+  });
+  await app.forceCheckUpdateInfo();
+  const run = app.installUpdate();
+  assert.deepEqual(app.state.updateInstall, {kind:"downloading", done:0, total:100});
+  assert.equal(app.isUpdateInstalling(), true);
+  await sleep(400);
+  assert.deepEqual(app.state.updateInstall, {kind:"downloading", done:50, total:100});
+  progress = {stage:"verify", done:0, total:0};
+  await sleep(400);
+  assert.equal(app.state.updateInstall.kind, "verifying");
+  install.resolve({version:"2.1.0"});
+  await run;
+  assert.equal(app.state.updateInstall.kind, "restarting");
+  assert.equal(restarts.length, 1);
+  // A second click while restarting must not start another install.
+  await app.installUpdate();
+  assert.equal(restarts.length, 1);
+});
+
+test("a failed update is reported, keeps the button usable and can be retried", async () => {
+  let fail = true;
+  const app = await setup({
+    forceCheckForUpdates: async () => signedRelease,
+    installUpdate: async () => { if (fail) throw new Error("signature does not match the downloaded file"); return {version:"2.1.0"}; },
+    updateProgress: async () => ({stage:"", done:0, total:0}),
+    restartApp: async () => {},
+  });
+  await app.forceCheckUpdateInfo();
+  await app.installUpdate();
+  assert.equal(app.state.updateInstall.kind, "failed");
+  assert.equal(app.state.updateInstall.error, "signature does not match the downloaded file");
+  assert.equal(app.isUpdateInstalling(), false);
+  await app.forceCheckUpdateInfo();
+  assert.equal(app.state.updateInstall.kind, "idle");
+  fail = false;
+  await app.installUpdate();
+  assert.equal(app.state.updateInstall.kind, "restarting");
+});
+
+test("a release without a signed binary is never installed in-app", async () => {
+  const app = await setup({
+    forceCheckForUpdates: async () => ({...signedRelease, selfUpdate:false}),
+    installUpdate: async () => { throw new Error("must not be called"); },
+  });
+  await app.forceCheckUpdateInfo();
+  await app.installUpdate();
+  assert.equal(app.state.updateInstall.kind, "idle");
+});

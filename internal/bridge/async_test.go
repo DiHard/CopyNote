@@ -126,3 +126,21 @@ func TestErrorsAreJSONEncoded(t *testing.T) {
 		t.Fatal("no callback")
 	}
 }
+
+func TestBindTimeoutIsEmbeddedInPageScript(t *testing.T) {
+	h := &fakeHost{callbacks: make(chan func(), 1)}
+	a := NewAsync(h)
+	defer a.Close()
+	if err := a.BindTimeout("install", 3*time.Minute, func(context.Context) (any, error) { return nil, nil }); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(h.script, "}, 180000);") {
+		t.Fatalf("timeout not applied: %s", h.script)
+	}
+	if err := a.Bind("check", func(context.Context) (any, error) { return nil, nil }); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(h.script, "}, 10000);") {
+		t.Fatalf("default timeout not applied: %s", h.script)
+	}
+}

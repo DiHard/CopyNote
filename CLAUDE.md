@@ -37,7 +37,7 @@ CopyNote/
 │   ├── clipboard/    # Win32 clipboard (CF_UNICODETEXT, no cgo)
 │   ├── singleton/    # Named mutex for single-instance enforcement
 │   ├── tray/         # System tray icon + custom GDI popup menu
-│   ├── updater/      # GitHub Releases check (notify-only, no download)
+│   ├── updater/      # GitHub Releases check + signed in-place self-update
 │   └── winutil/      # Shared Win32 wrappers (ShowWindow, DWM, registry…)
 │
 ├── web/
@@ -70,6 +70,7 @@ CopyNote/
 │   └── rsrc/           # Windows resource compiler source
 │
 ├── tools/genicon/      # Generates icon-dark.ico + icon-light.ico
+├── tools/signrelease/  # ed25519 release signing; private key lives outside the repo
 ├── assets/             # Generated .ico files
 └── bin/rsrc.exe        # Resource linker binary
 ```
@@ -117,6 +118,9 @@ Go functions are exposed to JavaScript via `webview.Bind()`:
 | `window.getVersion()` | version.Version | App version string (no leading `v`) |
 | `window.checkForUpdates()` | updater.CheckLatest | Background check, honors disableUpdateCheck |
 | `window.forceCheckForUpdates()` | updater.CheckLatest | Manual check, bypasses preference |
+| `window.installUpdate()` | updater.Install | Download `.exe` + `.sig` beside the running exe, verify ed25519, swap via rename (10 min promise timeout) |
+| `window.updateProgress()` | in-memory snapshot | `{stage, done, total}` polled by the UI while installUpdate runs |
+| `window.restartApp()` | Terminate → main relaunches | Only after a successful install: releases the mutex, starts the new exe, posts SHOW |
 | `window.applyTopmost(enabled)` | Win32 dispatch | Apply window stacking preference |
 
 All bridge calls return Promises. The Go side persists to disk on every mutation.
@@ -141,6 +145,21 @@ Runs on dedicated `runtime.LockOSThread()` goroutine. Custom popup menu (GDI-pai
 ### Single Instance
 
 Named mutex `Local\dev.copynote.app.singleton`. A second launch (`tray.ShowRunningInstance`) finds the running instance's tray window via `FindWindowEx(HWND_MESSAGE, "CopyNoteTrayWnd")`, grants it foreground rights with `AllowSetForegroundWindow` and posts the registered `dev.copynote.app.SHOW` message to it directly — the tray window is message-only, and message-only windows never receive `HWND_BROADCAST`. It waits up to 15 s for that window (the running instance may still be in WebView2 cold start); a request that arrives before `notifyReady` is shown once the UI is ready.
+
+### Self-update
+
+The Updates section in Settings installs a release in place. The user always starts it; nothing downloads or restarts silently.
+
+1. `checkForUpdates` parses the release assets. `selfUpdate` is true only when the release ships `copynote.exe` **and** `copynote.exe.sig`, a public key is embedded, and the exe directory is writable (`updater.CanSelfUpdate`). Otherwise the UI keeps the "Download" button that opens the release page.
+2. `installUpdate` (`internal/updater/install.go`) fetches the signature first, streams the binary to `<exe>.new` next to the running file (never `%TEMP%`), verifies the ed25519 signature over `"copynote release <version>\n" + file` with the key in `internal/updater/signature.go`, then swaps: running exe → `<exe>.old`, `<exe>.new` → exe. Windows allows renaming a running image but not overwriting it; if the second rename fails the old file is moved back.
+3. `restartApp` terminates the WebView. After the tray has stopped, `main.go` closes the loopback listener, releases the single-instance mutex, starts the new exe (`relaunch` in `update_windows.go`) and posts the same SHOW request a second launch uses, so the updated window appears.
+4. On the next start `RemoveStaging` drops an interrupted `.new`; `notifyReady` removes `.old` with retries once the UI is up (the previous process may still be exiting). Until then `.old` is the manual fallback if the new build does not start. Updates only go forward: an older exe must not be used after a data migration.
+
+Signing: `go run ./tools/signrelease -generate` creates the key pair once (private key in `%USERPROFILE%\.copynote-release\signing.key`, never committed; `COPYNOTE_SIGNING_KEY` holds the base64 seed in CI). `go run ./tools/signrelease copynote.exe` writes the `.sig` asset and refuses a key that does not match the embedded public key. The version is part of the signed message, so a signed older binary cannot be replayed under a newer tag. Rotating the key needs one release that carries the new public key but is still signed with the old one.
+
+Antivirus heuristics may flag an exe that replaces itself. Mitigations: user-initiated installs only, the signature check, and keeping the download beside the exe rather than in `%TEMP%`.
+
+End-to-end check without touching a real installation: build the "old" exe with `-X copynote/internal/version.Version=2.0.0 -X copynote/internal/updater.releasesURL=http://127.0.0.1:18080/latest`, build the "new" exe with `Version=2.0.1` and sign it with `go run ./tools/signrelease -version 2.0.1 <new.exe>`, serve `/latest` (GitHub-shaped JSON with both assets) plus the two files locally, and give **both** builds the same instance-name overrides (`-X main.singletonName=... -X copynote/internal/tray.trayClassName=... -X copynote/internal/tray.showMessageName=...`) so they can run beside the daily CopyNote. Start the old exe with `APPDATA`/`LOCALAPPDATA` pointing at scratch folders (isolated data, log and WebView2 cache) and `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222`, then drive `window.forceCheckForUpdates()`, `window.installUpdate()` and `window.restartApp()` over the Chrome DevTools Protocol; afterwards `window.getVersion()` on port 9222 must report the new version and `<exe>.old` must disappear within a minute.
 
 ## Data Persistence
 
@@ -233,7 +252,7 @@ Follows [SemVer](https://semver.org): `MAJOR.MINOR.PATCH`.
 
 ### Release process
 
-Use the **`release` skill** at [.claude/skills/release.md](.claude/skills/release.md) — it is the single source of truth for the release flow. The skill performs pre-flight checks, version bump, release notes, build, commit, tag, push, and `gh release create` with the binary attached. Triggers on phrases like "релиз vX.Y.Z", "выложи новую версию", "ship vX.Y.Z".
+Use the **`release` skill** at [.claude/skills/release.md](.claude/skills/release.md) — it is the single source of truth for the release flow. The skill performs pre-flight checks, version bump, release notes, build, signing (`tools/signrelease`), commit, tag, push, and `gh release create` with `copynote.exe` and `copynote.exe.sig` attached — both asset names are fixed, the in-app updater looks them up by name. Triggers on phrases like "релиз vX.Y.Z", "выложи новую версию", "ship vX.Y.Z".
 
 Do not improvise or shortcut steps — past ad-hoc releases left `version.go` out of sync with what was published on GitHub.
 

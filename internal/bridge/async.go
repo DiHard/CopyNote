@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 )
 
 type Host interface {
@@ -30,9 +31,19 @@ func NewAsync(host Host) *Async {
 	return &Async{host: host, ctx: ctx, cancel: cancel}
 }
 
+// DefaultTimeout bounds how long the page waits for a worker result before
+// its Promise rejects. Long operations such as downloads use BindTimeout.
+const DefaultTimeout = 10 * time.Second
+
 // Bind installs a Promise API backed by a short kickoff binding and a worker.
 // The host's Init and Bind calls must run before the initial navigation.
 func (a *Async) Bind(name string, fn func(context.Context) (any, error)) error {
+	return a.BindTimeout(name, DefaultTimeout, fn)
+}
+
+// BindTimeout is Bind with an explicit page-side timeout. The worker keeps
+// running after the Promise rejects; the page drops its late result.
+func (a *Async) BindTimeout(name string, timeout time.Duration, fn func(context.Context) (any, error)) error {
 	start := "__start_" + name
 	finish := "__finish_" + name
 	if err := a.host.Bind(start, func(id int) error {
@@ -87,8 +98,8 @@ func (a *Async) Bind(name string, fn func(context.Context) (any, error)) error {
   const id = ++next;
   const timer = setTimeout(() => {
    pending.delete(id);
-   reject(new Error("Update check timed out"));
-  }, 10000);
+   reject(new Error("Operation timed out"));
+  }, %d);
   pending.set(id, {resolve, reject, timer});
   window[%q](id).catch(error => {
    const p = pending.get(id);
@@ -96,7 +107,7 @@ func (a *Async) Bind(name string, fn func(context.Context) (any, error)) error {
    pending.delete(id); clearTimeout(timer); reject(error);
   });
  });
-})();`, finish, name, start))
+})();`, finish, name, timeout.Milliseconds(), start))
 	return nil
 }
 
