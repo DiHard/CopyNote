@@ -3,6 +3,7 @@ package model
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 func ValidateEntry(label, value string) error {
@@ -25,6 +26,11 @@ func ValidateSettings(s Settings) error {
 	case "system", "en", "ru":
 	default:
 		return fmt.Errorf("invalid locale %q", s.Locale)
+	}
+	if s.RelocateRemindAfter != "" {
+		if _, err := time.Parse(time.RFC3339, s.RelocateRemindAfter); err != nil {
+			return fmt.Errorf("invalid relocateRemindAfter %q: %w", s.RelocateRemindAfter, err)
+		}
 	}
 	return nil
 }

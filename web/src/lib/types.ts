@@ -21,9 +21,15 @@ export interface UserSettings {
   topmost: boolean;
   /** Inverted: true disables the update check. Default is false (enabled). */
   disableUpdateCheck: boolean;
-  /** Hides the banner offering to move the exe into a program folder.
-   *  The action itself stays available in Settings. */
+  /** Inverted: true keeps the window on screen when another program takes
+   *  focus. Default is false — the window hides. */
+  disableAutoHide: boolean;
+  /** Hides the banner offering to move the exe into a program folder for
+   *  good. The action itself stays available in Settings. */
   relocatePromptDismissed: boolean;
+  /** RFC3339 instant before which that banner stays hidden; "" when no
+   *  snooze is running. Unlike the flag above, this one expires. */
+  relocateRemindAfter: string;
   /** Last release version acknowledged by the user. */
   lastSeenUpdateVersion: string;
 }

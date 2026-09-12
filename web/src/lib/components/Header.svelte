@@ -1,14 +1,40 @@
 <script lang="ts">
-  import { state, openCreate, openSettings, hasUnseenUpdate } from "../state.svelte";
+  import { state, openCreate, openSettings, hasUnseenUpdate, copyTopMatch } from "../state.svelte";
+  import { SEARCH_ID, focusCardAt } from "../focus";
   import { t } from "../i18n";
 
   function hideWindow() {
     window.hide();
   }
+
+  /**
+   * Closes the keyboard loop the app is built around: open, type a few
+   * letters, press Enter, paste. Arrow-down hands off to the list for the
+   * cases where the top match is not the one wanted.
+   */
+  async function onSearchKeydown(e: KeyboardEvent) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      focusCardAt(0);
+      return;
+    }
+    if (e.key === "Escape" && state.query !== "") {
+      // Clear the filter first; a second Escape falls through to App's
+      // global handler and hides the window.
+      e.preventDefault();
+      state.query = "";
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      // A failed or empty copy leaves the window up, with the error shown.
+      if (await copyTopMatch()) window.hide();
+    }
+  }
 </script>
 
 <header
-  class="flex items-center gap-1.5 border-b border-outline bg-surface-alt px-2.5 py-1.5"
+  class="flex shrink-0 items-center gap-1.5 border-b border-outline bg-surface-alt px-2.5 py-1.5"
   style="-webkit-app-region: drag"
 >
   <span class="shrink-0 text-xs font-semibold text-on-surface">{t("app.title")}</span>
@@ -30,8 +56,11 @@
       <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
     </svg>
     <input
+      id={SEARCH_ID}
       type="text"
       bind:value={state.query}
+      onkeydown={onSearchKeydown}
+      aria-label={t("search.placeholder")}
       placeholder={t("search.placeholder")}
       class="w-full rounded border border-input-border bg-input py-1 pl-7 pr-2 text-xs text-on-surface placeholder:text-on-surface-faint focus:border-input-focus focus:outline-none"
     />

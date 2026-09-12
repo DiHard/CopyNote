@@ -99,8 +99,14 @@
           bind:value
           rows="3"
           placeholder={t("modal.value.placeholder")}
+          aria-describedby="value-hint"
           class="resize-y rounded-md border border-input-border bg-input px-3 py-1.5 text-sm text-on-surface placeholder:text-on-surface-faint focus:border-input-focus focus:outline-none"
         ></textarea>
+        <!-- The empty-value fallback is real behaviour in service.Copy, and
+             nothing else in the UI hints at it. -->
+        <span id="value-hint" class="text-[11px] leading-snug text-on-surface-dim"
+          >{t("modal.value.hint")}</span
+        >
       </label>
 
       {#if error}

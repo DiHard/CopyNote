@@ -8,18 +8,34 @@
     closeSettings,
     loadUpdateInfo,
     loadInstallLocation,
-    shouldShowRelocateBanner,
+    resetForShow,
   } from "./lib/state.svelte";
+  import { focusSearch } from "./lib/focus";
   import { t } from "./lib/i18n";
   import Header from "./lib/components/Header.svelte";
   import EntryList from "./lib/components/EntryList.svelte";
   import EntryModal from "./lib/components/EntryModal.svelte";
   import ConfirmModal from "./lib/components/ConfirmModal.svelte";
   import SettingsView from "./lib/components/SettingsView.svelte";
-  import RelocateBanner from "./lib/components/RelocateBanner.svelte";
+
+  /**
+   * Go calls this every time the window comes back on screen. A modal is
+   * left completely alone: it may hold an edit the user was pulled away
+   * from mid-sentence, and discarding that to tidy the view would be worse
+   * than a stale search box.
+   */
+  async function onWindowShown() {
+    if (appState.modal) return;
+    resetForShow();
+    // The settings view may have just been swapped out; the search box does
+    // not exist until Svelte has flushed.
+    await tick();
+    focusSearch();
+  }
 
   onMount(async () => {
     window.__openSettings = openSettings;
+    window.__onShow = onWindowShown;
     await Promise.all([refresh(), loadSettings()]);
     // Signal Go that the UI is ready — stops tray icon pulse
     // and enables LMB click.
@@ -33,12 +49,19 @@
 
   onDestroy(() => {
     delete window.__openSettings;
+    delete window.__onShow;
   });
 
   // ── Auto-resize window to fit content ──────────────────────────
-  // Measure actual DOM scrollHeight after Svelte flushes. Fixed/
-  // absolute elements (modals) don't contribute to scrollHeight, so
-  // we enforce a minimum when a modal is open.
+  // The shell is exactly one viewport tall and the entry list is the only
+  // thing that scrolls, so the height we ask Go for cannot be read off the
+  // shell — it would just report the size we already have. Instead we add
+  // up the fixed rows and the list's *content*, which is the height the
+  // window would need to show everything. Go clamps that to the work area;
+  // past the clamp the list simply scrolls inside a full-height window.
+  //
+  // Fixed/absolute elements (modals) are outside the shell, so a minimum is
+  // enforced for them separately.
 
   const MIN_H = 80;
   const MODAL_MIN_H = 420;
@@ -82,6 +105,34 @@
     if (rafId) cancelAnimationFrame(rafId);
   });
 
+  /** Flex children never collapse their margins, so a plain sum is exact. */
+  function outerHeight(el: HTMLElement): number {
+    const cs = getComputedStyle(el);
+    return el.offsetHeight + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom);
+  }
+
+  /**
+   * The window height that would show everything: every fixed row at its own
+   * height, plus the scroller's content rather than the slot it was given.
+   * Measuring the scroller itself would pin the window at whatever size it
+   * already has and it could never shrink again.
+   */
+  function desiredHeight(): number {
+    const shell = document.querySelector<HTMLElement>("[data-shell]");
+    const scroller = shell?.querySelector<HTMLElement>("[data-scroller]");
+    const content = scroller?.querySelector<HTMLElement>("[data-scroll-content]");
+    if (!shell || !scroller || !content) {
+      // No shell yet (or a view that has no scroller): fall back to the
+      // document, which is what this used to measure all the time.
+      return document.getElementById("app")?.scrollHeight ?? MIN_H;
+    }
+    let h = 0;
+    for (const child of Array.from(shell.children) as HTMLElement[]) {
+      h += child === scroller ? outerHeight(content) : outerHeight(child);
+    }
+    return h;
+  }
+
   $effect(() => {
     // Touch reactive deps so the effect re-runs when they change.
     void appState.view;
@@ -90,6 +141,7 @@
     void appState.loading;
     void appState.installLocation;
     void appState.settings.relocatePromptDismissed;
+    void appState.relocateSnoozeClicked;
     void appState.relocate;
     const modal = appState.modal;
 
@@ -99,9 +151,7 @@
       // Svelte's DOM update — prevents measuring stale scrollHeight
       // when switching views (e.g., opening settings from tray menu).
       requestAnimationFrame(() => {
-        const root = document.getElementById("app");
-        if (!root) return;
-        let h = Math.max(MIN_H, root.scrollHeight);
+        let h = Math.max(MIN_H, desiredHeight());
         if (modal) {
           h = Math.max(h, MODAL_MIN_H);
         }
@@ -153,13 +203,14 @@
   {#if appState.view === "settings"}
     <SettingsView />
   {:else}
-    <main class="flex flex-col bg-surface text-on-surface">
+    <!-- Exactly one viewport tall: the search box stays put and everything
+         else scrolls inside the list. Before this the shell grew past the
+         window, the document scrolled instead, and the search box went with
+         it — see desiredHeight() for how the window size is derived now. -->
+    <main data-shell class="flex h-screen flex-col bg-surface text-on-surface">
       <Header />
-      {#if shouldShowRelocateBanner()}
-        <RelocateBanner />
-      {/if}
       {#if appState.operationError}
-        <p role="alert" class="px-3 text-xs text-danger">{t("operation.error", {error: appState.operationError})}</p>
+        <p role="alert" class="shrink-0 px-3 text-xs text-danger">{t("operation.error", {error: appState.operationError})}</p>
       {/if}
       <EntryList />
     </main>

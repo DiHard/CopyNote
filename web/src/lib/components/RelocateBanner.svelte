@@ -4,6 +4,7 @@
     relocateApp,
     relocateAppTo,
     dismissRelocatePrompt,
+    snoozeRelocatePrompt,
   } from "../state.svelte";
   import { t } from "../i18n";
   import Spinner from "./Spinner.svelte";
@@ -22,9 +23,9 @@
   });
 </script>
 
-<!-- mt-3 matches the list's own px-3 py-3, and the gap below comes from that
-     same padding — so the banner sits on the same 12 px rhythm as the cards. -->
-<div class="mx-3 mt-3 rounded-lg border border-outline bg-card px-2.5 py-2">
+<!-- Sits inside the list's own px-3 py-3, so it needs no inset of its own —
+     just the 12 px gap to the first card, matching the list's rhythm. -->
+<div class="mb-3 rounded-lg border border-outline bg-card px-2.5 py-2">
   <div class="flex items-start gap-2">
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -77,13 +78,28 @@
         >
           {t("relocate.choose")}
         </button>
+      </div>
+
+      <!-- Two ways of saying no: one that comes back in a week, one that
+           does not come back at all. They get their own row because four
+           controls do not fit across 420 px, and the gap between them is
+           wide enough that the permanent one is not a slip of the mouse. -->
+      <div class="mt-1.5 flex items-center gap-4">
+        <button
+          type="button"
+          onclick={() => void snoozeRelocatePrompt()}
+          disabled={moving}
+          class="text-[11px] text-on-surface-dim transition hover:text-on-surface disabled:opacity-60"
+        >
+          {t("relocate.later")}
+        </button>
         <button
           type="button"
           onclick={() => void dismissRelocatePrompt()}
           disabled={moving}
-          class="ml-auto text-[11px] text-on-surface-faint transition hover:text-on-surface-dim disabled:opacity-60"
+          class="text-[11px] text-on-surface-dim transition hover:text-on-surface disabled:opacity-60"
         >
-          {t("relocate.later")}
+          {t("relocate.never")}
         </button>
       </div>
     </div>

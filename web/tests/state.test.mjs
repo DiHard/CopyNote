@@ -173,16 +173,38 @@ const location = (over = {}) => ({
   ...over,
 });
 
+const anEntry = {id: "1", label: "Email", value: "me@example.com", order: 0};
+
 test("the move offer follows where the executable actually lives", async () => {
-  const settled = await setup({getInstallLocation: async () => location({permanent: true, dir: PROGRAMS})});
+  const settled = await setup({
+    getInstallLocation: async () => location({permanent: true, dir: PROGRAMS}),
+    list: async () => [anEntry],
+  });
   await settled.loadInstallLocation();
+  await settled.refresh();
   assert.equal(settled.canOfferRelocate(), false, "a program folder needs no move");
   assert.equal(settled.shouldShowRelocateBanner(), false);
 
-  const loose = await setup({getInstallLocation: async () => location()});
+  const loose = await setup({
+    getInstallLocation: async () => location(),
+    list: async () => [anEntry],
+  });
   await loose.loadInstallLocation();
+  await loose.refresh();
   assert.equal(loose.canOfferRelocate(), true);
   assert.equal(loose.shouldShowRelocateBanner(), true);
+});
+
+test("the banner waits for the first entry, the settings action does not", async () => {
+  const app = await setup({getInstallLocation: async () => location(), list: async () => []});
+  await app.loadInstallLocation();
+  await app.refresh();
+  assert.equal(app.state.entries.length, 0);
+  assert.equal(app.shouldShowRelocateBanner(), false, "an empty list must not open with a warning");
+  assert.equal(app.canOfferRelocate(), true, "settings keeps the action from the start");
+
+  app.state.entries = [anEntry];
+  assert.equal(app.shouldShowRelocateBanner(), true, "the banner appears once there is something to protect");
 });
 
 test("an unknown executable path offers nothing", async () => {
@@ -196,13 +218,69 @@ test("an unknown executable path offers nothing", async () => {
   assert.equal(broken.canOfferRelocate(), false);
 });
 
+test("remind me later hides the banner until the stored instant passes", async () => {
+  const hour = 60 * 60 * 1000;
+  let asked = 0;
+  const app = await setup({
+    getInstallLocation: async () => location(),
+    list: async () => [anEntry],
+    snoozeRelocatePrompt: async () => {
+      asked++;
+      return new Date(Date.now() + hour).toISOString();
+    },
+  });
+  await app.loadInstallLocation();
+  await app.refresh();
+  assert.equal(app.shouldShowRelocateBanner(), true);
+
+  await app.snoozeRelocatePrompt();
+  assert.equal(asked, 1);
+  assert.equal(app.shouldShowRelocateBanner(), false, "hidden while the snooze runs");
+  assert.equal(app.state.settings.relocatePromptDismissed, false, "a snooze is not a dismissal");
+
+  // Once the instant is in the past the offer comes back on its own.
+  app.state.relocateSnoozeClicked = false;
+  app.state.settings = {
+    ...app.state.settings,
+    relocateRemindAfter: new Date(Date.now() - hour).toISOString(),
+  };
+  assert.equal(app.shouldShowRelocateBanner(), true, "an expired snooze stops hiding it");
+});
+
+test("a snooze that fails to persist still hides the banner and reports the error", async () => {
+  const app = await setup({
+    getInstallLocation: async () => location(),
+    list: async () => [anEntry],
+    snoozeRelocatePrompt: async () => {throw new Error("disk is full");},
+  });
+  await app.loadInstallLocation();
+  await app.refresh();
+
+  await app.snoozeRelocatePrompt();
+  assert.equal(app.shouldShowRelocateBanner(), false, "the click still feels like it worked");
+  assert.match(app.state.settingsError, /disk is full/);
+  assert.equal(app.state.settings.relocateRemindAfter, "", "nothing was stored");
+});
+
+test("a corrupted reminder instant shows the banner rather than hiding it forever", async () => {
+  const app = await setup({getInstallLocation: async () => location(), list: async () => [anEntry]});
+  await app.loadInstallLocation();
+  await app.refresh();
+  app.state.settings = {...app.state.settings, relocateRemindAfter: "not a date"};
+  assert.equal(app.shouldShowRelocateBanner(), true);
+});
+
 test("dismissing hides the banner but keeps the action in settings", async () => {
   let dismissed = 0;
   const app = await setup({
     getInstallLocation: async () => location(),
+    list: async () => [anEntry],
     dismissRelocatePrompt: async () => {dismissed++;},
   });
   await app.loadInstallLocation();
+  await app.refresh();
+  assert.equal(app.shouldShowRelocateBanner(), true, "visible before the dismissal");
+
   await app.dismissRelocatePrompt();
   assert.equal(dismissed, 1);
   assert.equal(app.shouldShowRelocateBanner(), false, "banner is gone");
@@ -262,4 +340,56 @@ test("a second click cannot start a move while one is running", async () => {
   assert.equal(calls, 1, "the running move is not restarted");
   gate.resolve();
   await first;
+});
+
+const twoEntries = [
+  {id: "1", label: "Рабочая почта", value: "me@example.com", order: 0},
+  {id: "2", label: "Личный телефон", value: "+7 999", order: 1},
+];
+
+test("Enter in the search box copies the top match", async () => {
+  const copied = [];
+  const app = await setup({list: async () => twoEntries, copy: async id => {copied.push(id); return null;}});
+  await app.refresh();
+
+  app.state.query = "телефон";
+  assert.equal(await app.copyTopMatch(), true);
+  assert.deepEqual(copied, ["2"], "the filtered first entry, not the list's first");
+});
+
+test("Enter copies nothing when the filter matches nothing", async () => {
+  const copied = [];
+  const app = await setup({list: async () => twoEntries, copy: async id => {copied.push(id); return null;}});
+  await app.refresh();
+
+  app.state.query = "не существует";
+  assert.equal(await app.copyTopMatch(), false, "so the caller leaves the window open");
+  assert.deepEqual(copied, []);
+});
+
+test("a failed clipboard write is reported and does not hide the window", async () => {
+  const app = await setup({
+    list: async () => twoEntries,
+    copy: async () => {throw new Error("clipboard is locked");},
+  });
+  await app.refresh();
+
+  assert.equal(await app.copyTopMatch(), false);
+  assert.match(app.state.operationError, /clipboard is locked/);
+  assert.doesNotMatch(app.state.operationError, /^Error:/, "the Error: prefix is stripped");
+});
+
+test("showing the window again clears last session's search and view", async () => {
+  const app = await setup({list: async () => twoEntries});
+  await app.refresh();
+
+  app.state.query = "почта";
+  app.state.operationError = "stale failure";
+  app.openSettings();
+  assert.equal(app.state.view, "settings");
+
+  app.resetForShow();
+  assert.equal(app.state.query, "", "a two-second copy must not start pre-filtered");
+  assert.equal(app.state.view, "main", "closing from Settings must not reopen there");
+  assert.equal(app.state.operationError, null);
 });

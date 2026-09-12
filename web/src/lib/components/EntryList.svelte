@@ -7,10 +7,12 @@
     filterEntries,
     openCreate,
     reorderEntries,
+    shouldShowRelocateBanner,
   } from "../state.svelte";
   import { t } from "../i18n";
   import type { Entry } from "../types";
   import EntryCard from "./EntryCard.svelte";
+  import RelocateBanner from "./RelocateBanner.svelte";
 
   const filtered = $derived(filterEntries(appState.entries, appState.query));
   const canDrag = $derived(appState.query.trim() === "");
@@ -199,52 +201,64 @@
   onkeydown={onWindowKeyDown}
 />
 
-<div bind:this={listEl} class="flex-1 overflow-y-auto px-3 py-3">
-  {#if appState.loading}
-    <div
-      class="flex h-full items-center justify-center text-sm text-on-surface-dim"
-    >
-      {t("list.loading")}
-    </div>
-  {:else if appState.loadError}
-    <div
-      class="rounded-md border border-danger/40 bg-danger-dim p-3 text-xs text-danger"
-    >
-      {t("list.error", { error: appState.loadError })}
-    </div>
-  {:else if appState.entries.length === 0}
-    <div
-      class="flex h-full flex-col items-center justify-center gap-3 text-center"
-    >
-      <p class="text-sm text-on-surface-dim">{t("list.empty")}</p>
-      <button
-        type="button"
-        onclick={openCreate}
-        class="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-text shadow-sm transition hover:bg-accent-hover"
+<!-- The only scroller in the app. min-h-0 is what lets a flex child actually
+     shrink below its content and scroll; the padding lives on the inner
+     wrapper so App can measure the content's true height. -->
+<div bind:this={listEl} data-scroller class="min-h-0 flex-1 overflow-y-auto">
+  <div data-scroll-content class="px-3 py-3">
+    <!-- Inside the scroller on purpose: only the search box is worth pinning.
+         The banner is 130 px, which is a third of a laptop-sized window, and
+         nailing it to the top would nag harder than the snooze buttons
+         suggest it should. -->
+    {#if shouldShowRelocateBanner()}
+      <RelocateBanner />
+    {/if}
+    {#if appState.loading}
+      <div
+        class="flex min-h-[7rem] items-center justify-center text-sm text-on-surface-dim"
       >
-        {t("list.empty.add")}
-      </button>
-    </div>
-  {:else if filtered.length === 0}
-    <div
-      class="flex h-full items-center justify-center text-center text-sm text-on-surface-dim"
-    >
-      {t("list.noMatch")}
-    </div>
-  {:else}
-    <div role="list" class="flex flex-col gap-2">
-      {#each renderList as entry (entry.id)}
-        <div animate:flip={{ duration: 180, easing: cubicOut }}>
-          <EntryCard
-            {entry}
-            isDragging={entry.id === draggingId}
-            dragInProgress={draggingId !== null}
-            dragDisabled={!canDrag}
-            onDragPointerDown={(e) => onCardPointerDown(e, entry.id)}
-            onMoveByKey={(dir) => onKeyboardMove(entry.id, dir)}
-          />
-        </div>
-      {/each}
-    </div>
-  {/if}
+        {t("list.loading")}
+      </div>
+    {:else if appState.loadError}
+      <div
+        class="rounded-md border border-danger/40 bg-danger-dim p-3 text-xs text-danger"
+      >
+        {t("list.error", { error: appState.loadError })}
+      </div>
+    {:else if appState.entries.length === 0}
+      <div
+        class="flex min-h-[7rem] flex-col items-center justify-center gap-3 text-center"
+      >
+        <p class="text-sm text-on-surface-dim">{t("list.empty")}</p>
+        <button
+          type="button"
+          onclick={openCreate}
+          class="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-text shadow-sm transition hover:bg-accent-hover"
+        >
+          {t("list.empty.add")}
+        </button>
+      </div>
+    {:else if filtered.length === 0}
+      <div
+        class="flex min-h-[7rem] items-center justify-center text-center text-sm text-on-surface-dim"
+      >
+        {t("list.noMatch")}
+      </div>
+    {:else}
+      <div role="list" class="flex flex-col gap-2">
+        {#each renderList as entry (entry.id)}
+          <div animate:flip={{ duration: 180, easing: cubicOut }}>
+            <EntryCard
+              {entry}
+              isDragging={entry.id === draggingId}
+              dragInProgress={draggingId !== null}
+              dragDisabled={!canDrag}
+              onDragPointerDown={(e) => onCardPointerDown(e, entry.id)}
+              onMoveByKey={(dir) => onKeyboardMove(entry.id, dir)}
+            />
+          </div>
+        {/each}
+      </div>
+    {/if}
+  </div>
 </div>

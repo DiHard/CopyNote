@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/jchv/go-webview2"
 
 	"copynote/internal/relocate"
+	"copynote/internal/service"
 	"copynote/internal/singleton"
 	"copynote/internal/tray"
 	"copynote/internal/updater"
@@ -44,6 +46,21 @@ var browserArgs = []string{
 	"--disable-component-update",
 	"--disable-sync",
 	"--no-first-run",
+}
+
+// notifyShown tells the frontend the window just came on screen. The window
+// is only parked off-screen, never destroyed, so without this the UI would
+// still be showing last session's search query — and possibly the settings
+// view — when the user opens it for a two-second copy.
+const notifyShown = `window.__onShow && window.__onShow()`
+
+// startedByAutorun reports whether Windows started this process from the
+// autorun registry entry rather than the user starting it. applyAutorun
+// appends the flag to the registered command line; anything without it —
+// a double click, a relaunch after an update or a move — is the user
+// asking for the app, and the window should come up on its own.
+func startedByAutorun() bool {
+	return slices.Contains(os.Args[1:], service.AutostartFlag)
 }
 
 func main() {
@@ -110,6 +127,7 @@ func main() {
 	//     first showAndFocus call.
 	if s, err := svc.GetSettings(); err == nil {
 		topmostEnabled.Store(s.Topmost)
+		autoHideDisabled.Store(s.DisableAutoHide)
 	} else {
 		topmostEnabled.Store(true) // default
 	}
@@ -167,21 +185,34 @@ func main() {
 	// of the monitor the window now belongs to.
 	applyWindowSize(hwnd, winutil.DpiForWindow(hwnd))
 
-	updates := bindApplication(w, hwnd, svc, exePath, filepath.Dir(dataFile))
-	defer updates.Close()
-
 	// 8. Tray. Runs on a dedicated OS-locked goroutine; communicates
-	//    with the webview UI thread via w.Dispatch.
+	//    with the webview UI thread via w.Dispatch. Built before the
+	//    bindings so a language change can reach the icon's hover text.
 	trayCtrl := &tray.Tray{
+		// Double-clicking the exe has to do something visible; a Windows
+		// sign-in must not. The autorun registry entry carries the flag,
+		// so its absence means a person started this.
+		ShowOnStart: !startedByAutorun(),
 		OnShow: func() {
-			w.Dispatch(func() { showAndFocus(hwnd) })
+			w.Dispatch(func() {
+				showAndFocus(hwnd)
+				w.Eval(notifyShown)
+			})
 		},
 		OnToggle: func() {
-			w.Dispatch(func() { toggleVisibility(hwnd) })
+			w.Dispatch(func() {
+				if toggleVisibility(hwnd) {
+					w.Eval(notifyShown)
+				}
+			})
 		},
 		OnSettings: func() {
 			w.Dispatch(func() {
 				showAndFocus(hwnd)
+				// Order matters: __onShow returns the UI to the list and
+				// focuses the search box, __openSettings then overrides the
+				// view. Both are queued on the UI thread in this order.
+				w.Eval(notifyShown)
 				w.Eval(`window.__openSettings && window.__openSettings()`)
 			})
 		},
@@ -200,6 +231,10 @@ func main() {
 			return s.Locale
 		},
 	}
+
+	updates := bindApplication(w, hwnd, svc, exePath, filepath.Dir(dataFile), trayCtrl)
+	defer updates.Close()
+
 	if err := w.Bind("notifyReady", func() {
 		trayCtrl.SetReady()
 		if exePath != "" {

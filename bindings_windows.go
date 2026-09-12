@@ -2,8 +2,10 @@ package main
 
 import (
 	"copynote/internal/bridge"
+	"copynote/internal/model"
 	"copynote/internal/service"
 	"copynote/internal/storage"
+	"copynote/internal/tray"
 	"copynote/internal/version"
 	"copynote/internal/winutil"
 	"errors"
@@ -14,7 +16,7 @@ import (
 	"path/filepath"
 )
 
-func bindApplication(w webview2.WebView, hwnd uintptr, svc *service.Service, exePath, dataDir string) *bridge.Async {
+func bindApplication(w webview2.WebView, hwnd uintptr, svc *service.Service, exePath, dataDir string, tr *tray.Tray) *bridge.Async {
 	// 7. Bind CRUD bridge methods.
 	mustBind := func(name string, fn any) {
 		if err := w.Bind(name, fn); err != nil {
@@ -33,7 +35,15 @@ func bindApplication(w webview2.WebView, hwnd uintptr, svc *service.Service, exe
 		})
 	})
 	mustBind("getSettings", svc.GetSettings)
-	mustBind("saveSettings", svc.SaveSettings)
+	// The tray's hover text is localized, so a language change has to reach
+	// it the same way it already reaches the popup menu.
+	mustBind("saveSettings", func(settings model.Settings) error {
+		if err := svc.SaveSettings(settings); err != nil {
+			return err
+		}
+		tr.RefreshTip()
+		return nil
+	})
 	mustBind("resizeWindow", func(contentHeight int) {
 		w.Dispatch(func() {
 			resizeToContent(hwnd, contentHeight)
@@ -64,6 +74,11 @@ func bindApplication(w webview2.WebView, hwnd uintptr, svc *service.Service, exe
 
 	// Moving the executable out of a download folder; see relocate_windows.go.
 	bindRelocate(w, svc, hwnd, exePath, dataDir)
+
+	// Read on every focus loss, so a plain atomic store is all it takes.
+	mustBind("applyAutoHide", func(enabled bool) {
+		autoHideDisabled.Store(!enabled)
+	})
 
 	mustBind("applyTopmost", func(enabled bool) {
 		topmostEnabled.Store(enabled)

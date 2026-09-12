@@ -87,19 +87,36 @@ type Tray struct {
 	// Called each time the popup menu is shown so labels are up to date.
 	GetLocale func() string
 
+	// ShowOnStart surfaces the window as soon as the UI is ready, without
+	// waiting for a click. Set it for a launch the user performed
+	// themselves — a Windows sign-in must not pop the window up. Read once
+	// during setup, so it has to be assigned before Run.
+	ShowOnStart bool
+
 	hwnd      uintptr
 	showMsgID uint32
 	added     bool
 	ready     atomic.Bool // true once WebView2 has finished loading
 	timerID   uintptr     // pulse timer (0 = not running)
 
-	// showPending records a show request that arrived before WebView2
-	// finished loading; it is honoured on msgSetReady. Tray thread only.
-	showPending bool
+	// pending is a request that arrived before WebView2 finished loading;
+	// it is honoured on msgSetReady. Tray thread only.
+	pending pendingRequest
 
 	startOnce sync.Once
 	startErr  error
 }
+
+// pendingRequest is what the user asked for while the UI was still loading.
+// Sliding out a blank window during a cold start looks like a crash, and
+// dropping the request looks like a dead icon, so it waits instead.
+type pendingRequest uint8
+
+const (
+	pendingNone pendingRequest = iota
+	pendingShow
+	pendingSettings
+)
 
 // Tray callback message ID. WM_APP-range avoids collisions with system
 // messages and stock control messages.
@@ -364,12 +381,19 @@ func (t *Tray) setup() error {
 		uCallbackMessage: trayCallbackMsg,
 		hIcon:            hIcon,
 	}
-	copyTip(&nid.szTip, "CopyNote")
+	copyTip(&nid.szTip, t.tip())
 
 	if r, _, addErr := procShellNotifyIconW.Call(uintptr(nimAdd), uintptr(unsafe.Pointer(&nid))); r == 0 {
 		return fmt.Errorf("Shell_NotifyIconW NIM_ADD: %w", addErr)
 	}
 	t.added = true
+
+	// A launch the user performed themselves opens the window as soon as
+	// the UI can render it. Reusing the pending slot keeps that on the
+	// same path as a click and a second exe launch.
+	if t.ShowOnStart {
+		t.pending = pendingShow
+	}
 
 	// Build pulse animation frames from the current icon and start timer.
 	buildPulseIcons(hIcon)
@@ -399,7 +423,10 @@ func (t *Tray) teardown() {
 func copyTip(dst *[128]uint16, s string) {
 	u16, _ := windows.UTF16FromString(s)
 	if len(u16) > len(dst) {
+		// The tip is localized now, so a long translation has to truncate
+		// to a still-terminated string rather than fill the buffer.
 		u16 = u16[:len(dst)]
+		u16[len(u16)-1] = 0
 	}
 	for i := range u16 {
 		dst[i] = u16[i]
@@ -415,14 +442,21 @@ func trayWndProc(hwnd, msgID, wParam, lParam uintptr) uintptr {
 		// lParam is the actual mouse event from the tray icon.
 		switch uint32(lParam) {
 		case winutil.WM_LBUTTONUP:
-			// Block LMB until WebView2 has loaded.
-			if t != nil && t.ready.Load() {
-				switch {
-				case t.OnToggle != nil:
-					t.OnToggle()
-				case t.OnShow != nil:
-					t.OnShow()
-				}
+			if t == nil {
+				break
+			}
+			// Cold start: remember the click instead of dropping it. A
+			// second click must not toggle the queued request back off —
+			// there is no window on screen for the user to be toggling.
+			if !t.ready.Load() {
+				t.pending = pendingShow
+				break
+			}
+			switch {
+			case t.OnToggle != nil:
+				t.OnToggle()
+			case t.OnShow != nil:
+				t.OnShow()
 			}
 		case winutil.WM_RBUTTONUP:
 			if t != nil {
@@ -444,7 +478,10 @@ func trayWndProc(hwnd, msgID, wParam, lParam uintptr) uintptr {
 		return 0
 
 	case msgSetReady:
-		if t != nil && t.timerID != 0 {
+		if t == nil {
+			return 0
+		}
+		if t.timerID != 0 {
 			procKillTimer.Call(hwnd, t.timerID)
 			t.timerID = 0
 			// Restore the full-opacity theme-appropriate icon.
@@ -460,11 +497,25 @@ func trayWndProc(hwnd, msgID, wParam, lParam uintptr) uintptr {
 			_, _, _ = procShellNotifyIconW.Call(uintptr(nimModify), uintptr(unsafe.Pointer(&nid)))
 			destroyPulseIcons()
 		}
-		if t != nil && t.showPending {
-			t.showPending = false
+		// ready is already set by SetReady, so this picks the "click to
+		// open" wording.
+		applyTip(t, t.tip())
+		switch t.pending {
+		case pendingShow:
 			if t.OnShow != nil {
 				t.OnShow()
 			}
+		case pendingSettings:
+			if t.OnSettings != nil {
+				t.OnSettings()
+			}
+		}
+		t.pending = pendingNone
+		return 0
+
+	case msgRefreshTip:
+		if t != nil {
+			applyTip(t, t.tip())
 		}
 		return 0
 
@@ -474,7 +525,7 @@ func trayWndProc(hwnd, msgID, wParam, lParam uintptr) uintptr {
 			if !t.ready.Load() {
 				// Still loading: show once WebView2 is ready instead of
 				// sliding out an empty window.
-				t.showPending = true
+				t.pending = pendingShow
 				return 0
 			}
 			if t.OnShow != nil {
@@ -715,37 +766,103 @@ func (t *Tray) SetReady() {
 
 const msgSetReady = winutil.WM_APP + 3
 
-// Tray menu labels by locale. Falls back to English.
-var trayMenuLabels = map[string][3]string{
-	"en": {"Open CopyNote", "Settings", "Quit"},
-	"ru": {"Открыть CopyNote", "Настройки", "Выход"},
+// RefreshTip re-applies the icon's hover text. The text is localized, so
+// it has to follow a language change the way the popup menu already does.
+// Safe to call from any goroutine.
+func (t *Tray) RefreshTip() {
+	if t == nil || t.hwnd == 0 {
+		return
+	}
+	winutil.PostMessage(t.hwnd, msgRefreshTip, 0, 0)
+}
+
+const msgRefreshTip = winutil.WM_APP + 4
+
+// applyTip updates the hover text of an icon already in the tray.
+// Must run on the tray's OS thread.
+func applyTip(t *Tray, text string) {
+	if !t.added {
+		return
+	}
+	nid := notifyIconDataW{
+		cbSize: uint32(unsafe.Sizeof(notifyIconDataW{})),
+		hWnd:   t.hwnd,
+		uID:    1,
+		uFlags: nifTip,
+	}
+	copyTip(&nid.szTip, text)
+	_, _, _ = procShellNotifyIconW.Call(uintptr(nimModify), uintptr(unsafe.Pointer(&nid)))
+}
+
+// trayText is everything the shell renders on our behalf: the popup menu
+// and the icon's hover text.
+type trayText struct {
+	open, settings, quit string
+	// tipLoading covers the WebView2 cold start, where a click cannot open
+	// anything yet; tipReady doubles as the only place the app ever tells
+	// the user what the icon is for.
+	tipLoading, tipReady string
+}
+
+// Tray strings by locale. Falls back to English.
+var trayTexts = map[string]trayText{
+	"en": {
+		open: "Open CopyNote", settings: "Settings", quit: "Quit",
+		tipLoading: "CopyNote — loading…", tipReady: "CopyNote — click to open",
+	},
+	"ru": {
+		open: "Открыть CopyNote", settings: "Настройки", quit: "Выход",
+		tipLoading: "CopyNote — загрузка…", tipReady: "CopyNote — нажмите, чтобы открыть",
+	},
+}
+
+// text resolves the strings for the current UI locale.
+func (t *Tray) text() trayText {
+	locale := "en"
+	if t != nil && t.GetLocale != nil {
+		locale = t.GetLocale()
+	}
+	if s, ok := trayTexts[locale]; ok {
+		return s
+	}
+	return trayTexts["en"]
+}
+
+// tip is the hover text matching the current loading state.
+func (t *Tray) tip() string {
+	if t.ready.Load() {
+		return t.text().tipReady
+	}
+	return t.text().tipLoading
 }
 
 func showTrayPopup(t *Tray) {
 	var pt point
 	_, _, _ = procGetCursorPos.Call(uintptr(unsafe.Pointer(&pt)))
 
-	locale := "en"
-	if t.GetLocale != nil {
-		locale = t.GetLocale()
-	}
-	labels, ok := trayMenuLabels[locale]
-	if !ok {
-		labels = trayMenuLabels["en"]
-	}
+	labels := t.text()
 
 	items := []popupItem{
-		{id: menuIDOpen, label: labels[0]},
-		{id: menuIDSettings, label: labels[1]},
-		{id: menuIDQuit, label: labels[2]},
+		{id: menuIDOpen, label: labels.open},
+		{id: menuIDSettings, label: labels.settings},
+		{id: menuIDQuit, label: labels.quit},
 	}
 	showCustomPopup(items, pt.x, pt.y, func(id uint32) {
 		switch id {
 		case menuIDOpen:
+			// Same cold-start rule as a left click: queue, never drop.
+			if !t.ready.Load() {
+				t.pending = pendingShow
+				return
+			}
 			if t.OnShow != nil {
 				t.OnShow()
 			}
 		case menuIDSettings:
+			if !t.ready.Load() {
+				t.pending = pendingSettings
+				return
+			}
 			if t.OnSettings != nil {
 				t.OnSettings()
 			}

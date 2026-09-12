@@ -112,4 +112,8 @@ func bindRelocate(w webview2.WebView, svc *service.Service, hwnd uintptr, exePat
 	mustBind("dismissRelocatePrompt", func() error {
 		return svc.UpdateSettings(func(s *model.Settings) { s.RelocatePromptDismissed = true })
 	})
+
+	// Snoozing needs the service's clock, so unlike the permanent dismissal
+	// above it lives there rather than inline here.
+	mustBind("snoozeRelocatePrompt", svc.SnoozeRelocatePrompt)
 }

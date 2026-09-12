@@ -84,9 +84,13 @@
 html,
 body,
 #app {
-  /* Do NOT set height:100% — let the content dictate the height
-     so the Go-side resizeWindow binding can shrink-wrap the window
-     to the actual DOM scrollHeight. */
+  /* The shell inside #app is h-screen and owns all scrolling, so the
+     document itself must never scroll: if it did, the header would
+     scroll away with the content. The window is still shrink-wrapped to
+     the content — App.svelte measures the rows and the list's content
+     rather than the document. */
+  height: 100%;
+  overflow: hidden;
   margin: 0;
   font-family:
     "Segoe UI",
@@ -104,4 +108,28 @@ html {
 }
 html::-webkit-scrollbar {
   display: none; /* Chromium / WebView2 */
+}
+
+/* The entry list (and the settings body) is the one thing that scrolls.
+   Chromium's default 15 px bar is far too heavy for a 420 px window, so
+   this is a Win11-style thin overlay: transparent track, thumb inset with
+   a transparent border so it reads as a floating pill. */
+[data-scroller] {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-outline-strong) transparent;
+}
+[data-scroller]::-webkit-scrollbar {
+  width: 10px;
+}
+[data-scroller]::-webkit-scrollbar-track {
+  background: transparent;
+}
+[data-scroller]::-webkit-scrollbar-thumb {
+  background-color: var(--color-outline-strong);
+  background-clip: content-box;
+  border: 3px solid transparent;
+  border-radius: 5px;
+}
+[data-scroller]::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-on-surface-faint);
 }
