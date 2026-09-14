@@ -13,11 +13,10 @@ frontend, refresh the page.
 
 ## When to run the real app instead
 
-A test build can run beside the daily CopyNote without touching it — see
-"Running a test instance beside the real app" in CLAUDE.md for the `-X`
-overrides and the environment. That is the tool for anything Go decides:
-which global shortcut Windows actually accepted, what the tray does during a
-cold start, the window's real position and focus.
+`tools/testinstance` builds a test exe that runs beside the daily CopyNote
+without touching it, and checks it for real. That is the tool for anything Go
+decides: which global shortcut Windows actually accepted, what the tray does
+during a cold start, the window's real position and focus.
 
 This harness stays the faster loop for layout and frontend behaviour: no exe
 build, no WebView2 start-up, and scenarios (`?empty`, `?many`, …) that would
@@ -78,7 +77,7 @@ and compare.
 state behind them. Anything decided in Go — which global shortcut is really
 registered after Windows refuses a new one, what the tray does during a cold
 start, the window's actual size and position — needs code review or a real
-run. The hotkey's restore-on-refusal path was found by review for exactly
+run in `tools/testinstance`. The hotkey's restore-on-refusal path was found by review for exactly
 this reason: here, a refused combination looks perfectly fine.
 
 Layout measurements — `getBoundingClientRect`, `scrollHeight`, computed

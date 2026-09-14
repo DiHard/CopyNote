@@ -72,6 +72,8 @@ CopyNote/
 │
 ├── tools/genicon/      # Generates icon-dark.ico + icon-light.ico
 ├── tools/signrelease/  # ed25519 release signing; private key lives outside the repo
+├── tools/uxharness/    # Built frontend in a browser against a fake Go bridge
+├── tools/testinstance/ # Real exe beside the daily CopyNote: launch, hotkey, cold start, autorun
 ├── assets/             # Generated .ico files
 └── bin/rsrc.exe        # Resource linker binary
 ```
@@ -218,7 +220,7 @@ What Go decides — which global shortcut Windows accepted, what the tray does w
 go build -ldflags="-H=windowsgui -s -w -X main.singletonName=Local\dev.copynote.test.singleton -X copynote/internal/tray.trayClassName=CopyNoteTestTrayWnd -X copynote/internal/tray.showMessageName=dev.copynote.test.SHOW -X copynote/internal/service.autorunValueName=CopyNoteTest" -o <scratch>/copynote-test.exe .
 ```
 
-Start it with `APPDATA` and `LOCALAPPDATA` pointing at scratch folders (data, log, WebView2 profile) and `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9223` to drive the page and the bridge over CDP.
+Start it with `APPDATA` and `LOCALAPPDATA` pointing at scratch folders (data, log, WebView2 profile) and `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9223` to drive the page and the bridge over CDP. `tools/testinstance/` does all of this and checks the launch, the global hotkey, the cold start and autorun in the real exe — `pwsh tools/testinstance/all.ps1`; its README lists what each script covers.
 
 - **Still shared**: the global hotkey is machine-wide, so the test build gets Ctrl+Alt+N only while no other program holds it — a daily CopyNote that has the hotkey does. Turning autorun on inside the test instance writes its own `Run` value pointing at the test exe; turn it off again before quitting.
 - **Quit it the way the tray does**: post `WM_QUIT` to its tray window, `FindWindowEx(HWND_MESSAGE, 0, "<trayClassName>", NULL)`. Killing the process leaves a dead icon in the tray until the pointer passes over it, and the next launch has to wait for the old `msedgewebview2.exe` processes to release the debugging port.
