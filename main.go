@@ -33,14 +33,15 @@ import (
 //go:embed all:web/dist
 var distFS embed.FS
 
+// singletonName is the single-instance mutex. A var so a test build can run
+// beside the real application (-X main.singletonName=...). The tray class and
+// show message names in internal/tray and the autorun value name in
+// internal/service take the same override; CLAUDE.md lists the full set.
+var singletonName = `Local\dev.copynote.app.singleton`
+
 // Chromium switches passed to WebView2 to disable background services
 // that add startup latency on first navigation (Safe Browsing updater,
 // domain reliability telemetry, component updater, etc.).
-// singletonName is the single-instance mutex. A var so a test build can run
-// beside the real application (-X main.singletonName=...; the tray class and
-// show message names in internal/tray have the same override).
-var singletonName = `Local\dev.copynote.app.singleton`
-
 var browserArgs = []string{
 	"--disable-background-networking",
 	"--disable-component-update",

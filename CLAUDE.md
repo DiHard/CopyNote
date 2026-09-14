@@ -183,7 +183,7 @@ Signing: `go run ./tools/signrelease -generate` creates the key pair once (priva
 
 Antivirus heuristics may flag an exe that replaces itself. Mitigations: user-initiated installs only, the signature check, and keeping the download beside the exe rather than in `%TEMP%`.
 
-End-to-end check without touching a real installation: build the "old" exe with `-X copynote/internal/version.Version=2.0.0 -X copynote/internal/updater.releasesURL=http://127.0.0.1:18080/latest`, build the "new" exe with `Version=2.0.1` and sign it with `go run ./tools/signrelease -version 2.0.1 <new.exe>`, serve `/latest` (GitHub-shaped JSON with both assets) plus the two files locally, and give **both** builds the same instance-name overrides (`-X main.singletonName=... -X copynote/internal/tray.trayClassName=... -X copynote/internal/tray.showMessageName=...`) so they can run beside the daily CopyNote. Start the old exe with `APPDATA`/`LOCALAPPDATA` pointing at scratch folders (isolated data, log and WebView2 cache) and `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222`, then drive `window.forceCheckForUpdates()`, `window.installUpdate()` and `window.restartApp()` over the Chrome DevTools Protocol; afterwards `window.getVersion()` on port 9222 must report the new version and `<exe>.old` must disappear within a minute.
+End-to-end check without touching a real installation: build the "old" exe with `-X copynote/internal/version.Version=2.0.0 -X copynote/internal/updater.releasesURL=http://127.0.0.1:18080/latest`, build the "new" exe with `Version=2.0.1` and sign it with `go run ./tools/signrelease -version 2.0.1 <new.exe>`, serve `/latest` (GitHub-shaped JSON with both assets) plus the two files locally, and give **both** builds the same instance-name overrides (all four from "Running a test instance beside the real app" below) so they can run beside the daily CopyNote. Start the old exe with `APPDATA`/`LOCALAPPDATA` pointing at scratch folders (isolated data, log and WebView2 cache) and `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222`, then drive `window.forceCheckForUpdates()`, `window.installUpdate()` and `window.restartApp()` over the Chrome DevTools Protocol; afterwards `window.getVersion()` on port 9222 must report the new version and `<exe>.old` must disappear within a minute.
 
 ### Moving the executable
 
@@ -202,7 +202,28 @@ A downloaded `copynote.exe` normally stays in `%USERPROFILE%\Downloads`. That is
 - **The marker is untrusted input**: `safeToDelete` accepts only an absolute path to a `copynote*.exe`, never the running image. A stray marker cannot turn the next start into an arbitrary delete.
 - **Autorun needs no special handling**: the relaunched copy runs `EnsureAutorunPath`, which rewrites `HKCU\...\Run` from its own `os.Executable()`.
 
-⚠ **Test instances share the real registry.** The `-X` overrides isolate the mutex, tray class and SHOW message, and `APPDATA`/`LOCALAPPDATA` isolate the data — but the `Run` value name `CopyNote` is a `const` and is not isolated. A test instance whose isolated settings have `autorun: false` **deletes the real installation’s autorun entry** on startup through `EnsureAutorunPath`. Launching the real app once restores it.
+### Running a test instance beside the real app
+
+What Go decides — which global shortcut Windows accepted, what the tray does with a request during the cold start, where the window lands and whether it gets focus — can only be checked in a running exe, and the daily CopyNote is usually running on the same machine. A second copy shares four machine-wide names with it; each is a `var` so a test build can replace it with `-X`:
+
+| Override | Without it, the test build… |
+|---|---|
+| `main.singletonName` | finds the real instance's mutex, asks the real window to show and exits |
+| `copynote/internal/tray.trayClassName`, `copynote/internal/tray.showMessageName` | sends the show request of a second launch or a post-update relaunch to whichever tray window it finds first — possibly the real one |
+| `copynote/internal/service.autorunValueName` | repoints the real `Run` entry at the test exe on every start, or — with fresh settings, where autorun is off — **deletes it** |
+
+`-X` ignores a constant without a word. The tray names and the autorun name used to be constants while this guide already listed them as overrides; the tray and service tests now take their addresses, so turning one back into a `const` stops them compiling.
+
+```bash
+go build -ldflags="-H=windowsgui -s -w -X main.singletonName=Local\dev.copynote.test.singleton -X copynote/internal/tray.trayClassName=CopyNoteTestTrayWnd -X copynote/internal/tray.showMessageName=dev.copynote.test.SHOW -X copynote/internal/service.autorunValueName=CopyNoteTest" -o <scratch>/copynote-test.exe .
+```
+
+Start it with `APPDATA` and `LOCALAPPDATA` pointing at scratch folders (data, log, WebView2 profile) and `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9223` to drive the page and the bridge over CDP.
+
+- **Still shared**: the global hotkey is machine-wide, so the test build gets Ctrl+Alt+N only while no other program holds it — a daily CopyNote that has the hotkey does. Turning autorun on inside the test instance writes its own `Run` value pointing at the test exe; turn it off again before quitting.
+- **Quit it the way the tray does**: post `WM_QUIT` to its tray window, `FindWindowEx(HWND_MESSAGE, 0, "<trayClassName>", NULL)`. Killing the process leaves a dead icon in the tray until the pointer passes over it, and the next launch has to wait for the old `msedgewebview2.exe` processes to release the debugging port.
+- **Cold start**: launch with `--autostart` (so `ShowOnStart` stays out of it) and post the request the moment `FindWindowEx` first finds the tray window — it arrives well before the page's `DOMContentLoaded`, so it reliably exercises the `pending` slot. An `--autostart` launch with no request must stay parked (`GetWindowRect` left edge at −30000).
+- **Real keystrokes**: `SendInput` of the combination produces a genuine `WM_HOTKEY`. Probe first with a `RegisterHotKey` of your own — error 1409 means someone holds it — so the keys never land in whatever window has focus.
 
 ## Data Persistence
 

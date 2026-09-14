@@ -15,6 +15,12 @@ import (
 	"copynote/internal/winutil"
 )
 
+// Test builds override these names with -X to run beside the real
+// application, and the linker ignores -X for anything but a string variable.
+// Taking their addresses keeps them variables: a constant here stops this
+// file from compiling instead of silently breaking that isolation.
+var _ = []*string{&trayClassName, &showMessageName}
+
 // testNames returns a window class and message name unique to the test, so
 // a CopyNote running on the developer's machine is never contacted.
 func testNames(t *testing.T) (className, messageName string) {

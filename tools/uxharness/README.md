@@ -11,18 +11,17 @@ node tools/uxharness/serve.mjs        # http://127.0.0.1:18099/
 Both the bundle and the stub are re-read on every request: rebuild the
 frontend, refresh the page.
 
-## Why not just run the app
+## When to run the real app instead
 
-A second CopyNote cannot be run beside the real one for UI work:
+A test build can run beside the daily CopyNote without touching it — see
+"Running a test instance beside the real app" in CLAUDE.md for the `-X`
+overrides and the environment. That is the tool for anything Go decides:
+which global shortcut Windows actually accepted, what the tray does during a
+cold start, the window's real position and focus.
 
-- `autorunValueName` (`"CopyNote"` in `internal/service/settings.go`) is a
-  `const`, not `-X`-overridable like the mutex, tray class and SHOW message.
-  A test instance whose isolated settings say `autorun: false` therefore
-  **deletes the real installation's autorun entry**, and one that says `true`
-  repoints it at the test binary.
-- The singleton mutex means a second launch just surfaces the running window.
-
-Fixing the first point is worth doing; until then, this.
+This harness stays the faster loop for layout and frontend behaviour: no exe
+build, no WebView2 start-up, and scenarios (`?empty`, `?many`, …) that would
+otherwise need prepared data files.
 
 ## Why it works
 
