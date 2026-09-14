@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"log"
+	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -135,11 +137,11 @@ func setProgress(stage updater.Stage, done, total int64) {
 }
 
 // relaunch starts the replaced executable and asks it to show its window,
-// the same way a second launch would. main calls it after the tray has
-// shut down and the single-instance mutex has been released — otherwise
-// the new process would see a running instance and exit.
+// the same way a second launch would. The child waits for this process to
+// exit before initializing WebView2, because both processes cannot safely
+// use the same WebView2 user-data directory at the same time.
 func relaunch(exePath string) {
-	cmd := exec.Command(exePath)
+	cmd := exec.Command(exePath, waitForPIDFlag, strconv.Itoa(os.Getpid()))
 	cmd.Dir = filepath.Dir(exePath)
 	if err := cmd.Start(); err != nil {
 		log.Printf("relaunch after update: %v", err)

@@ -298,13 +298,15 @@ func (t *Tray) Run() error {
 	}
 }
 
-// Stop posts WM_QUIT to the tray's hidden window so Run() returns.
+// Stop asks the tray thread to post WM_QUIT to its own message queue so
+// Run() returns. Posting WM_QUIT directly to the hidden window would only
+// dispatch it as an ordinary window message and leave GetMessage running.
 // Safe to call from any goroutine.
 func (t *Tray) Stop() {
 	if t.hwnd == 0 {
 		return
 	}
-	_, _, _ = procPostMessageW.Call(t.hwnd, uintptr(winutil.WM_QUIT), 0, 0)
+	_, _, _ = procPostMessageW.Call(t.hwnd, msgStop, 0, 0)
 }
 
 func (t *Tray) setup() error {
@@ -517,6 +519,12 @@ func trayWndProc(hwnd, msgID, wParam, lParam uintptr) uintptr {
 		if t != nil {
 			applyTip(t, t.tip())
 		}
+		return 0
+
+	case msgStop:
+		// PostQuitMessage must run on the thread whose GetMessage loop is
+		// being stopped; posting WM_QUIT to the window itself is insufficient.
+		procPostQuitMessage.Call(0)
 		return 0
 
 	default:
@@ -777,6 +785,10 @@ func (t *Tray) RefreshTip() {
 }
 
 const msgRefreshTip = winutil.WM_APP + 4
+
+// msgStop is handled by trayWndProc, which then posts WM_QUIT to the tray
+// thread's queue. WM_APP+5 keeps it separate from the other tray commands.
+const msgStop = winutil.WM_APP + 5
 
 // applyTip updates the hover text of an icon already in the tray.
 // Must run on the tray's OS thread.

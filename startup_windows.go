@@ -5,11 +5,40 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
+
+	"golang.org/x/sys/windows"
 
 	"copynote/internal/service"
 	"copynote/internal/storage"
 	"copynote/internal/winutil"
 )
+
+const waitForPIDFlag = "--wait-for-pid"
+
+// waitForRelaunchParent is used by a relaunched copy before it creates
+// WebView2. The old process must exit first: WebView2 serializes access to
+// its user-data directory, and starting both processes at once makes the new
+// copy fail during controller creation.
+func waitForRelaunchParent() {
+	for i := 1; i+1 < len(os.Args); i++ {
+		if os.Args[i] != waitForPIDFlag {
+			continue
+		}
+		pid, err := strconv.ParseUint(os.Args[i+1], 10, 32)
+		if err != nil || pid == 0 {
+			return
+		}
+		h, err := windows.OpenProcess(windows.SYNCHRONIZE, false, uint32(pid))
+		if err != nil {
+			// The parent may have exited before this process opened its handle.
+			return
+		}
+		defer windows.CloseHandle(h)
+		_, _ = windows.WaitForSingleObject(h, windows.INFINITE)
+		return
+	}
+}
 
 func initializeLogging() func() {
 	dir := filepath.Join(os.Getenv("LOCALAPPDATA"), "CopyNote")

@@ -64,6 +64,7 @@ func startedByAutorun() bool {
 }
 
 func main() {
+	waitForRelaunchParent()
 	closeLog := initializeLogging()
 	defer closeLog()
 	// 0. Per-monitor DPI awareness has to be set before the first window
