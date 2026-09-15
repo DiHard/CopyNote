@@ -5,6 +5,12 @@
  * Light values in :root, dark values in .dark.
  * Tailwind 4 picks up --color-* as usable utilities:
  *   bg-surface, text-on-surface, border-outline, etc.
+ *
+ * Every text color clears WCAG AA (4.5:1) on each surface it is drawn on,
+ * hover fills and the input background included; icons clear 3:1. The
+ * tightest pairs are faint text on #f3f3f3 in light and on the #383838
+ * input in dark, which is why on-surface-faint can only be a shade lighter
+ * than on-surface-dim. Check a new pairing before relying on it.
  */
 
 @theme {
@@ -21,9 +27,12 @@
   --color-accent: var(--t-accent);
   --color-accent-hover: var(--t-accent-hover);
   --color-accent-text: var(--t-accent-text);
+  --color-accent-soft: var(--t-accent-soft);
   --color-danger: var(--t-danger);
   --color-danger-dim: var(--t-danger-dim);
+  --color-on-danger: var(--t-on-danger);
   --color-success: var(--t-success);
+  --color-on-success: var(--t-on-success);
   --color-overlay: var(--t-overlay);
   --color-input: var(--t-input);
   --color-input-border: var(--t-input-border);
@@ -40,19 +49,25 @@
   --t-card-hover: #f0f0f0;
   --t-on-surface: #1a1a1a;
   --t-on-surface-dim: #616161;
-  --t-on-surface-faint: #999999;
+  --t-on-surface-faint: #6e6e6e;
   --t-outline: #e5e5e5;
   --t-outline-strong: #d1d1d1;
-  --t-accent: #0078d4;
+  /* #0078d4 was 4.1:1 as link text on surface; this clears 5.7:1 there and
+     6.3:1 under white button text. */
+  --t-accent: #005fb8;
   --t-accent-hover: #106ebe;
   --t-accent-text: #ffffff;
-  --t-danger: #d13438;
+  --t-accent-soft: #e5eff9;
+  /* #d13438 was 4.4:1 on surface and 4.2:1 on its own danger-dim box. */
+  --t-danger: #c42b1c;
   --t-danger-dim: #fde7e7;
+  --t-on-danger: #ffffff;
   --t-success: #107c10;
+  --t-on-success: #ffffff;
   --t-overlay: rgba(0, 0, 0, 0.3);
   --t-input: #ffffff;
   --t-input-border: #d1d1d1;
-  --t-input-focus: #0078d4;
+  --t-input-focus: #005fb8;
   --t-update-dot: #ea580c; /* orange-600 — darker for light-mode contrast */
 }
 
@@ -64,16 +79,20 @@
   --t-card: #2d2d2d;
   --t-card-hover: #383838;
   --t-on-surface: #ffffff;
-  --t-on-surface-dim: #9e9e9e;
-  --t-on-surface-faint: #6b6b6b;
+  --t-on-surface-dim: #b0b0b0;
+  --t-on-surface-faint: #a3a3a3;
   --t-outline: #3d3d3d;
   --t-outline-strong: #4d4d4d;
   --t-accent: #60cdff;
   --t-accent-hover: #4cc2ff;
   --t-accent-text: #003e6e;
+  --t-accent-soft: #1b3a4f;
   --t-danger: #ff6b6b;
   --t-danger-dim: #3d1f1f;
+  /* The fills are light in this theme: white text on them was 2–2.8:1. */
+  --t-on-danger: #4a0b0b;
   --t-success: #6ccb5f;
+  --t-on-success: #0b3d0b;
   --t-overlay: rgba(0, 0, 0, 0.5);
   --t-input: #383838;
   --t-input-border: #4d4d4d;

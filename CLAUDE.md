@@ -249,6 +249,8 @@ CSS variables in `app.css` define a Windows 11–inspired palette:
 - Mapped to Tailwind 4 utilities: `bg-surface`, `text-on-surface`, `border-outline`, etc.
 - Theme switch: toggles `.dark` class on `<html>`, stored in the data.json settings object
 - "system" mode uses `matchMedia("(prefers-color-scheme: dark)")` listener
+- **Contrast lives in the tokens, not in the components.** Every text token clears 4.5:1 on each surface it is drawn on — hover fills and the dark theme's `#383838` input included — and icons clear 3:1. That leaves `on-surface-faint` only a shade lighter than `on-surface-dim`: any lighter and the Settings section headings fail in light, every placeholder in dark. Text on a filled `danger`/`success` uses `on-danger`/`on-success`, because the dark theme's fills are light and white text on them was 2–2.8:1.
+- **Icon buttons are 28 × 28**: `p-1.5` around a 16 px icon (header, row actions). Text-only buttons are about 16 px tall and meet WCAG 2.5.8 only through its spacing exception, so don't put another control right against one.
 
 ## Key Patterns
 

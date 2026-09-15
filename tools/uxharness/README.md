@@ -63,6 +63,10 @@ Confirmed the hard way, in the Claude Code browser pane:
 - **`requestAnimationFrame` starves** whenever the pane is not painting.
   Anything behind it — the auto-resize effect, Svelte-rendered modals — then
   appears frozen. A modal that would not close on Escape was this.
+- **CSS transitions do not advance** either, for the same reason: after a
+  class or theme change `getComputedStyle` keeps reporting the value the
+  transition started from. Before measuring colours, inject
+  `*, *::before, *::after { transition: none !important; animation: none !important }`.
 - **Screenshots time out** with "did not finish rendering". Retry once, then
   fall back to reading the DOM, which keeps working.
 - **Viewport width below 768 switches the pane to mobile emulation**: Android

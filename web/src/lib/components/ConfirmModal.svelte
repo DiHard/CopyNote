@@ -73,7 +73,7 @@
         type="button"
         disabled={busy}
         onclick={confirm}
-        class="rounded-md bg-danger px-3 py-1.5 text-sm font-medium text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+        class="rounded-md bg-danger px-3 py-1.5 text-sm font-medium text-on-danger shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {t("confirm.delete")}
       </button>

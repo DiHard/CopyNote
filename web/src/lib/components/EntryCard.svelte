@@ -123,7 +123,7 @@
 
   <div
     data-no-drag
-    class="flex shrink-0 items-center gap-1 px-2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 {copyState !==
+    class="flex shrink-0 items-center gap-1 px-1.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 {copyState !==
     'idle'
       ? 'pointer-events-none opacity-0'
       : ''}"
@@ -137,12 +137,12 @@
       title={t("card.edit")}
       aria-label={t("card.edit")}
       onclick={() => openEdit(entry)}
-      class="rounded p-1 text-on-surface-dim hover:bg-surface-hover hover:text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      class="rounded p-1.5 text-on-surface-dim hover:bg-surface-hover hover:text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
-        width="14"
-        height="14"
+        width="16"
+        height="16"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
@@ -164,12 +164,12 @@
       title={t("card.delete")}
       aria-label={t("card.delete")}
       onclick={() => openDelete(entry)}
-      class="rounded p-1 text-on-surface-dim hover:bg-danger-dim hover:text-danger focus:outline-none focus-visible:ring-2 focus-visible:ring-danger"
+      class="rounded p-1.5 text-on-surface-dim hover:bg-danger-dim hover:text-danger focus:outline-none focus-visible:ring-2 focus-visible:ring-danger"
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
-        width="14"
-        height="14"
+        width="16"
+        height="16"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
@@ -194,13 +194,13 @@
   >
     {#if copyState === "copied"}
       <span
-        class="rounded-md bg-success px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white shadow-sm"
+        class="rounded-md bg-success px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-on-success shadow-sm"
       >
         {t("card.copied")}
       </span>
     {:else if copyState === "failed"}
       <span
-        class="rounded-md bg-danger px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white shadow-sm"
+        class="rounded-md bg-danger px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-on-danger shadow-sm"
       >
         {t("card.failed")}
       </span>
