@@ -5,6 +5,7 @@
     relocateAppTo,
     dismissRelocatePrompt,
     snoozeRelocatePrompt,
+    installFolderName,
   } from "../state.svelte";
   import { t } from "../i18n";
   import Spinner from "./Spinner.svelte";
@@ -14,13 +15,7 @@
     appState.relocate.kind === "failed" ? appState.relocate.error : null,
   );
 
-  /** The folder name alone — the full path is too long for 420 px and the
-   *  name is what makes "you are running from Downloads" land. */
-  const folder = $derived.by(() => {
-    const dir = appState.installLocation?.dir ?? "";
-    const parts = dir.split(/[\\/]/).filter(Boolean);
-    return parts.length > 0 ? parts[parts.length - 1] : dir;
-  });
+  const folder = $derived(installFolderName());
 </script>
 
 <!-- Sits inside the list's own px-3 py-3, so it needs no inset of its own —

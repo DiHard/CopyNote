@@ -76,8 +76,15 @@
     entries = ids.map((id, i) => ({ ...entries.find((e) => e.id === id), order: i }));
     return reply(null);
   };
+  // ?copybusy: another program holds the clipboard. go-webview2 rejects with
+  // Go's error text as a plain string, not an Error.
   window.copy = (id) => {
     calls.copy.push(id);
+    if (flags.has("copybusy")) {
+      return new Promise((_, fail) =>
+        setTimeout(() => fail("clipboard: OpenClipboard busy after 5 attempts: Access is denied."), 40),
+      );
+    }
     return reply(entries.find((e) => e.id === id) ?? null);
   };
 
@@ -109,7 +116,8 @@
   window.getSettings = () => reply({ ...settings });
   window.saveSettings = (next) => { settings = { ...next }; return reply(); };
   window.exportData = () => reply(true);
-  window.importData = () => reply(true);
+  // As if the file held three entries, one of them already in the list.
+  window.importData = () => reply({ added: 2, skipped: 1 });
   window.openExternal = (url) => { console.log("[harness] openExternal", url); return reply(); };
   window.openAppFolder = () => reply();
   window.notifyReady = () => reply();

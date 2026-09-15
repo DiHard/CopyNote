@@ -49,5 +49,5 @@ createServer(async (req, res) => {
   }
 }).listen(port, "127.0.0.1", () => {
   console.log(`harness on http://127.0.0.1:${port}/`);
-  console.log("scenarios: ?empty  ?many  ?downloads  ?update");
+  console.log("scenarios: ?empty  ?many  ?downloads  ?update  ?hotkeytaken  ?copybusy");
 });

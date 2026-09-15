@@ -67,16 +67,16 @@ test("a failed preference save is visible and does not poison later saves", asyn
 });
 
 test("cancelled file dialogs do not report success or reload settings", async () => {
-  const app = await setup({importData: async()=>false, exportData: async()=>false,
+  const app = await setup({importData: async()=>null, exportData: async()=>false,
     getSettings: async()=>{throw new Error("must not reload");}});
-  assert.equal(await app.importData(),false);
+  assert.equal(await app.importData(),null);
   assert.equal(await app.exportData(),false);
   assert.equal(app.state.settingsError,null);
 });
 
 test("import and a following preference write use the imported snapshot", async () => {
   const writes=[];
-  const app=await setup({importData:async()=>true, list:async()=>[],
+  const app=await setup({importData:async()=>({added:0,skipped:0}), list:async()=>[],
     getSettings:async()=>({...app.state.settings,theme:"dark"}),
     saveSettings:async value=>writes.push({...value})});
   const imported=app.importData();
@@ -370,13 +370,46 @@ test("Enter copies nothing when the filter matches nothing", async () => {
 test("a failed clipboard write is reported and does not hide the window", async () => {
   const app = await setup({
     list: async () => twoEntries,
-    copy: async () => {throw new Error("clipboard is locked");},
+    copy: async () => {throw new Error("clipboard: EmptyClipboard: Access is denied.");},
   });
   await app.refresh();
 
   assert.equal(await app.copyTopMatch(), false);
-  assert.match(app.state.operationError, /clipboard is locked/);
-  assert.doesNotMatch(app.state.operationError, /^Error:/, "the Error: prefix is stripped");
+  assert.deepEqual(
+    app.state.copyError,
+    {busy: false, detail: "EmptyClipboard: Access is denied."},
+    "Go's wording, without the Error: and clipboard: prefixes",
+  );
+});
+
+test("a busy clipboard gets a sentence, and the next good copy clears it", async () => {
+  let busy = true;
+  const app = await setup({
+    list: async () => twoEntries,
+    // go-webview2 rejects with Go's error text as a plain string.
+    copy: async () => {
+      if (busy) throw "clipboard: OpenClipboard busy after 5 attempts: Access is denied.";
+      return null;
+    },
+  });
+  await app.refresh();
+
+  await assert.rejects(app.copyEntry("1"), undefined, "the card still learns that the copy failed");
+  assert.equal(app.state.copyError.busy, true);
+
+  busy = false;
+  await app.copyEntry("1");
+  assert.equal(app.state.copyError, null);
+});
+
+test("an import passes on what it added and skipped, then reloads the list", async () => {
+  const app = await setup({
+    importData: async () => ({added: 2, skipped: 1}),
+    list: async () => twoEntries,
+    getSettings: async () => ({...app.state.settings}),
+  });
+  assert.deepEqual(await app.importData(), {added: 2, skipped: 1});
+  assert.equal(app.state.entries.length, 2);
 });
 
 test("showing the window again clears last session's search and view", async () => {
@@ -385,6 +418,7 @@ test("showing the window again clears last session's search and view", async () 
 
   app.state.query = "почта";
   app.state.operationError = "stale failure";
+  app.state.copyError = {busy: true, detail: "OpenClipboard busy"};
   app.openSettings();
   assert.equal(app.state.view, "settings");
 
@@ -392,6 +426,7 @@ test("showing the window again clears last session's search and view", async () 
   assert.equal(app.state.query, "", "a two-second copy must not start pre-filtered");
   assert.equal(app.state.view, "main", "closing from Settings must not reopen there");
   assert.equal(app.state.operationError, null);
+  assert.equal(app.state.copyError, null, "last session's failure is not news");
 });
 
 test("the first entry teaches copying before it warns about Downloads", async () => {

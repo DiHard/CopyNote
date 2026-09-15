@@ -41,6 +41,7 @@ Appended to the URL:
 | `?downloads` | exe in Downloads — the relocate banner |
 | `?update` | a signed release is available — the in-app update flow |
 | `?hotkeytaken` | Windows refuses every global shortcut — the Settings error path |
+| `?copybusy` | another program holds the clipboard — the copy error line |
 
 `window.__harness.calls` records what the UI asked the bridge to do
 (`resizeWindow` heights, `hide` count, copied ids, topmost/auto-hide values,

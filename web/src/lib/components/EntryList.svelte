@@ -285,7 +285,10 @@
     {:else}
       <div role="list" class="flex flex-col gap-2">
         {#each renderList as entry, i (entry.id)}
-          <div animate:flip={{ duration: 180, easing: cubicOut }}>
+          <!-- The list's direct child carries the role. On the card inside,
+               one wrapper further down, the items fell outside the list and a
+               screen reader never announced it. -->
+          <div role="listitem" animate:flip={{ duration: 180, easing: cubicOut }}>
             <EntryCard
               {entry}
               isDragging={entry.id === draggingId}

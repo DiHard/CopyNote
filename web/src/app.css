@@ -7,10 +7,11 @@
  *   bg-surface, text-on-surface, border-outline, etc.
  *
  * Every text color clears WCAG AA (4.5:1) on each surface it is drawn on,
- * hover fills and the input background included; icons clear 3:1. The
- * tightest pairs are faint text on #f3f3f3 in light and on the #383838
- * input in dark, which is why on-surface-faint can only be a shade lighter
- * than on-surface-dim. Check a new pairing before relying on it.
+ * hover fills and the input background included; icons clear 3:1. Faint
+ * text is the tight one: placeholders on the #383838 input in dark leave
+ * on-surface-faint only a shade lighter than on-surface-dim, and in light it
+ * clears the #f3f3f3 surface by a hair (4.6:1) but not the hover fills.
+ * Check a new pairing before relying on it.
  */
 
 @theme {
@@ -100,6 +101,40 @@
   --t-update-dot: #fb923c; /* orange-400 — lighter for dark-mode contrast */
 }
 
+/*
+ * Focus. Everything the keyboard reaches gets its indicator from here, so
+ * components carry no focus classes of their own, and a focus:outline-none
+ * on one switches its indicator off. It is an outline rather than Tailwind's
+ * ring: a ring is a box-shadow, which Windows contrast themes drop, while an
+ * outline is repainted in the system colour.
+ */
+@layer base {
+  /* 2 px clear of the control, so it also shows around a filled accent button. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  /* Text fields the Windows 11 way: the border turns accent and its bottom
+     edge doubles. On any focus, not only from the keyboard, since a caret
+     alone is easy to miss. */
+  :is(input:not([type="checkbox"]), textarea, select):focus {
+    outline: 1px solid var(--color-input-focus);
+    outline-offset: -1px;
+    box-shadow: inset 0 -1px 0 var(--color-input-focus);
+  }
+
+  /* A card takes focus through its copy button, but the ring goes around the
+     whole card, row buttons included. */
+  [data-card-focus]:focus-visible {
+    outline: none;
+  }
+  [data-entry-id]:has([data-card-focus]:focus-visible) {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+}
+
 html,
 body,
 #app {
@@ -129,26 +164,32 @@ html::-webkit-scrollbar {
   display: none; /* Chromium / WebView2 */
 }
 
-/* The entry list (and the settings body) is the one thing that scrolls.
-   Chromium's default 15 px bar is far too heavy for a 420 px window, so
-   this is a Win11-style thin overlay: transparent track, thumb inset with
-   a transparent border so it reads as a floating pill. */
-[data-scroller] {
+/* The entry list (and the settings body) is the one thing that scrolls,
+   apart from a modal taller than the screen. Chromium's default 15 px bar
+   is far too heavy for a 420 px window, so this is a Win11-style thin
+   overlay: transparent track, thumb inset with a transparent border so it
+   reads as a floating pill. */
+[data-scroller],
+[data-modal] {
   scrollbar-width: thin;
   scrollbar-color: var(--color-outline-strong) transparent;
 }
-[data-scroller]::-webkit-scrollbar {
+[data-scroller]::-webkit-scrollbar,
+[data-modal]::-webkit-scrollbar {
   width: 10px;
 }
-[data-scroller]::-webkit-scrollbar-track {
+[data-scroller]::-webkit-scrollbar-track,
+[data-modal]::-webkit-scrollbar-track {
   background: transparent;
 }
-[data-scroller]::-webkit-scrollbar-thumb {
+[data-scroller]::-webkit-scrollbar-thumb,
+[data-modal]::-webkit-scrollbar-thumb {
   background-color: var(--color-outline-strong);
   background-clip: content-box;
   border: 3px solid transparent;
   border-radius: 5px;
 }
-[data-scroller]::-webkit-scrollbar-thumb:hover {
+[data-scroller]::-webkit-scrollbar-thumb:hover,
+[data-modal]::-webkit-scrollbar-thumb:hover {
   background-color: var(--color-on-surface-faint);
 }

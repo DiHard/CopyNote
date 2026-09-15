@@ -2,7 +2,7 @@
 // Each function returns a promise that rejects with an Error whose message
 // matches the Go error returned by the bound method.
 
-import type { Entry, EntryMenuRequest, InstallLocation, UpdateInfo, UpdateProgress, UserSettings } from "./types";
+import type { Entry, EntryMenuRequest, ImportResult, InstallLocation, UpdateInfo, UpdateProgress, UserSettings } from "./types";
 
 declare global {
   interface Window {
@@ -17,7 +17,8 @@ declare global {
     getSettings: () => Promise<UserSettings>;
     saveSettings: (settings: UserSettings) => Promise<void>;
     exportData: () => Promise<boolean>;
-    importData: () => Promise<boolean>;
+    /** Resolves to null when the user cancels the file dialog. */
+    importData: () => Promise<ImportResult | null>;
     openExternal: (url: string) => Promise<void>;
     /** Opens the folder the running copynote.exe sits in, in Explorer. */
     openAppFolder: () => Promise<void>;
@@ -70,7 +71,7 @@ export const api = {
   getSettings: (): Promise<UserSettings> => window.getSettings(),
   saveSettings: (s: UserSettings): Promise<void> => window.saveSettings(s),
   exportData: (): Promise<boolean> => window.exportData(),
-  importData: (): Promise<boolean> => window.importData(),
+  importData: (): Promise<ImportResult | null> => window.importData(),
   openAppFolder: (): Promise<void> => window.openAppFolder(),
   getVersion: (): Promise<string> => window.getVersion(),
   checkForUpdates: (): Promise<UpdateInfo | null> => window.checkForUpdates(),

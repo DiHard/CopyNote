@@ -51,9 +51,9 @@ export function getLocale(): string {
   return currentLocale;
 }
 
-/** List of available locales with display names. */
+/** The shipped languages, each named in itself. "Same as Windows" is not a
+ *  language: Settings adds that choice, translated. */
 export const availableLocales = [
-  { code: "system", label: "System" },
   { code: "en", label: "English" },
   { code: "ru", label: "Русский" },
 ];

@@ -137,7 +137,6 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-  role="listitem"
   data-entry-id={entry.id}
   onpointerdown={onPointerDown}
   oncontextmenu={onContextMenu}
@@ -145,7 +144,8 @@
     ? 'opacity-60 shadow-lg ring-2 ring-accent/40'
     : ''}"
 >
-  <!-- data-card-focus: the element arrow keys walk between; see lib/focus.ts -->
+  <!-- data-card-focus: the element arrow keys walk between; see lib/focus.ts.
+       Its focus ring goes around the whole card (app.css). -->
   <button
     type="button"
     data-card-focus
@@ -154,7 +154,7 @@
     onclick={onCopy}
     onkeydown={onKeyDown}
     title={dragDisabled ? t("card.copy") : t("card.copyOrDrag")}
-    class="flex min-w-0 flex-1 items-start px-3 py-2.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-l-lg {dragInProgress
+    class="flex min-w-0 flex-1 items-start px-3 py-2.5 text-left {dragInProgress
       ? 'cursor-grabbing'
       : 'cursor-pointer'}"
   >
@@ -170,10 +170,7 @@
 
   <div
     data-no-drag
-    class="flex shrink-0 items-center gap-1 px-1.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 {copyState !==
-    'idle'
-      ? 'pointer-events-none opacity-0'
-      : ''}"
+    class="flex shrink-0 items-center gap-1 px-1.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
   >
     <!-- Out of the Tab order so the list costs one stop, not three; the key
          is announced instead. -->
@@ -184,7 +181,7 @@
       title={t("card.edit")}
       aria-label={t("card.edit")}
       onclick={() => openEdit(entry)}
-      class="rounded p-1.5 text-on-surface-dim hover:bg-surface-hover hover:text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      class="rounded p-1.5 text-on-surface-dim hover:bg-surface-hover hover:text-on-surface"
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -211,7 +208,7 @@
       title={t("card.delete")}
       aria-label={t("card.delete")}
       onclick={() => openDelete(entry)}
-      class="rounded p-1.5 text-on-surface-dim hover:bg-danger-dim hover:text-danger focus:outline-none focus-visible:ring-2 focus-visible:ring-danger"
+      class="rounded p-1.5 text-on-surface-dim hover:bg-danger-dim hover:text-danger"
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -232,8 +229,11 @@
     </button>
   </div>
 
+  <!-- Left of the row's buttons while they show (right-18 is their 72 px), so
+       they stay clickable during the badge. `right` is not transitioned: the
+       badge should not slide away when the pointer leaves the card. -->
   <div
-    class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 transition-all duration-200 {copyState ===
+    class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 transition-[opacity,translate] duration-200 group-focus-within:right-18 group-hover:right-18 {copyState ===
     'idle'
       ? 'translate-x-1 opacity-0'
       : 'opacity-100'}"
@@ -241,13 +241,13 @@
   >
     {#if copyState === "copied"}
       <span
-        class="rounded-md bg-success px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-on-success shadow-sm"
+        class="rounded-md bg-success px-2 py-0.5 text-[11px] font-semibold text-on-success shadow-sm"
       >
         {t("card.copied")}
       </span>
     {:else if copyState === "failed"}
       <span
-        class="rounded-md bg-danger px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-on-danger shadow-sm"
+        class="rounded-md bg-danger px-2 py-0.5 text-[11px] font-semibold text-on-danger shadow-sm"
       >
         {t("card.failed")}
       </span>
