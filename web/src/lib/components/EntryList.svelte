@@ -283,26 +283,42 @@
         </button>
       </div>
     {:else}
+      {#snippet card(entry: Entry, i: number)}
+        <EntryCard
+          {entry}
+          isDragging={entry.id === draggingId}
+          dragInProgress={draggingId !== null}
+          dragDisabled={!canDrag}
+          tabbable={entry.id === tabbableId}
+          canMoveUp={canDrag && i > 0}
+          canMoveDown={canDrag && i < renderList.length - 1}
+          onDragPointerDown={(e) => onCardPointerDown(e, entry.id)}
+          onMoveByKey={(dir) => onKeyboardMove(entry.id, dir)}
+          onFocused={() => (activeId = entry.id)}
+        />
+      {/snippet}
+      <!-- The list's direct child carries the role. On the card inside, one
+           wrapper further down, the items fell outside the list and a screen
+           reader never announced it.
+
+           Only an unfiltered list animates. animate:flip is there for moves —
+           a drag, Ctrl+↑↓, an entry added or deleted — but every row a keyed
+           update removes, Svelte first measures and pins in place with a
+           forced layout of its own, whether or not anything animates after.
+           A search that hid most of a thousand entries spent seconds on that,
+           and a filtered list cannot be reordered anyway. -->
       <div role="list" class="flex flex-col gap-2">
-        {#each renderList as entry, i (entry.id)}
-          <!-- The list's direct child carries the role. On the card inside,
-               one wrapper further down, the items fell outside the list and a
-               screen reader never announced it. -->
-          <div role="listitem" animate:flip={{ duration: 180, easing: cubicOut }}>
-            <EntryCard
-              {entry}
-              isDragging={entry.id === draggingId}
-              dragInProgress={draggingId !== null}
-              dragDisabled={!canDrag}
-              tabbable={entry.id === tabbableId}
-              canMoveUp={canDrag && i > 0}
-              canMoveDown={canDrag && i < renderList.length - 1}
-              onDragPointerDown={(e) => onCardPointerDown(e, entry.id)}
-              onMoveByKey={(dir) => onKeyboardMove(entry.id, dir)}
-              onFocused={() => (activeId = entry.id)}
-            />
-          </div>
-        {/each}
+        {#if canDrag}
+          {#each renderList as entry, i (entry.id)}
+            <div role="listitem" animate:flip={{ duration: 180, easing: cubicOut }}>
+              {@render card(entry, i)}
+            </div>
+          {/each}
+        {:else}
+          {#each renderList as entry, i (entry.id)}
+            <div role="listitem">{@render card(entry, i)}</div>
+          {/each}
+        {/if}
       </div>
       {#if appState.showFirstCopyHint}
         <!-- Shown once, right after the list stops being empty: this is the
