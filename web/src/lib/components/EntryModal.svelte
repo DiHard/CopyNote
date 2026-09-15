@@ -5,12 +5,13 @@
   import { closeModal, createEntry, updateEntry } from "../state.svelte";
   import { t } from "../i18n";
 
-  let { entry }: { entry?: Entry } = $props();
+  let { entry, initialLabel = "" }: { entry?: Entry; initialLabel?: string } =
+    $props();
 
   const isEdit = $derived(!!entry);
 
   /* svelte-ignore state_referenced_locally */
-  let label = $state(entry?.label ?? "");
+  let label = $state(entry?.label ?? initialLabel);
   /* svelte-ignore state_referenced_locally */
   let value = $state(entry?.value ?? "");
   let error = $state<string | null>(null);
@@ -51,9 +52,14 @@
 
 <svelte:window onkeydown={onKeydown} />
 
+<!-- The overlay scrolls rather than centring its card: a centred flex item
+     taller than the window overflows above the top, where no scrolling reaches
+     it. m-auto still centres the card while it fits. App grows the window to
+     fit the card (data-modal-card); scrolling is for past the screen's height. -->
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div
-  class="fixed inset-0 z-40 flex items-center justify-center bg-overlay p-4"
+  data-modal
+  class="fixed inset-0 z-40 flex overflow-y-auto bg-overlay p-4 outline-none"
   use:modalFocus
   role="dialog"
   aria-labelledby="modal-title"
@@ -64,7 +70,8 @@
   }}
 >
   <div
-    class="w-full max-w-sm rounded-xl border border-outline bg-surface-alt p-4 shadow-2xl"
+    data-modal-card
+    class="m-auto w-full max-w-sm rounded-xl border border-outline bg-surface-alt p-4 shadow-2xl"
     transition:fade={{ duration: 150 }}
   >
     <h2 id="modal-title" class="mb-3 text-base font-semibold text-on-surface">
@@ -79,7 +86,7 @@
       class="flex flex-col gap-3"
     >
       <label class="flex flex-col gap-1">
-        <span class="text-xs font-medium uppercase tracking-wide text-on-surface-dim"
+        <span class="text-xs font-medium text-on-surface"
           >{t("modal.label")}</span
         >
         <input
@@ -87,12 +94,12 @@
           bind:value={label}
           type="text"
           placeholder={t("modal.label.placeholder")}
-          class="rounded-md border border-input-border bg-input px-3 py-1.5 text-sm text-on-surface placeholder:text-on-surface-faint focus:border-input-focus focus:outline-none"
+          class="rounded-md border border-input-border bg-input px-3 py-1.5 text-sm text-on-surface placeholder:text-on-surface-faint"
         />
       </label>
 
       <label class="flex flex-col gap-1">
-        <span class="text-xs font-medium uppercase tracking-wide text-on-surface-dim"
+        <span class="text-xs font-medium text-on-surface"
           >{t("modal.value")}</span
         >
         <textarea
@@ -100,7 +107,7 @@
           rows="3"
           placeholder={t("modal.value.placeholder")}
           aria-describedby="value-hint"
-          class="resize-y rounded-md border border-input-border bg-input px-3 py-1.5 text-sm text-on-surface placeholder:text-on-surface-faint focus:border-input-focus focus:outline-none"
+          class="resize-y rounded-md border border-input-border bg-input px-3 py-1.5 text-sm text-on-surface placeholder:text-on-surface-faint"
         ></textarea>
         <!-- The empty-value fallback is real behaviour in service.Copy, and
              nothing else in the UI hints at it. -->

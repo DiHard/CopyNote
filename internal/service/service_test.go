@@ -11,6 +11,11 @@ import (
 	"copynote/internal/storage"
 )
 
+// A test build overrides autorunValueName with -X so it never touches the
+// real installation's autorun entry. -X ignores constants silently; taking the
+// address stops this file from compiling if the name ever becomes one.
+var _ = &autorunValueName
+
 // newTestService returns a service backed by a temp file with a
 // deterministic clock and a no-op clipboard. Tests that need to assert
 // on clipboard interaction replace s.writeText with a closure of their own.

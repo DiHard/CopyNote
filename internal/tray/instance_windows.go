@@ -14,7 +14,13 @@ import (
 // Names shared by every CopyNote process: the class of the tray window,
 // which a second launch looks up, and the registered message that asks
 // the running instance to show its main window.
-const (
+//
+// Variables, not constants, so a test build can run beside the real
+// application under names of its own (-X copynote/internal/tray.trayClassName=...
+// and showMessageName). -X skips a constant without any warning, and a test
+// build's second launch or post-update relaunch may then reach the real
+// instance's tray window and bring up the real window instead.
+var (
 	trayClassName   = "CopyNoteTrayWnd"
 	showMessageName = "dev.copynote.app.SHOW"
 )

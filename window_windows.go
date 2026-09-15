@@ -265,6 +265,8 @@ const (
 // edge, then parking it at offScreenX/Y. Unlike SW_HIDE this keeps
 // WS_VISIBLE set so WebView2's renderer is never throttled.
 func moveOffScreen(hwnd uintptr) {
+	// A context menu must not outlive the window it belongs to.
+	entryMenu.Close()
 	if windowHidden.Load() {
 		return // already hidden
 	}

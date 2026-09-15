@@ -10,8 +10,13 @@
     installUpdate,
     isUpdateInstalling,
     canOfferRelocate,
+    applyHotkey,
+    hotkeyLabel,
+    DEFAULT_HOTKEY,
+    HOTKEY_OFF,
     relocateApp,
     relocateAppTo,
+    installFolderName,
   } from "../state.svelte";
   import { t, availableLocales } from "../i18n";
   import type { UserSettings } from "../types";
@@ -28,10 +33,64 @@
     }
   });
 
+  // ── Global hotkey capture ────────────────────────────────────────
+  let capturing = $state(false);
+
+  /**
+   * Built from `event.code`, not `event.key`: under Ctrl+Alt on a Russian
+   * layout `key` is a Cyrillic letter, and the Go parser only knows the
+   * physical keys. The set here mirrors hotkey.virtualKey exactly.
+   */
+  function keyNameFrom(e: KeyboardEvent): string | null {
+    const c = e.code;
+    if (/^Key[A-Z]$/.test(c)) return c.slice(3);
+    if (/^Digit[0-9]$/.test(c)) return c.slice(5);
+    if (/^F([1-9]|1[0-9]|2[0-4])$/.test(c)) return c;
+    const named = ["Space", "Insert", "Delete", "Home", "End", "PageUp", "PageDown", "Backquote"];
+    return named.includes(c) ? c : null;
+  }
+
+  function onCaptureKeydown(e: KeyboardEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.key === "Escape") {
+      capturing = false;
+      return;
+    }
+    const key = keyNameFrom(e);
+    // Modifiers alone, or a key the app cannot register: keep waiting rather
+    // than storing something that would fail.
+    if (!key) return;
+    const mods: string[] = [];
+    if (e.ctrlKey) mods.push("Ctrl");
+    if (e.altKey) mods.push("Alt");
+    if (e.shiftKey) mods.push("Shift");
+    if (e.metaKey) mods.push("Win");
+    if (mods.length === 0) return;
+    capturing = false;
+    void applyHotkey([...mods, key].join("+"));
+  }
+
+  // Key names are the same in every locale; only what they do is translated.
+  const shortcuts = () => [
+    { keys: "Enter", what: t("settings.keys.enter") },
+    { keys: "↑ ↓", what: t("settings.keys.arrows") },
+    { keys: "Ctrl + ↑ ↓", what: t("settings.keys.move") },
+    { keys: "F2", what: t("settings.keys.edit") },
+    { keys: "Delete", what: t("settings.keys.delete") },
+    { keys: "Esc", what: t("settings.keys.escape") },
+  ];
+
   const themeOptions = () => [
     { value: "system", label: t("settings.theme.system") },
     { value: "light", label: t("settings.theme.light") },
     { value: "dark", label: t("settings.theme.dark") },
+  ];
+
+  // Languages keep their own names; the system choice is the one to translate.
+  const localeOptions = () => [
+    { value: "system", label: t("settings.language.system") },
+    ...availableLocales.map((l) => ({ value: l.code, label: l.label })),
   ];
 
   let dataStatus = $state<string | null>(null);
@@ -141,7 +200,14 @@
 	dataBusy = true;
     dataStatus = null;
     try {
-      if (await importData()) dataStatus = t("settings.importOk");
+      const result = await importData();
+      if (result) {
+        const added = String(result.added);
+        dataStatus =
+          result.skipped > 0
+            ? t("settings.importResult.skipped", { added, skipped: String(result.skipped) })
+            : t("settings.importResult", { added });
+      }
     } catch (e) {
       dataStatus = t("settings.importError", { error: String(e).replace(/^Error:\s*/, "") });
     } finally { dataBusy = false; }
@@ -203,21 +269,70 @@
     {/if}
     <!-- General -->
     <section>
-      <h2 class="mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-on-surface-faint">
+      <h2 class="mb-1.5 text-sm font-semibold text-on-surface">
         {t("settings.general")}
       </h2>
       <label
-        class="flex cursor-pointer items-center justify-between rounded-lg border border-outline bg-card px-2.5 py-2"
+        class="flex cursor-pointer items-start justify-between gap-3 rounded-lg border border-outline bg-card px-2.5 py-2"
       >
-        <span class="text-sm">{t("settings.autorun")}</span>
+        <span class="min-w-0">
+          <span class="block text-sm">{t("settings.autorun")}</span>
+          <span class="mt-0.5 block text-[11px] leading-snug text-on-surface-dim"
+            >{t("settings.autorun.hint")}</span
+          >
+        </span>
         <input
           type="checkbox"
           disabled={appState.settingsPending > 0 || dataBusy}
           checked={appState.settings.autorun}
           onchange={onAutorunChange}
-          class="h-4 w-4 cursor-pointer rounded border-input-border bg-input text-accent focus:ring-accent focus:ring-offset-0"
+          class="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-input-border bg-input text-accent"
         />
       </label>
+      {#if canOfferRelocate()}
+        <!-- Running from a download folder: offer to put it somewhere that
+             survives a disk cleanup. Unlike the banner this ignores the
+             dismissal, so dismissing never hides the action for good. It sits
+             under autorun because autorun is what a cleanup would break. -->
+        <div class="mt-1.5 rounded-lg border border-outline bg-card px-2.5 py-2">
+          <div class="flex items-start justify-between gap-3">
+            <span class="min-w-0">
+              <span class="block text-sm" title={appState.installLocation?.dir ?? ""}
+                >{t("relocate.title", { folder: installFolderName() })}</span
+              >
+              <!-- Once the move runs, why to move is moot; what matters is that
+                   the window is about to close itself. -->
+              <span class="mt-0.5 block text-[11px] leading-snug text-on-surface-dim"
+                >{relocating ? t("relocate.willRestart") : t("relocate.body")}</span
+              >
+            </span>
+            <button
+              type="button"
+              onclick={() => void relocateApp()}
+              disabled={relocating || dataBusy || isUpdateInstalling()}
+              class="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-accent-text transition hover:bg-accent-hover disabled:opacity-60"
+            >
+              {#if relocating}<Spinner />{/if}
+              {relocating ? t("relocate.moving") : t("relocate.move")}
+            </button>
+          </div>
+          <div class="mt-1 flex items-baseline gap-3">
+            <button
+              type="button"
+              onclick={() => void relocateAppTo(t("relocate.pickTitle"))}
+              disabled={relocating}
+              class="text-[11px] text-accent transition hover:underline disabled:opacity-60"
+            >
+              {t("relocate.choose")}
+            </button>
+          </div>
+          {#if relocateError}
+            <p role="alert" class="mt-1 text-[11px] leading-snug text-danger">
+              {t("relocate.failed", { error: relocateError })}
+            </p>
+          {/if}
+        </div>
+      {/if}
       <label
         class="mt-1.5 flex cursor-pointer items-start justify-between gap-3 rounded-lg border border-outline bg-card px-2.5 py-2"
       >
@@ -232,9 +347,67 @@
           disabled={appState.settingsPending > 0 || dataBusy}
           checked={!appState.settings.disableAutoHide}
           onchange={onAutoHideChange}
-          class="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-input-border bg-input text-accent focus:ring-accent focus:ring-offset-0"
+          class="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-input-border bg-input text-accent"
         />
       </label>
+      <!-- The one control here that Windows can refuse, so it reports back. -->
+      <div class="mt-1.5 rounded-lg border border-outline bg-card px-2.5 py-2">
+        <div class="flex items-start justify-between gap-3">
+          <span class="min-w-0">
+            <span class="block text-sm">{t("settings.hotkey")}</span>
+            <span class="mt-0.5 block text-[11px] leading-snug text-on-surface-dim"
+              >{t("settings.hotkey.hint")}</span
+            >
+          </span>
+          <button
+            type="button"
+            onclick={() => (capturing = !capturing)}
+            onkeydown={capturing ? onCaptureKeydown : undefined}
+            disabled={appState.settingsPending > 0 || dataBusy}
+            class="shrink-0 rounded-md border px-2 py-1 text-[11px] transition disabled:opacity-60 {capturing
+              ? 'border-accent bg-accent-soft text-accent'
+              : 'border-outline bg-surface text-on-surface hover:bg-surface-hover'}"
+          >
+            {capturing
+              ? t("settings.hotkey.press")
+              : appState.settings.hotkey === HOTKEY_OFF
+                ? t("settings.hotkey.off")
+                : hotkeyLabel()}
+          </button>
+        </div>
+        <div class="mt-1 flex items-baseline gap-3">
+          {#if appState.settings.hotkey !== HOTKEY_OFF}
+            <button
+              type="button"
+              onclick={() => void applyHotkey(HOTKEY_OFF)}
+              class="text-[11px] text-on-surface-dim transition hover:text-on-surface"
+            >
+              {t("settings.hotkey.disable")}
+            </button>
+          {:else}
+            <button
+              type="button"
+              onclick={() => void applyHotkey(DEFAULT_HOTKEY)}
+              class="text-[11px] text-accent transition hover:underline"
+            >
+              {t("settings.hotkey.enable", { keys: DEFAULT_HOTKEY })}
+            </button>
+          {/if}
+        </div>
+        {#if appState.hotkeyError}
+          <!-- The ordinary refusal gets a plain sentence; Windows' own wording
+               only surfaces for the rare failure that is something else. -->
+          <p role="alert" class="mt-1 text-[11px] leading-snug text-danger">
+            {appState.hotkeyError.taken
+              ? t("settings.hotkey.taken", { combo: appState.hotkeyError.combo })
+              : t("settings.hotkey.failed", {
+                  combo: appState.hotkeyError.combo,
+                  error: appState.hotkeyError.detail,
+                })}
+          </p>
+        {/if}
+      </div>
+
       <!-- Reads as a pair with the toggle above: turn hiding off and this is
            what keeps the window in front of the app being filled in. Both
            carry a real trade-off, so both name it — here a heavier shadow. -->
@@ -252,27 +425,32 @@
           disabled={appState.settingsPending > 0 || dataBusy}
           checked={appState.settings.topmost}
           onchange={onTopmostChange}
-          class="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-input-border bg-input text-accent focus:ring-accent focus:ring-offset-0"
+          class="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-input-border bg-input text-accent"
         />
       </label>
     </section>
 
     <!-- Appearance -->
     <section>
-      <h2 class="mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-on-surface-faint">
+      <h2 class="mb-1.5 text-sm font-semibold text-on-surface">
         {t("settings.appearance")}
       </h2>
       <div class="space-y-1.5">
         <div
-          class="flex items-center justify-between rounded-lg border border-outline bg-card px-2.5 py-2"
+          class="flex items-start justify-between gap-3 rounded-lg border border-outline bg-card px-2.5 py-2"
         >
-          <span class="text-sm">{t("settings.theme")}</span>
+          <span class="min-w-0">
+            <span class="block text-sm">{t("settings.theme")}</span>
+            <span class="mt-0.5 block text-[11px] leading-snug text-on-surface-dim"
+              >{t("settings.theme.hint")}</span
+            >
+          </span>
           <select
             aria-label={t("settings.theme")}
             disabled={appState.settingsPending > 0 || dataBusy}
             value={appState.settings.theme}
             onchange={onThemeChange}
-            class="cursor-pointer rounded-md border border-input-border bg-input px-2 py-1 text-sm text-on-surface focus:border-input-focus focus:outline-none"
+            class="shrink-0 cursor-pointer rounded-md border border-input-border bg-input px-2 py-1 text-sm text-on-surface"
           >
             {#each themeOptions() as opt}
               <option value={opt.value}>{opt.label}</option>
@@ -281,18 +459,23 @@
         </div>
 
         <div
-          class="flex items-center justify-between rounded-lg border border-outline bg-card px-2.5 py-2"
+          class="flex items-start justify-between gap-3 rounded-lg border border-outline bg-card px-2.5 py-2"
         >
-          <span class="text-sm">{t("settings.language")}</span>
+          <span class="min-w-0">
+            <span class="block text-sm">{t("settings.language")}</span>
+            <span class="mt-0.5 block text-[11px] leading-snug text-on-surface-dim"
+              >{t("settings.language.hint")}</span
+            >
+          </span>
           <select
             aria-label={t("settings.language")}
             disabled={appState.settingsPending > 0 || dataBusy}
             value={appState.settings.locale}
             onchange={onLocaleChange}
-            class="cursor-pointer rounded-md border border-input-border bg-input px-2 py-1 text-sm text-on-surface focus:border-input-focus focus:outline-none"
+            class="shrink-0 cursor-pointer rounded-md border border-input-border bg-input px-2 py-1 text-sm text-on-surface"
           >
-            {#each availableLocales as loc}
-              <option value={loc.code}>{loc.label}</option>
+            {#each localeOptions() as opt}
+              <option value={opt.value}>{opt.label}</option>
             {/each}
           </select>
         </div>
@@ -301,7 +484,7 @@
 
     <!-- Data -->
     <section>
-      <h2 class="mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-on-surface-faint">
+      <h2 class="mb-1.5 text-sm font-semibold text-on-surface">
         {t("settings.data")}
       </h2>
       <div class="flex gap-1.5">
@@ -322,14 +505,17 @@
           {t("settings.export")}
         </button>
       </div>
+      <!-- Import merges rather than replaces, which nobody could tell from a
+           button, and a backup is where a wrong guess costs data. -->
+      <p class="mt-1 text-[11px] leading-snug text-on-surface-dim">{t("settings.data.hint")}</p>
       {#if dataStatus}
-        <p class="mt-1 text-[11px] text-on-surface-dim">{dataStatus}</p>
+        <p role="status" class="mt-1 text-[11px] text-on-surface">{dataStatus}</p>
       {/if}
     </section>
 
     <!-- Updates -->
     <section>
-      <h2 class="mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-on-surface-faint">
+      <h2 class="mb-1.5 text-sm font-semibold text-on-surface">
         {t("settings.updates.title")}
       </h2>
       <div class="space-y-1.5">
@@ -405,23 +591,51 @@
         </button>
 
         <label
-          class="flex cursor-pointer items-center justify-between rounded-lg border border-outline bg-card px-2.5 py-2"
+          class="flex cursor-pointer items-start justify-between gap-3 rounded-lg border border-outline bg-card px-2.5 py-2"
         >
-          <span class="text-sm">{t("settings.updates.autoCheck")}</span>
+          <span class="min-w-0">
+            <span class="block text-sm">{t("settings.updates.autoCheck")}</span>
+            <span class="mt-0.5 block text-[11px] leading-snug text-on-surface-dim"
+              >{t("settings.updates.autoCheck.hint")}</span
+            >
+          </span>
           <input
             type="checkbox"
-          disabled={appState.settingsPending > 0 || dataBusy}
+            disabled={appState.settingsPending > 0 || dataBusy}
             checked={!appState.settings.disableUpdateCheck}
             onchange={onAutoCheckChange}
-            class="h-4 w-4 cursor-pointer rounded border-input-border bg-input text-accent focus:ring-accent focus:ring-offset-0"
+            class="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-input-border bg-input text-accent"
           />
         </label>
       </div>
     </section>
 
+    <!-- Keyboard. The row actions left the Tab order, so their keys have to
+         be written down somewhere the user can find them. -->
+    <section>
+      <h2 class="mb-1.5 text-sm font-semibold text-on-surface">
+        {t("settings.keys")}
+      </h2>
+      <div class="overflow-hidden rounded-lg border border-outline bg-card">
+        {#each shortcuts() as s, i}
+          <div
+            class="flex items-baseline justify-between gap-3 px-2.5 py-1.5 {i > 0
+              ? 'border-t border-outline'
+              : ''}"
+          >
+            <span class="min-w-0 text-[13px] text-on-surface-dim">{s.what}</span>
+            <kbd
+              class="shrink-0 rounded border border-outline bg-surface px-1.5 py-0.5 text-[11px] text-on-surface"
+              >{s.keys}</kbd
+            >
+          </div>
+        {/each}
+      </div>
+    </section>
+
     <!-- About -->
     <section>
-      <h2 class="mb-1.5 text-[11px] font-semibold uppercase tracking-widest text-on-surface-faint">
+      <h2 class="mb-1.5 text-sm font-semibold text-on-surface">
         {t("settings.about")}
       </h2>
       <div class="rounded-lg border border-outline bg-card px-2.5 py-1.5">
@@ -437,42 +651,6 @@
           >github.com/DiHard/CopyNote</button>
         </div>
       </div>
-      {#if canOfferRelocate()}
-        <!-- Running from a download folder: offer to put it somewhere that
-             survives a disk cleanup. Unlike the banner this ignores the
-             dismissal, so dismissing never hides the action for good. -->
-        <button
-          type="button"
-          onclick={() => void relocateApp()}
-          disabled={relocating || dataBusy || isUpdateInstalling()}
-          class="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-lg border border-outline bg-card px-2.5 py-1.5 text-sm text-on-surface-dim transition hover:bg-card-hover hover:text-on-surface disabled:opacity-60"
-        >
-          {#if relocating}<Spinner class="h-3.5 w-3.5" />{/if}
-          {relocating ? t("relocate.moving") : t("relocate.settings")}
-        </button>
-        <div class="mt-1 flex items-baseline justify-between gap-2">
-          <!-- While the move runs, where it is now matters less than the fact
-               that the window is about to close itself. -->
-          <p class="min-w-0 truncate text-[11px] text-on-surface-faint" title={appState.installLocation?.dir ?? ""}>
-            {relocating
-              ? t("relocate.willRestart")
-              : t("relocate.currently", { dir: appState.installLocation?.dir ?? "" })}
-          </p>
-          <button
-            type="button"
-            onclick={() => void relocateAppTo(t("relocate.pickTitle"))}
-            disabled={relocating}
-            class="shrink-0 text-[11px] text-accent transition hover:underline disabled:opacity-60"
-          >
-            {t("relocate.choose")}
-          </button>
-        </div>
-        {#if relocateError}
-          <p role="alert" class="mt-1 text-[11px] text-danger">
-            {t("relocate.failed", { error: relocateError })}
-          </p>
-        {/if}
-      {/if}
       <!-- The app is portable: this folder holds the exe, and a self-update
            leaves its .old fallback here too. -->
       <button

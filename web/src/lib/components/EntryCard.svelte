@@ -1,7 +1,8 @@
 <script lang="ts">
-  import type { Entry } from "../types";
+  import type { Entry, MenuItem } from "../types";
   import { openEdit, openDelete, copyEntry } from "../state.svelte";
-  import { moveCardFocus } from "../focus";
+  import { moveCardFocus, focusCardAt, focusLastCard } from "../focus";
+  import { showEntryMenu } from "../entryMenu";
   import { t } from "../i18n";
   import { onDestroy } from "svelte";
 
@@ -10,15 +11,25 @@
     isDragging = false,
     dragInProgress = false,
     dragDisabled = false,
+    tabbable = false,
+    canMoveUp = false,
+    canMoveDown = false,
     onDragPointerDown,
     onMoveByKey,
+    onFocused,
   }: {
     entry: Entry;
     isDragging?: boolean;
     dragInProgress?: boolean;
     dragDisabled?: boolean;
+    /** Roving tabindex: the whole list is one Tab stop, and this is it. */
+    tabbable?: boolean;
+    /** Whether the context menu can move this entry up or down. */
+    canMoveUp?: boolean;
+    canMoveDown?: boolean;
     onDragPointerDown?: (e: PointerEvent) => void;
     onMoveByKey?: (dir: -1 | 1) => void;
+    onFocused?: () => void;
   } = $props();
 
   type CopyState = "idle" | "copied" | "failed";
@@ -44,10 +55,31 @@
   }
 
   function onKeyDown(e: KeyboardEvent) {
+    // The row's own actions are out of the Tab order, so they get the keys a
+    // Windows user already expects. Announced via aria-keyshortcuts below.
+    if (e.key === "F2") {
+      e.preventDefault();
+      openEdit(entry);
+      return;
+    }
+    if (e.key === "Delete") {
+      e.preventDefault();
+      openDelete(entry);
+      return;
+    }
+    if (e.key === "Home") {
+      e.preventDefault();
+      focusCardAt(0);
+      return;
+    }
+    if (e.key === "End") {
+      e.preventDefault();
+      focusLastCard();
+      return;
+    }
     if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
     const dir = e.key === "ArrowDown" ? 1 : -1;
-    // Ctrl moves the entry, a plain arrow moves the focus. Tab still walks
-    // every control in the row; the arrows are the fast path past them.
+    // Ctrl moves the entry, a plain arrow moves the focus.
     if (e.ctrlKey) {
       if (dragDisabled) return;
       e.preventDefault();
@@ -58,6 +90,46 @@
     moveCardFocus(dir);
   }
 
+  // A right click and a long press put a pointer down first; the menu key and
+  // Shift+F10 do not.
+  let lastPointerDown = -Infinity;
+
+  function onPointerDown(e: PointerEvent) {
+    lastPointerDown = e.timeStamp;
+    onDragPointerDown?.(e);
+  }
+
+  /**
+   * The row's actions without hovering for them, plus moving the entry
+   * without a drag. Opened from the keyboard, the menu appears under the card
+   * with its first item highlighted, like a keyboard-opened Windows menu.
+   */
+  async function onContextMenu(e: MouseEvent) {
+    e.preventDefault();
+    const keyboard = e.timeStamp - lastPointerDown > 1500;
+    const card = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const items: MenuItem[] = [
+      { id: "copy", label: t("card.menu.copy"), shortcut: "Enter" },
+      { id: "edit", label: t("card.menu.edit"), shortcut: "F2" },
+      { id: "delete", label: t("card.menu.delete"), shortcut: "Delete" },
+      { id: "", label: "", separator: true },
+      { id: "up", label: t("card.menu.up"), shortcut: "Ctrl+↑", disabled: !canMoveUp },
+      { id: "down", label: t("card.menu.down"), shortcut: "Ctrl+↓", disabled: !canMoveDown },
+    ];
+    const choice = await showEntryMenu({
+      x: keyboard ? card.left + 12 : e.clientX,
+      y: keyboard ? card.bottom : e.clientY,
+      keyboard,
+      dark: document.documentElement.classList.contains("dark"),
+      items,
+    });
+    if (choice === "copy") void onCopy();
+    else if (choice === "edit") openEdit(entry);
+    else if (choice === "delete") openDelete(entry);
+    else if (choice === "up") onMoveByKey?.(-1);
+    else if (choice === "down") onMoveByKey?.(1);
+  }
+
   onDestroy(() => {
     if (timer !== null) clearTimeout(timer);
   });
@@ -65,21 +137,24 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-  role="listitem"
   data-entry-id={entry.id}
-  onpointerdown={(e) => onDragPointerDown?.(e)}
+  onpointerdown={onPointerDown}
+  oncontextmenu={onContextMenu}
   class="group relative flex items-stretch gap-1 rounded-lg border border-outline bg-surface-alt transition hover:border-outline-strong hover:bg-card-hover {isDragging
     ? 'opacity-60 shadow-lg ring-2 ring-accent/40'
     : ''}"
 >
-  <!-- data-card-focus: the element arrow keys walk between; see lib/focus.ts -->
+  <!-- data-card-focus: the element arrow keys walk between; see lib/focus.ts.
+       Its focus ring goes around the whole card (app.css). -->
   <button
     type="button"
     data-card-focus
+    tabindex={tabbable ? 0 : -1}
+    onfocus={() => onFocused?.()}
     onclick={onCopy}
     onkeydown={onKeyDown}
-    title={t("card.copy")}
-    class="flex min-w-0 flex-1 items-start px-3 py-2.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-l-lg {dragInProgress
+    title={dragDisabled ? t("card.copy") : t("card.copyOrDrag")}
+    class="flex min-w-0 flex-1 items-start px-3 py-2.5 text-left {dragInProgress
       ? 'cursor-grabbing'
       : 'cursor-pointer'}"
   >
@@ -95,22 +170,23 @@
 
   <div
     data-no-drag
-    class="flex shrink-0 items-center gap-1 px-2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 {copyState !==
-    'idle'
-      ? 'pointer-events-none opacity-0'
-      : ''}"
+    class="flex shrink-0 items-center gap-1 px-1.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
   >
+    <!-- Out of the Tab order so the list costs one stop, not three; the key
+         is announced instead. -->
     <button
       type="button"
+      tabindex="-1"
+      aria-keyshortcuts="F2"
       title={t("card.edit")}
       aria-label={t("card.edit")}
       onclick={() => openEdit(entry)}
-      class="rounded p-1 text-on-surface-dim hover:bg-surface-hover hover:text-on-surface"
+      class="rounded p-1.5 text-on-surface-dim hover:bg-surface-hover hover:text-on-surface"
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
-        width="14"
-        height="14"
+        width="16"
+        height="16"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
@@ -127,15 +203,17 @@
     </button>
     <button
       type="button"
+      tabindex="-1"
+      aria-keyshortcuts="Delete"
       title={t("card.delete")}
       aria-label={t("card.delete")}
       onclick={() => openDelete(entry)}
-      class="rounded p-1 text-on-surface-dim hover:bg-danger-dim hover:text-danger"
+      class="rounded p-1.5 text-on-surface-dim hover:bg-danger-dim hover:text-danger"
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
-        width="14"
-        height="14"
+        width="16"
+        height="16"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
@@ -151,8 +229,11 @@
     </button>
   </div>
 
+  <!-- Left of the row's buttons while they show (right-18 is their 72 px), so
+       they stay clickable during the badge. `right` is not transitioned: the
+       badge should not slide away when the pointer leaves the card. -->
   <div
-    class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 transition-all duration-200 {copyState ===
+    class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 transition-[opacity,translate] duration-200 group-focus-within:right-18 group-hover:right-18 {copyState ===
     'idle'
       ? 'translate-x-1 opacity-0'
       : 'opacity-100'}"
@@ -160,13 +241,13 @@
   >
     {#if copyState === "copied"}
       <span
-        class="rounded-md bg-success px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white shadow-sm"
+        class="rounded-md bg-success px-2 py-0.5 text-[11px] font-semibold text-on-success shadow-sm"
       >
         {t("card.copied")}
       </span>
     {:else if copyState === "failed"}
       <span
-        class="rounded-md bg-danger px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white shadow-sm"
+        class="rounded-md bg-danger px-2 py-0.5 text-[11px] font-semibold text-on-danger shadow-sm"
       >
         {t("card.failed")}
       </span>

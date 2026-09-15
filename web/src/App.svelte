@@ -10,7 +10,7 @@
     loadInstallLocation,
     resetForShow,
   } from "./lib/state.svelte";
-  import { focusSearch } from "./lib/focus";
+  import { focusSearch, nextTabStop } from "./lib/focus";
   import { t } from "./lib/i18n";
   import Header from "./lib/components/Header.svelte";
   import EntryList from "./lib/components/EntryList.svelte";
@@ -60,8 +60,8 @@
   // window would need to show everything. Go clamps that to the work area;
   // past the clamp the list simply scrolls inside a full-height window.
   //
-  // Fixed/absolute elements (modals) are outside the shell, so a minimum is
-  // enforced for them separately.
+  // Fixed/absolute elements (modals) are outside the shell and are measured
+  // separately; see modalHeight().
 
   const MIN_H = 80;
   const MODAL_MIN_H = 420;
@@ -133,6 +133,28 @@
     return h;
   }
 
+  /**
+   * A modal is position: fixed, so desiredHeight() never sees it. MODAL_MIN_H
+   * keeps room for the usual form until it renders; after that the card is
+   * measured, because the value field can be dragged taller than that room
+   * and the buttons would end up below the window.
+   */
+  function modalHeight(): number {
+    const overlay = document.querySelector<HTMLElement>("[data-modal]");
+    const card = overlay?.querySelector<HTMLElement>("[data-modal-card]");
+    if (!overlay || !card) return 0;
+    const cs = getComputedStyle(overlay);
+    return card.offsetHeight + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+  }
+
+  /** Asks Go for the height the current view and modal need. */
+  function fitWindow(): void {
+    let h = Math.max(MIN_H, desiredHeight());
+    if (appState.modal) h = Math.max(h, MODAL_MIN_H, modalHeight());
+    if (appState.view === "settings") h = Math.max(h, SETTINGS_MIN_H);
+    smoothResize(h);
+  }
+
   $effect(() => {
     // Touch reactive deps so the effect re-runs when they change.
     void appState.view;
@@ -143,23 +165,15 @@
     void appState.settings.relocatePromptDismissed;
     void appState.relocateSnoozeClicked;
     void appState.relocate;
-    const modal = appState.modal;
+    void appState.operationError;
+    void appState.copyError;
+    void appState.modal;
 
-    const view = appState.view;
     void tick().then(() => {
       // Wait one extra frame so the browser finishes layout after
       // Svelte's DOM update — prevents measuring stale scrollHeight
       // when switching views (e.g., opening settings from tray menu).
-      requestAnimationFrame(() => {
-        let h = Math.max(MIN_H, desiredHeight());
-        if (modal) {
-          h = Math.max(h, MODAL_MIN_H);
-        }
-        if (view === "settings") {
-          h = Math.max(h, SETTINGS_MIN_H);
-        }
-        smoothResize(h);
-      });
+      requestAnimationFrame(fitWindow);
     });
   });
 
@@ -181,9 +195,33 @@
     return () => { if (modalTimer) clearTimeout(modalTimer); };
   });
 
+  // Once the modal is on screen the window follows its card: a dragged value
+  // field or a new error line changes the height without touching any state
+  // the resize effect above tracks.
+  $effect(() => {
+    if (!showModal) return;
+    void appState.modal;
+    const card = document.querySelector<HTMLElement>("[data-modal-card]");
+    if (!card) return;
+    const observer = new ResizeObserver(() => fitWindow());
+    observer.observe(card);
+    return () => observer.disconnect();
+  });
+
   /** Global keyboard shortcuts. */
   function onGlobalKeydown(e: KeyboardEvent) {
 	if (e.defaultPrevented) return;
+    // Tab from the search box reaches the list before the header buttons; see
+    // nextTabStop. Modals trap Tab themselves, and Settings keeps the default.
+    if (e.key === "Tab" && !e.altKey && !e.ctrlKey && !e.metaKey && !appState.modal && appState.view === "main") {
+      const shell = document.querySelector<HTMLElement>("main[data-shell]");
+      const next = shell ? nextTabStop(shell, document.activeElement, e.shiftKey) : null;
+      if (next) {
+        e.preventDefault();
+        next.focus();
+      }
+      return;
+    }
     if (e.key === "Escape" && !appState.modal) {
       e.preventDefault();
       if (appState.view === "settings") {
@@ -209,6 +247,14 @@
          it — see desiredHeight() for how the window size is derived now. -->
     <main data-shell class="flex h-screen flex-col bg-surface text-on-surface">
       <Header />
+      {#if appState.copyError}
+        <!-- The badge on the card says that a copy failed; this says why. -->
+        <p role="alert" class="shrink-0 px-3 text-xs text-danger">
+          {appState.copyError.busy
+            ? t("copyError.busy")
+            : t("copyError.failed", { error: appState.copyError.detail })}
+        </p>
+      {/if}
       {#if appState.operationError}
         <p role="alert" class="shrink-0 px-3 text-xs text-danger">{t("operation.error", {error: appState.operationError})}</p>
       {/if}
@@ -216,7 +262,7 @@
     </main>
 
     {#if showModal && appState.modal?.kind === "create"}
-      <EntryModal />
+      <EntryModal initialLabel={appState.modal.label} />
     {:else if showModal && appState.modal?.kind === "edit"}
       <EntryModal entry={appState.modal.entry} />
     {:else if showModal && appState.modal?.kind === "delete"}

@@ -9,7 +9,9 @@ export interface Entry {
 
 export type ModalState =
   | null
-  | { kind: "create" }
+  /** `label` prefills the form — the empty-search action offers to save
+   *  whatever was typed. Empty for a plain "new entry" click. */
+  | { kind: "create"; label: string }
   | { kind: "edit"; entry: Entry }
   | { kind: "delete"; entry: Entry };
 
@@ -30,6 +32,9 @@ export interface UserSettings {
   /** RFC3339 instant before which that banner stays hidden; "" when no
    *  snooze is running. Unlike the flag above, this one expires. */
   relocateRemindAfter: string;
+  /** Global shortcut as the user sees it ("Ctrl+Alt+N"). "" means the
+   *  built-in default, "off" disables it. */
+  hotkey: string;
   /** Last release version acknowledged by the user. */
   lastSeenUpdateVersion: string;
 }
@@ -58,6 +63,13 @@ export interface InstallLocation {
   canRelocate: boolean;
 }
 
+/** What an import did with the file's entries; matches Go service.ImportResult. */
+export interface ImportResult {
+  added: number;
+  /** Same label and value as an entry already in the list, or earlier in the file. */
+  skipped: number;
+}
+
 /** Matches the Go updateProgress JSON shape polled during installUpdate. */
 export interface UpdateProgress {
   stage: "" | "download" | "verify" | "apply";
@@ -67,3 +79,24 @@ export interface UpdateProgress {
 
 /** Which top-level view is active. */
 export type ViewMode = "main" | "settings";
+
+/** One row of the entry context menu Go draws; matches Go entryMenuItem. */
+export interface MenuItem {
+  id: string;
+  label: string;
+  shortcut?: string;
+  disabled?: boolean;
+  separator?: boolean;
+}
+
+/** Matches Go entryMenuRequest. x and y are CSS pixels in the window. */
+export interface EntryMenuRequest {
+  /** Echoed back with the answer; see lib/entryMenu.ts. */
+  token: number;
+  x: number;
+  y: number;
+  dark: boolean;
+  /** Opened from the keyboard: highlight the first item. */
+  keyboard: boolean;
+  items: MenuItem[];
+}

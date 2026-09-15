@@ -7,7 +7,7 @@
 //   - a message-only HWND that receives tray callbacks and the show
 //     request posted by a second exe launch (see ShowRunningInstance),
 //   - the tray icon registered via Shell_NotifyIcon,
-//   - a popup HMENU shown on right-click.
+//   - a right-click menu, drawn by internal/popupmenu.
 //
 // All cleanup happens when Run() returns (loop exited via PostQuitMessage).
 package tray
@@ -15,6 +15,7 @@ package tray
 import (
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -22,6 +23,8 @@ import (
 
 	"golang.org/x/sys/windows"
 
+	"copynote/internal/hotkey"
+	"copynote/internal/popupmenu"
 	"copynote/internal/winutil"
 )
 
@@ -87,6 +90,14 @@ type Tray struct {
 	// Called each time the popup menu is shown so labels are up to date.
 	GetLocale func() string
 
+	// OnHotkey is invoked from the tray thread when the global hotkey fires.
+	// Same intent as a left click on the icon, so it should toggle.
+	OnHotkey func()
+
+	// Hotkey is the stored preference ("" = the built-in default, "off" =
+	// disabled) registered during setup. Later changes go through SetHotkey.
+	Hotkey string
+
 	// ShowOnStart surfaces the window as soon as the UI is ready, without
 	// waiting for a click. Set it for a launch the user performed
 	// themselves — a Windows sign-in must not pop the window up. Read once
@@ -102,6 +113,15 @@ type Tray struct {
 	// pending is a request that arrived before WebView2 finished loading;
 	// it is honoured on msgSetReady. Tray thread only.
 	pending pendingRequest
+
+	// menu is the right-click menu. Tray thread only.
+	menu popupmenu.Menu
+
+	// hotkeyMu guards the combination SetHotkey hands to the tray thread.
+	hotkeyMu      sync.Mutex
+	hotkeyWanted  hotkey.Spec
+	hotkeyEnabled bool
+	hotkeyOn      bool // a registration is currently live; tray thread only
 
 	startOnce sync.Once
 	startErr  error
@@ -238,6 +258,7 @@ var (
 	moduser32   = windows.NewLazySystemDLL("user32.dll")
 	modshell32  = windows.NewLazySystemDLL("shell32.dll")
 	modkernel32 = windows.NewLazySystemDLL("kernel32.dll")
+	modgdi32    = windows.NewLazySystemDLL("gdi32.dll")
 
 	procRegisterClassExW   = moduser32.NewProc("RegisterClassExW")
 	procCreateWindowExW    = moduser32.NewProc("CreateWindowExW")
@@ -253,12 +274,18 @@ var (
 	procGetCursorPos       = moduser32.NewProc("GetCursorPos")
 	procSetTimer           = moduser32.NewProc("SetTimer")
 	procKillTimer          = moduser32.NewProc("KillTimer")
+	procRegisterHotKey     = moduser32.NewProc("RegisterHotKey")
+	procUnregisterHotKey   = moduser32.NewProc("UnregisterHotKey")
 	procGetIconInfo        = moduser32.NewProc("GetIconInfo")
 	procCreateIconIndirect = moduser32.NewProc("CreateIconIndirect")
 	procDestroyIcon        = moduser32.NewProc("DestroyIcon")
 
-	// GDI procs shared with popup_windows.go are declared there.
-	// Additional GDI procs needed only for pulse animation:
+	procGetSystemMetrics = moduser32.NewProc("GetSystemMetrics")
+	procGetDC            = moduser32.NewProc("GetDC")
+	procReleaseDC        = moduser32.NewProc("ReleaseDC")
+
+	// GDI procs for the pulse animation.
+	procDeleteObject     = modgdi32.NewProc("DeleteObject")
 	procGetObjectW       = modgdi32.NewProc("GetObjectW")
 	procGetDIBits        = modgdi32.NewProc("GetDIBits")
 	procCreateDIBSection = modgdi32.NewProc("CreateDIBSection")
@@ -395,6 +422,20 @@ func (t *Tray) setup() error {
 		t.pending = pendingShow
 	}
 
+	// A combination another program already owns is a normal outcome, not a
+	// startup failure: the app still works from the icon, and Settings shows
+	// the problem once the UI asks again through SetHotkey.
+	if spec, enabled, err := hotkey.Resolve(t.Hotkey); err != nil {
+		log.Printf("hotkey %q: %v", t.Hotkey, err)
+	} else {
+		t.hotkeyMu.Lock()
+		t.hotkeyWanted, t.hotkeyEnabled = spec, enabled
+		t.hotkeyMu.Unlock()
+		if code := applyHotkey(t); code != 0 {
+			log.Printf("register hotkey %q: %v", t.Hotkey, windows.Errno(code))
+		}
+	}
+
 	// Build pulse animation frames from the current icon and start timer.
 	buildPulseIcons(hIcon)
 	procSetTimer.Call(hwnd, pulseTimerID, pulseIntervalMs, 0)
@@ -403,6 +444,10 @@ func (t *Tray) setup() error {
 }
 
 func (t *Tray) teardown() {
+	if t.hotkeyOn {
+		_, _, _ = procUnregisterHotKey.Call(t.hwnd, hotkeyID)
+		t.hotkeyOn = false
+	}
 	if t.added {
 		nid := notifyIconDataW{
 			cbSize: uint32(unsafe.Sizeof(notifyIconDataW{})),
@@ -416,7 +461,7 @@ func (t *Tray) teardown() {
 		_, _, _ = procDestroyWindow.Call(t.hwnd)
 		t.hwnd = 0
 	}
-	releasePopupResources()
+	t.menu.Release()
 	instance = nil
 }
 
@@ -516,6 +561,27 @@ func trayWndProc(hwnd, msgID, wParam, lParam uintptr) uintptr {
 	case msgRefreshTip:
 		if t != nil {
 			applyTip(t, t.tip())
+		}
+		return 0
+
+	case msgApplyHotkey:
+		if t == nil {
+			return 0
+		}
+		return applyHotkey(t)
+
+	case wmHotkey:
+		// Same intent as a left click on the icon, including during the cold
+		// start — the request waits rather than opening a blank window.
+		if t == nil {
+			return 0
+		}
+		if !t.ready.Load() {
+			t.pending = pendingShow
+			return 0
+		}
+		if t.OnHotkey != nil {
+			t.OnHotkey()
 		}
 		return 0
 
@@ -766,6 +832,95 @@ func (t *Tray) SetReady() {
 
 const msgSetReady = winutil.WM_APP + 3
 
+// ── Global hotkey ────────────────────────────────────────────────────
+// RegisterHotKey delivers WM_HOTKEY to the thread owning the window, so all
+// of this lives on the tray thread; SetHotkey reaches it with a blocking
+// SendMessage and reads the outcome out of the return value. That is safe
+// here because the tray loop never waits on the caller.
+
+const (
+	msgApplyHotkey = winutil.WM_APP + 5
+	wmHotkey       = 0x0312
+	hotkeyID       = 1
+)
+
+// SetHotkey re-registers the global hotkey and reports whether Windows
+// accepted it. A combination another program already owns fails here, which
+// is the whole reason this is not fire-and-forget.
+func (t *Tray) SetHotkey(setting string) error {
+	if t == nil || t.hwnd == 0 {
+		return errors.New("tray is not running")
+	}
+	spec, enabled, err := hotkey.Resolve(setting)
+	if err != nil {
+		return err
+	}
+	t.hotkeyMu.Lock()
+	t.hotkeyWanted, t.hotkeyEnabled = spec, enabled
+	t.hotkeyMu.Unlock()
+
+	if code := winutil.SendMessage(t.hwnd, msgApplyHotkey, 0, 0); code != 0 {
+		// Windows' own text, unadorned: the UI already knows which
+		// combination it asked for and recognises the ordinary "already
+		// registered" case to phrase it for a person. Prefixing the raw
+		// setting here printed "register : …" for the empty default.
+		return windows.Errno(code)
+	}
+	return nil
+}
+
+// liveHotkey is the combination currently registered, valid while
+// t.hotkeyOn. Package-scoped like currentIconID: one Tray per process, and
+// only the tray thread touches it.
+var liveHotkey hotkey.Spec
+
+// registerHotkey returns 0, or the Win32 error code. Tray thread only.
+func registerHotkey(t *Tray, spec hotkey.Spec) uintptr {
+	// MOD_NOREPEAT: holding the combination down must open the window once,
+	// not once per key repeat.
+	r, _, err := procRegisterHotKey.Call(
+		t.hwnd, hotkeyID, uintptr(spec.Mods|hotkey.ModNoRepeat), uintptr(spec.VK))
+	if r != 0 {
+		return 0
+	}
+	if errno, ok := err.(windows.Errno); ok && errno != 0 {
+		return uintptr(errno)
+	}
+	return uintptr(windows.ERROR_HOTKEY_ALREADY_REGISTERED)
+}
+
+// applyHotkey runs on the tray thread. Returns 0, or the Win32 error code.
+func applyHotkey(t *Tray) uintptr {
+	prev, prevOn := liveHotkey, t.hotkeyOn
+	if prevOn {
+		_, _, _ = procUnregisterHotKey.Call(t.hwnd, hotkeyID)
+		t.hotkeyOn = false
+	}
+	t.hotkeyMu.Lock()
+	spec, enabled := t.hotkeyWanted, t.hotkeyEnabled
+	t.hotkeyMu.Unlock()
+	if !enabled {
+		return 0
+	}
+	code := registerHotkey(t, spec)
+	if code == 0 {
+		liveHotkey, t.hotkeyOn = spec, true
+		return 0
+	}
+	// Refused. The UI keeps the old preference stored, so the old shortcut
+	// has to keep working as well — trying a taken combination must not
+	// silently cost the user the one they already had. It was ours a moment
+	// ago, so restoring practically always succeeds; if not, say so.
+	if prevOn {
+		if restore := registerHotkey(t, prev); restore == 0 {
+			liveHotkey, t.hotkeyOn = prev, true
+		} else {
+			log.Printf("restore hotkey after refusal: %v", windows.Errno(restore))
+		}
+	}
+	return code
+}
+
 // RefreshTip re-applies the icon's hover text. The text is localized, so
 // it has to follow a language change the way the popup menu already does.
 // Safe to call from any goroutine.
@@ -842,12 +997,15 @@ func showTrayPopup(t *Tray) {
 
 	labels := t.text()
 
-	items := []popupItem{
-		{id: menuIDOpen, label: labels.open},
-		{id: menuIDSettings, label: labels.settings},
-		{id: menuIDQuit, label: labels.quit},
+	items := []popupmenu.Item{
+		{ID: menuIDOpen, Label: labels.open},
+		{ID: menuIDSettings, Label: labels.settings},
+		{ID: menuIDQuit, Label: labels.quit},
 	}
-	showCustomPopup(items, pt.x, pt.y, func(id uint32) {
+	t.menu.Show(items, pt.x, pt.y, popupmenu.Options{}, func(id uint32, picked bool) {
+		if !picked {
+			return
+		}
 		switch id {
 		case menuIDOpen:
 			// Same cold-start rule as a left click: queue, never drop.

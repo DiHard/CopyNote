@@ -68,6 +68,7 @@ var (
 
 	procShowWindow                   = moduser32.NewProc("ShowWindow")
 	procSetForegroundWindow          = moduser32.NewProc("SetForegroundWindow")
+	procClientToScreen               = moduser32.NewProc("ClientToScreen")
 	procIsIconic                     = moduser32.NewProc("IsIconic")
 	procIsWindowVisible              = moduser32.NewProc("IsWindowVisible")
 	procPostMessageW                 = moduser32.NewProc("PostMessageW")
@@ -146,6 +147,13 @@ func SetForegroundWindow(hwnd uintptr) bool {
 	return r != 0
 }
 
+// ClientToScreen converts a point in hwnd's client area to screen coordinates.
+func ClientToScreen(hwnd uintptr, x, y int32) (int32, int32) {
+	pt := struct{ X, Y int32 }{x, y}
+	_, _, _ = procClientToScreen.Call(hwnd, uintptr(unsafe.Pointer(&pt)))
+	return pt.X, pt.Y
+}
+
 // IsIconic returns true if the window is currently minimized.
 func IsIconic(hwnd uintptr) bool {
 	r, _, _ := procIsIconic.Call(hwnd)
@@ -163,6 +171,15 @@ func IsWindowVisible(hwnd uintptr) bool {
 func PostMessage(hwnd uintptr, msg uint32, wParam, lParam uintptr) bool {
 	r, _, _ := procPostMessageW.Call(hwnd, uintptr(msg), wParam, lParam)
 	return r != 0
+}
+
+// SendMessage → LRESULT SendMessageW(HWND, UINT, WPARAM, LPARAM).
+// Unlike PostMessage this blocks until the target window's thread has
+// handled the message, so the caller can read a result out of the return
+// value. Only safe towards a thread that cannot be waiting on the caller.
+func SendMessage(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
+	r, _, _ := procSendMessageW.Call(hwnd, uintptr(msg), wParam, lParam)
+	return r
 }
 
 // RegisterWindowMessage returns a system-wide message ID for the given
@@ -457,14 +474,14 @@ func OpenFileDialog(hwnd uintptr, filter string) (string, bool) {
 
 // browseInfoW is BROWSEINFOW from shlobj_core.h.
 type browseInfoW struct {
-	hwndOwner    uintptr
-	pidlRoot     uintptr
-	displayName  *uint16
-	title        *uint16
-	flags        uint32
-	callback     uintptr
-	lParam       uintptr
-	image        int32
+	hwndOwner   uintptr
+	pidlRoot    uintptr
+	displayName *uint16
+	title       *uint16
+	flags       uint32
+	callback    uintptr
+	lParam      uintptr
+	image       int32
 }
 
 const (

@@ -75,9 +75,19 @@ func bindApplication(w webview2.WebView, hwnd uintptr, svc *service.Service, exe
 	// Moving the executable out of a download folder; see relocate_windows.go.
 	bindRelocate(w, svc, hwnd, exePath, dataDir)
 
+	// The entry list's context menu; see entrymenu_windows.go.
+	bindEntryMenu(w, hwnd)
+
 	// Read on every focus loss, so a plain atomic store is all it takes.
 	mustBind("applyAutoHide", func(enabled bool) {
 		autoHideDisabled.Store(!enabled)
+	})
+
+	// Unlike the other preferences this one can be refused by Windows — the
+	// combination may already belong to another program — so the error goes
+	// back to the UI instead of into the log.
+	mustBind("applyHotkey", func(setting string) error {
+		return tr.SetHotkey(setting)
 	})
 
 	mustBind("applyTopmost", func(enabled bool) {
@@ -107,19 +117,22 @@ func bindApplication(w webview2.WebView, hwnd uintptr, svc *service.Service, exe
 		return err == nil, err
 	})
 
-	mustBind("importData", func() (bool, error) {
+	// Resolves to null when the dialog is cancelled, which the page tells apart
+	// from an import that added nothing.
+	mustBind("importData", func() (*service.ImportResult, error) {
 		path, ok := winutil.OpenFileDialog(hwnd, fileFilter)
 		if !ok {
-			return false, nil // user cancelled
+			return nil, nil // user cancelled
 		}
 		raw, err := os.ReadFile(path)
 		if err != nil {
-			return false, fmt.Errorf("read file: %w", err)
+			return nil, fmt.Errorf("read file: %w", err)
 		}
-		if err := svc.ImportData(raw); err != nil {
-			return false, err
+		result, err := svc.ImportData(raw)
+		if err != nil {
+			return nil, err
 		}
-		return true, nil
+		return &result, nil
 	})
 
 	return updates
