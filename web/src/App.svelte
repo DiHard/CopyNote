@@ -10,7 +10,7 @@
     loadInstallLocation,
     resetForShow,
   } from "./lib/state.svelte";
-  import { focusSearch } from "./lib/focus";
+  import { focusSearch, nextTabStop } from "./lib/focus";
   import { t } from "./lib/i18n";
   import Header from "./lib/components/Header.svelte";
   import EntryList from "./lib/components/EntryList.svelte";
@@ -184,6 +184,17 @@
   /** Global keyboard shortcuts. */
   function onGlobalKeydown(e: KeyboardEvent) {
 	if (e.defaultPrevented) return;
+    // Tab from the search box reaches the list before the header buttons; see
+    // nextTabStop. Modals trap Tab themselves, and Settings keeps the default.
+    if (e.key === "Tab" && !e.altKey && !e.ctrlKey && !e.metaKey && !appState.modal && appState.view === "main") {
+      const shell = document.querySelector<HTMLElement>("main[data-shell]");
+      const next = shell ? nextTabStop(shell, document.activeElement, e.shiftKey) : null;
+      if (next) {
+        e.preventDefault();
+        next.focus();
+      }
+      return;
+    }
     if (e.key === "Escape" && !appState.modal) {
       e.preventDefault();
       if (appState.view === "settings") {

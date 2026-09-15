@@ -29,6 +29,14 @@ public static class CopyNoteProbe
     [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] static extern bool AllowSetForegroundWindow(int pid);
     [DllImport("user32.dll")] static extern bool PeekMessageW(out MSG msg, IntPtr hwnd, uint min, uint max, uint remove);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr FindWindowW(string className, string title);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassNameW(IntPtr hwnd, StringBuilder name, int max);
+    [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr hwnd, uint cmd);
+    [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr hwnd);
+    [DllImport("user32.dll")] static extern uint GetDpiForWindow(IntPtr hwnd);
+    [DllImport("user32.dll")] static extern bool AttachThreadInput(uint attach, uint attachTo, bool on);
+    [DllImport("user32.dll")] static extern bool BringWindowToTop(IntPtr hwnd);
+    [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
 
     static readonly IntPtr HwndMessage = new IntPtr(-3);
 
@@ -117,6 +125,70 @@ public static class CopyNoteProbe
     }
 
     public static IntPtr Foreground() { return GetForegroundWindow(); }
+
+    // The visible popup menu pid shows - internal/popupmenu's window - or zero.
+    public static IntPtr Menu(int pid)
+    {
+        IntPtr found = IntPtr.Zero;
+        EnumWindows((h, l) =>
+        {
+            uint owner;
+            GetWindowThreadProcessId(h, out owner);
+            if ((int)owner != pid || !IsWindowVisible(h)) return true;
+            var name = new StringBuilder(64);
+            GetClassNameW(h, name, name.Capacity);
+            if (name.ToString() != "CopyNotePopupMenu") return true;
+            found = h;
+            return false;
+        }, IntPtr.Zero);
+        return found;
+    }
+
+    public static IntPtr WaitMenu(int pid, int timeoutMs)
+    {
+        long deadline = Environment.TickCount64 + timeoutMs;
+        while (Environment.TickCount64 < deadline)
+        {
+            IntPtr menu = Menu(pid);
+            if (menu != IntPtr.Zero) return menu;
+            Thread.Sleep(5);
+        }
+        return IntPtr.Zero;
+    }
+
+    public static bool WaitMenuGone(int pid, int timeoutMs)
+    {
+        long deadline = Environment.TickCount64 + timeoutMs;
+        while (Environment.TickCount64 < deadline)
+        {
+            if (Menu(pid) == IntPtr.Zero) return true;
+            Thread.Sleep(5);
+        }
+        return false;
+    }
+
+    // The window hwnd belongs to (GW_OWNER), or zero.
+    public static IntPtr Owner(IntPtr hwnd) { return GetWindow(hwnd, 4); }
+
+    public static uint Dpi(IntPtr hwnd) { return GetDpiForWindow(hwnd); }
+
+    public static IntPtr Taskbar() { return FindWindowW("Shell_TrayWnd", null); }
+
+    // Makes hwnd the foreground window, as a click into it would, even where
+    // Windows refuses this process: for the one call, the thread shares the
+    // input state of the thread that has the foreground now. Test tooling
+    // only - an application must never do this.
+    public static bool ForceForeground(IntPtr hwnd)
+    {
+        uint pid;
+        uint foregroundThread = GetWindowThreadProcessId(GetForegroundWindow(), out pid);
+        uint self = GetCurrentThreadId();
+        bool attached = foregroundThread != 0 && foregroundThread != self && AttachThreadInput(self, foregroundThread, true);
+        SetForegroundWindow(hwnd);
+        BringWindowToTop(hwnd);
+        if (attached) AttachThreadInput(self, foregroundThread, false);
+        return GetForegroundWindow() == hwnd;
+    }
 
     // Waits for the tray window, then posts msg to it count times at once.
     // Returns the Unix ms of the post, or -1 on timeout.

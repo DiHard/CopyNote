@@ -27,6 +27,7 @@ Ctrl+Alt+N and Ctrl+Alt+M. Don't type meanwhile.
 | `hotkey.ps1` | Real keystrokes toggle the window and reopening clears the search; switching to another combination, `off` and back to the default; Windows refusing Win+V leaves Ctrl+Alt+N working; quitting releases it |
 | `coldstart.ps1` | Tray clicks and the hotkey that arrive before the page has loaded bring the window up once the UI is ready, and only then; a second launch reaches the test build, not the daily CopyNote |
 | `autorun.ps1` | Autorun writes and deletes `Run\CopyNoteTest` and never touches `Run\CopyNote` |
+| `menu.ps1` | The entry context menu opens at the pointer, or under the card for the menu key; the window stays up while it is open; its keys skip the separator and disabled items; activation and focus return to the page; switching windows or the hotkey closes it; the tray icon's menu still works |
 | `trace.ps1` | Not a check: every change of the window's position and focus after a launch, for a window that appears and vanishes. `-FreshProfile` for a first run, `-WithForegroundRights` for a launch the way Explorer does it |
 
 Each check prints `[ok  ]` or `[FAIL]` lines and exits with its number of
@@ -49,9 +50,15 @@ Ctrl+Alt+M — a daily CopyNote that has the hotkey does.
   window is (parked means a left edge at −30000), probes a combination with
   `RegisterHotKey` (error 1409: someone holds it), types it with `keybd_event`
   only once the probe says it is held, so keys never land in another window,
-  and posts tray and hotkey messages.
+  and posts tray and hotkey messages. It also finds the popup menu window
+  (`CopyNotePopupMenu`) and its owner, and forces the foreground onto a window
+  (`ForceForeground`) for checks that need one active: Windows does not count
+  DevTools input as input.
 - `cdp.mjs` evaluates an expression in the page over DevTools. That reaches the
-  Go bridge too: `window.applyHotkey(…)`, `window.saveSettings(…)`.
+  Go bridge too: `window.applyHotkey(…)`, `window.saveSettings(…)`. With
+  `--send` (`Send-PageCommand`) it sends one raw DevTools command instead:
+  `Input.dispatchMouseEvent` and `Input.dispatchKeyEvent` reach the page as
+  trusted input without moving the pointer or typing into another window.
 - The test build quits the way its tray does, with `WM_QUIT` on the tray
   window; the next launch waits for its `msedgewebview2.exe` processes to
   release the DevTools port.

@@ -75,6 +75,9 @@ func bindApplication(w webview2.WebView, hwnd uintptr, svc *service.Service, exe
 	// Moving the executable out of a download folder; see relocate_windows.go.
 	bindRelocate(w, svc, hwnd, exePath, dataDir)
 
+	// The entry list's context menu; see entrymenu_windows.go.
+	bindEntryMenu(w, hwnd)
+
 	// Read on every focus loss, so a plain atomic store is all it takes.
 	mustBind("applyAutoHide", func(enabled bool) {
 		autoHideDisabled.Store(!enabled)

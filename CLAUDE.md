@@ -36,7 +36,8 @@ CopyNote/
 │   ├── service/      # CRUD logic, clipboard, settings (mutex-protected)
 │   ├── clipboard/    # Win32 clipboard (CF_UNICODETEXT, no cgo)
 │   ├── singleton/    # Named mutex for single-instance enforcement
-│   ├── tray/         # System tray icon + custom GDI popup menu
+│   ├── tray/         # System tray icon and its right-click menu
+│   ├── popupmenu/    # Owner-drawn GDI popup menu: the tray's and the entry list's
 │   ├── relocate/     # Move the exe out of Downloads into a program folder
 │   ├── updater/      # GitHub Releases check + signed in-place self-update
 │   └── winutil/      # Shared Win32 wrappers (ShowWindow, DWM, registry…)
@@ -73,7 +74,7 @@ CopyNote/
 ├── tools/genicon/      # Generates icon-dark.ico + icon-light.ico
 ├── tools/signrelease/  # ed25519 release signing; private key lives outside the repo
 ├── tools/uxharness/    # Built frontend in a browser against a fake Go bridge
-├── tools/testinstance/ # Real exe beside the daily CopyNote: launch, hotkey, cold start, autorun
+├── tools/testinstance/ # Real exe beside the daily CopyNote: launch, hotkey, cold start, autorun, context menu
 ├── assets/             # Generated .ico files
 └── bin/rsrc.exe        # Resource linker binary
 ```
@@ -133,6 +134,7 @@ Go functions are exposed to JavaScript via `webview.Bind()`:
 | `window.relocateApp(dir)` | relocate.CopyTo + restart | Copy the exe to `dir` (`""` = default) and restart from there |
 | `window.dismissRelocatePrompt()` | svc.UpdateSettings | Silence the relocate banner for good |
 | `window.snoozeRelocatePrompt()` | svc.SnoozeRelocatePrompt | Hide the relocate banner for a week; returns the RFC3339 instant it stored |
+| `window.showEntryMenu(request)` | `entryMenu.Show` on the UI thread | Native context menu for an entry; resolves once it is open, and the pick arrives through `window.__entryMenuClosed(token, id)` |
 
 All bridge calls return Promises. The Go side persists to disk on every mutation.
 
@@ -146,6 +148,7 @@ All bridge calls return Promises. The Go side persists to disk on every mutation
 - **Show on a user launch**: starting the exe by hand surfaces the window as soon as the UI is ready; a Windows sign-in does not. `applyAutorun` appends `service.AutostartFlag` (`--autostart`) to the `Run` value, `startedByAutorun` looks for it, and `tray.ShowOnStart` carries the answer. `EnsureAutorunPath` rewrites the registry value on every start, so installations made before the flag existed migrate themselves. A relaunch after an update or a move passes no arguments and therefore also shows the window — which is what those flows already asked for separately
 - **No SW_HIDE**: visibility managed via off-screen positioning to prevent WebView2 renderer throttling
 - **Auto-hide**: `WM_ACTIVATEAPP` wParam=0 moves off-screen after 300ms guard, unless `settings.disableAutoHide` is set — then the window stays up until the ✕, Escape or the tray icon closes it
+- **Entry context menu**: right click, the menu key or Shift+F10, or a long press on a card opens `internal/popupmenu` — the tray's own menu, not HTML: with one or two entries the window is barely taller than the menu, and only a window of its own can run past the edges. `entrymenu_windows.go` shows it **on the UI thread, owned by the main window**. Activation then stays within one thread, so the main window gets no `WM_ACTIVATEAPP` and auto-hide leaves it alone while the menu is open; when the menu closes Windows activates the owner again, and go-webview2's `AutoFocus` puts keyboard focus back into the page. Shown on the tray thread instead, it would hide the window it belongs to. `moveOffScreen` closes it, so it never outlives the window. The menu answers `WM_GETDLGCODE` with `DLGC_WANTALLKEYS`: go-webview2's loop runs every UI-thread message through `IsDialogMessage`, which otherwise swallows the arrows, Enter and Escape as dialog navigation — the tray thread's own loop never had that problem. The page sends the items (labels are localized there) with a token and gets `__entryMenuClosed(token, id)` back; a menu replaced by a newer one resolves to `""` at once, so its late answer is ignored (`lib/entryMenu.ts`). `tools/testinstance/menu.ps1` checks all of this in the real exe.
 - **Toggle debounce**: LMB on tray within 150ms of auto-hide = stay hidden
 - **Slide animation**: show = slide up from below screen (200ms ease-out), hide = slide down (150ms ease-in)
 - **Anchor**: Bottom-right corner, 8 px margin (scaled for DPI), compensates for DWM invisible border
@@ -156,7 +159,7 @@ All bridge calls return Promises. The Go side persists to disk on every mutation
 
 ### Tray System
 
-Runs on dedicated `runtime.LockOSThread()` goroutine. Custom popup menu (GDI-painted, not `TrackPopupMenu`) with dark/light theme support; its metrics and font are scaled for the DPI of the monitor under the cursor (`popupMetricsFor`). Adaptive icon swaps between dark/light stroke on `WM_SETTINGCHANGE("ImmersiveColorSet")`. Pulse animation during loading (10 GDI-generated alpha frames). Menu items and the icon's hover text are localized (EN/RU) via `trayTexts`.
+Runs on dedicated `runtime.LockOSThread()` goroutine. Its right-click menu is `internal/popupmenu` (GDI-painted, not `TrackPopupMenu`), the same code as the entry context menu; metrics and font are scaled for the DPI of the monitor it opens on (`metricsFor`). Adaptive icon swaps between dark/light stroke on `WM_SETTINGCHANGE("ImmersiveColorSet")`. Pulse animation during loading (10 GDI-generated alpha frames). Menu items and the icon's hover text are localized (EN/RU) via `trayTexts`.
 
 **Nothing asked for during the cold start is dropped.** Left click, the popup's *Open* and *Settings*, a second exe launch and `ShowOnStart` all funnel into one `pending` slot (`pendingShow` / `pendingSettings`, tray thread only) that `msgSetReady` drains once `notifyReady` arrives. Sliding out a blank window mid-cold-start looks like a crash and silently ignoring the click looks like a dead icon, so the request waits instead. A second left click keeps the queued request as a show rather than toggling it off — there is no window on screen for the user to be toggling.
 
@@ -220,7 +223,7 @@ What Go decides — which global shortcut Windows accepted, what the tray does w
 go build -ldflags="-H=windowsgui -s -w -X main.singletonName=Local\dev.copynote.test.singleton -X copynote/internal/tray.trayClassName=CopyNoteTestTrayWnd -X copynote/internal/tray.showMessageName=dev.copynote.test.SHOW -X copynote/internal/service.autorunValueName=CopyNoteTest" -o <scratch>/copynote-test.exe .
 ```
 
-Start it with `APPDATA` and `LOCALAPPDATA` pointing at scratch folders (data, log, WebView2 profile) and `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9223` to drive the page and the bridge over CDP. `tools/testinstance/` does all of this and checks the launch, the global hotkey, the cold start and autorun in the real exe — `pwsh tools/testinstance/all.ps1`; its README lists what each script covers.
+Start it with `APPDATA` and `LOCALAPPDATA` pointing at scratch folders (data, log, WebView2 profile) and `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9223` to drive the page and the bridge over CDP. `tools/testinstance/` does all of this and checks the launch, the global hotkey, the cold start, autorun and the entry context menu in the real exe — `pwsh tools/testinstance/all.ps1`; its README lists what each script covers.
 
 - **Still shared**: the global hotkey is machine-wide, so the test build gets Ctrl+Alt+N only while no other program holds it — a daily CopyNote that has the hotkey does. Turning autorun on inside the test instance writes its own `Run` value pointing at the test exe; turn it off again before quitting.
 - **Quit it the way the tray does**: post `WM_QUIT` to its tray window, `FindWindowEx(HWND_MESSAGE, 0, "<trayClassName>", NULL)`. Killing the process leaves a dead icon in the tray until the pointer passes over it, and the next launch has to wait for the old `msedgewebview2.exe` processes to release the debugging port.
@@ -300,7 +303,8 @@ The app is a "copy one thing and get out of the way" utility, so the whole loop 
 - **F2 / Delete** on the focused card edit and delete it — Windows conventions, since those buttons left the Tab order. Both carry `aria-keyshortcuts` so a screen reader announces them, and both are listed in Settings → Клавиши, which is the only place a sighted user can discover them.
 - **Ctrl + ↑ / ↓** on a focused card: move the entry itself. Disabled while a search filter is active, since the visible order is not the stored one.
 - **Enter** in modal form: Submit (create/edit)
-- **Tab**: Navigates copy/edit/delete controls; modal focus is trapped and restored on close.
+- **Tab** from the search box goes to the list first — the card that last had focus, or the empty screen's or no-match button (`data-list-focus`) — and only then to the header buttons and the rest; the order wraps (`nextTabStop` in `lib/focus.ts`, applied by App's window keydown handler). The header buttons come before the list in the document, so plain Tab used to cost four presses before reaching an entry. In modals focus is trapped and restored on close.
+- **Context menu** on a card (right click, menu key, Shift+F10): copy, edit, delete, move up and down, each with its key shown — the one place the row actions are visible without hovering, and the only way to reorder without a drag or Ctrl+↑↓. The move items are disabled at the ends of the list and while a search filter is active.
 - **Enter in delete dialog**: Activates the focused button. Cancel has initial focus.
 
 Focus crosses component boundaries through a DOM contract rather than props: `SEARCH_ID` on the header input and `data-card-focus` on each card's copy button, both resolved in `lib/focus.ts` — the same approach the drag code already takes with `[data-entry-id]`.

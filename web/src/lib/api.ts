@@ -2,7 +2,7 @@
 // Each function returns a promise that rejects with an Error whose message
 // matches the Go error returned by the bound method.
 
-import type { Entry, InstallLocation, UpdateInfo, UpdateProgress, UserSettings } from "./types";
+import type { Entry, EntryMenuRequest, InstallLocation, UpdateInfo, UpdateProgress, UserSettings } from "./types";
 
 declare global {
   interface Window {
@@ -46,6 +46,11 @@ declare global {
     /** Hides the move banner for a while; resolves to the RFC3339 instant
      *  Go stored, so the duration lives in one place only. */
     snoozeRelocatePrompt: () => Promise<string>;
+    /** Opens the native context menu for an entry and resolves once it is
+     *  open; the choice arrives through __entryMenuClosed. */
+    showEntryMenu: (request: EntryMenuRequest) => Promise<void>;
+    /** Called by Go when that menu closes: the picked id, "" if dismissed. */
+    __entryMenuClosed?: (token: number, id: string) => void;
     /** Injected at runtime by Go for tray→settings navigation. */
     __openSettings?: () => void;
     /** Called by Go each time the window comes back on screen. */

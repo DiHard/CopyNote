@@ -1,7 +1,8 @@
 <script lang="ts">
-  import type { Entry } from "../types";
+  import type { Entry, MenuItem } from "../types";
   import { openEdit, openDelete, copyEntry } from "../state.svelte";
   import { moveCardFocus, focusCardAt, focusLastCard } from "../focus";
+  import { showEntryMenu } from "../entryMenu";
   import { t } from "../i18n";
   import { onDestroy } from "svelte";
 
@@ -11,6 +12,8 @@
     dragInProgress = false,
     dragDisabled = false,
     tabbable = false,
+    canMoveUp = false,
+    canMoveDown = false,
     onDragPointerDown,
     onMoveByKey,
     onFocused,
@@ -21,6 +24,9 @@
     dragDisabled?: boolean;
     /** Roving tabindex: the whole list is one Tab stop, and this is it. */
     tabbable?: boolean;
+    /** Whether the context menu can move this entry up or down. */
+    canMoveUp?: boolean;
+    canMoveDown?: boolean;
     onDragPointerDown?: (e: PointerEvent) => void;
     onMoveByKey?: (dir: -1 | 1) => void;
     onFocused?: () => void;
@@ -84,6 +90,46 @@
     moveCardFocus(dir);
   }
 
+  // A right click and a long press put a pointer down first; the menu key and
+  // Shift+F10 do not.
+  let lastPointerDown = -Infinity;
+
+  function onPointerDown(e: PointerEvent) {
+    lastPointerDown = e.timeStamp;
+    onDragPointerDown?.(e);
+  }
+
+  /**
+   * The row's actions without hovering for them, plus moving the entry
+   * without a drag. Opened from the keyboard, the menu appears under the card
+   * with its first item highlighted, like a keyboard-opened Windows menu.
+   */
+  async function onContextMenu(e: MouseEvent) {
+    e.preventDefault();
+    const keyboard = e.timeStamp - lastPointerDown > 1500;
+    const card = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const items: MenuItem[] = [
+      { id: "copy", label: t("card.menu.copy"), shortcut: "Enter" },
+      { id: "edit", label: t("card.menu.edit"), shortcut: "F2" },
+      { id: "delete", label: t("card.menu.delete"), shortcut: "Delete" },
+      { id: "", label: "", separator: true },
+      { id: "up", label: t("card.menu.up"), shortcut: "Ctrl+↑", disabled: !canMoveUp },
+      { id: "down", label: t("card.menu.down"), shortcut: "Ctrl+↓", disabled: !canMoveDown },
+    ];
+    const choice = await showEntryMenu({
+      x: keyboard ? card.left + 12 : e.clientX,
+      y: keyboard ? card.bottom : e.clientY,
+      keyboard,
+      dark: document.documentElement.classList.contains("dark"),
+      items,
+    });
+    if (choice === "copy") void onCopy();
+    else if (choice === "edit") openEdit(entry);
+    else if (choice === "delete") openDelete(entry);
+    else if (choice === "up") onMoveByKey?.(-1);
+    else if (choice === "down") onMoveByKey?.(1);
+  }
+
   onDestroy(() => {
     if (timer !== null) clearTimeout(timer);
   });
@@ -93,7 +139,8 @@
 <div
   role="listitem"
   data-entry-id={entry.id}
-  onpointerdown={(e) => onDragPointerDown?.(e)}
+  onpointerdown={onPointerDown}
+  oncontextmenu={onContextMenu}
   class="group relative flex items-stretch gap-1 rounded-lg border border-outline bg-surface-alt transition hover:border-outline-strong hover:bg-card-hover {isDragging
     ? 'opacity-60 shadow-lg ring-2 ring-accent/40'
     : ''}"
@@ -106,7 +153,7 @@
     onfocus={() => onFocused?.()}
     onclick={onCopy}
     onkeydown={onKeyDown}
-    title={t("card.copy")}
+    title={dragDisabled ? t("card.copy") : t("card.copyOrDrag")}
     class="flex min-w-0 flex-1 items-start px-3 py-2.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-l-lg {dragInProgress
       ? 'cursor-grabbing'
       : 'cursor-pointer'}"

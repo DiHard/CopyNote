@@ -21,10 +21,16 @@ export const en: Record<string, string> = {
 
   // EntryCard
   "card.copy": "Click to copy",
+  "card.copyOrDrag": "Click to copy, or drag to reorder",
   "card.edit": "Edit",
   "card.delete": "Delete",
   "card.copied": "Copied",
   "card.failed": "Failed",
+  "card.menu.copy": "Copy",
+  "card.menu.edit": "Edit",
+  "card.menu.delete": "Delete",
+  "card.menu.up": "Move up",
+  "card.menu.down": "Move down",
 
   // EntryModal
   "modal.create.title": "New entry",

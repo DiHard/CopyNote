@@ -72,3 +72,24 @@ export interface UpdateProgress {
 
 /** Which top-level view is active. */
 export type ViewMode = "main" | "settings";
+
+/** One row of the entry context menu Go draws; matches Go entryMenuItem. */
+export interface MenuItem {
+  id: string;
+  label: string;
+  shortcut?: string;
+  disabled?: boolean;
+  separator?: boolean;
+}
+
+/** Matches Go entryMenuRequest. x and y are CSS pixels in the window. */
+export interface EntryMenuRequest {
+  /** Echoed back with the answer; see lib/entryMenu.ts. */
+  token: number;
+  x: number;
+  y: number;
+  dark: boolean;
+  /** Opened from the keyboard: highlight the first item. */
+  keyboard: boolean;
+  items: MenuItem[];
+}

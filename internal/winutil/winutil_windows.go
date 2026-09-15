@@ -68,6 +68,7 @@ var (
 
 	procShowWindow                   = moduser32.NewProc("ShowWindow")
 	procSetForegroundWindow          = moduser32.NewProc("SetForegroundWindow")
+	procClientToScreen               = moduser32.NewProc("ClientToScreen")
 	procIsIconic                     = moduser32.NewProc("IsIconic")
 	procIsWindowVisible              = moduser32.NewProc("IsWindowVisible")
 	procPostMessageW                 = moduser32.NewProc("PostMessageW")
@@ -144,6 +145,13 @@ func ShowWindow(hwnd uintptr, cmd int) bool {
 func SetForegroundWindow(hwnd uintptr) bool {
 	r, _, _ := procSetForegroundWindow.Call(hwnd)
 	return r != 0
+}
+
+// ClientToScreen converts a point in hwnd's client area to screen coordinates.
+func ClientToScreen(hwnd uintptr, x, y int32) (int32, int32) {
+	pt := struct{ X, Y int32 }{x, y}
+	_, _, _ = procClientToScreen.Call(hwnd, uintptr(unsafe.Pointer(&pt)))
+	return pt.X, pt.Y
 }
 
 // IsIconic returns true if the window is currently minimized.
@@ -466,14 +474,14 @@ func OpenFileDialog(hwnd uintptr, filter string) (string, bool) {
 
 // browseInfoW is BROWSEINFOW from shlobj_core.h.
 type browseInfoW struct {
-	hwndOwner    uintptr
-	pidlRoot     uintptr
-	displayName  *uint16
-	title        *uint16
-	flags        uint32
-	callback     uintptr
-	lParam       uintptr
-	image        int32
+	hwndOwner   uintptr
+	pidlRoot    uintptr
+	displayName *uint16
+	title       *uint16
+	flags       uint32
+	callback    uintptr
+	lParam      uintptr
+	image       int32
 }
 
 const (

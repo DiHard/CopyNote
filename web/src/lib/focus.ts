@@ -49,3 +49,36 @@ export function moveCardFocus(delta: number): void {
   }
   focusCardAt(current + delta);
 }
+
+/** Elements Tab may stop on; isTabStop drops the ones it skips. */
+const TAB_STOP_CANDIDATES = "input, button, select, textarea, a[href], [tabindex]";
+
+function isTabStop(el: HTMLElement): boolean {
+  return el.tabIndex >= 0 && !(el as HTMLButtonElement).disabled && el.getClientRects().length > 0;
+}
+
+/**
+ * The main view's Tab order: the search box, then the list — the card that
+ * last had focus, or the button the empty and no-match screens offer
+ * (`data-list-focus`) — then everything else in document order, wrapping
+ * around. The header buttons come before the list in the document, so plain
+ * Tab went from the search box to "+", ⚙ and ✕ first; now a few letters, Tab
+ * and Enter copy an entry.
+ *
+ * Returns null when focus is somewhere this order does not know, which leaves
+ * Tab to the browser.
+ */
+export function nextTabStop(root: HTMLElement, from: Element | null, backwards: boolean): HTMLElement | null {
+  const stops = Array.from(root.querySelectorAll<HTMLElement>(TAB_STOP_CANDIDATES)).filter(isTabStop);
+  const search = document.getElementById(SEARCH_ID);
+  const list = root.querySelector<HTMLElement>('[data-card-focus][tabindex="0"], [data-list-focus]');
+  const head = [search, list].filter((el): el is HTMLElement => el !== null && stops.includes(el));
+  const order = [...head, ...stops.filter((el) => !head.includes(el))];
+
+  let at = order.indexOf(from as HTMLElement);
+  // A card's edit and delete buttons are outside the order; Tab from one
+  // carries on as if from the card.
+  if (at < 0 && list && from?.closest?.("[data-entry-id]")) at = order.indexOf(list);
+  if (at < 0) return null;
+  return order[(at + (backwards ? order.length - 1 : 1)) % order.length];
+}

@@ -7,7 +7,7 @@
 //   - a message-only HWND that receives tray callbacks and the show
 //     request posted by a second exe launch (see ShowRunningInstance),
 //   - the tray icon registered via Shell_NotifyIcon,
-//   - a popup HMENU shown on right-click.
+//   - a right-click menu, drawn by internal/popupmenu.
 //
 // All cleanup happens when Run() returns (loop exited via PostQuitMessage).
 package tray
@@ -24,6 +24,7 @@ import (
 	"golang.org/x/sys/windows"
 
 	"copynote/internal/hotkey"
+	"copynote/internal/popupmenu"
 	"copynote/internal/winutil"
 )
 
@@ -112,6 +113,9 @@ type Tray struct {
 	// pending is a request that arrived before WebView2 finished loading;
 	// it is honoured on msgSetReady. Tray thread only.
 	pending pendingRequest
+
+	// menu is the right-click menu. Tray thread only.
+	menu popupmenu.Menu
 
 	// hotkeyMu guards the combination SetHotkey hands to the tray thread.
 	hotkeyMu      sync.Mutex
@@ -254,6 +258,7 @@ var (
 	moduser32   = windows.NewLazySystemDLL("user32.dll")
 	modshell32  = windows.NewLazySystemDLL("shell32.dll")
 	modkernel32 = windows.NewLazySystemDLL("kernel32.dll")
+	modgdi32    = windows.NewLazySystemDLL("gdi32.dll")
 
 	procRegisterClassExW   = moduser32.NewProc("RegisterClassExW")
 	procCreateWindowExW    = moduser32.NewProc("CreateWindowExW")
@@ -275,8 +280,12 @@ var (
 	procCreateIconIndirect = moduser32.NewProc("CreateIconIndirect")
 	procDestroyIcon        = moduser32.NewProc("DestroyIcon")
 
-	// GDI procs shared with popup_windows.go are declared there.
-	// Additional GDI procs needed only for pulse animation:
+	procGetSystemMetrics = moduser32.NewProc("GetSystemMetrics")
+	procGetDC            = moduser32.NewProc("GetDC")
+	procReleaseDC        = moduser32.NewProc("ReleaseDC")
+
+	// GDI procs for the pulse animation.
+	procDeleteObject     = modgdi32.NewProc("DeleteObject")
 	procGetObjectW       = modgdi32.NewProc("GetObjectW")
 	procGetDIBits        = modgdi32.NewProc("GetDIBits")
 	procCreateDIBSection = modgdi32.NewProc("CreateDIBSection")
@@ -452,7 +461,7 @@ func (t *Tray) teardown() {
 		_, _, _ = procDestroyWindow.Call(t.hwnd)
 		t.hwnd = 0
 	}
-	releasePopupResources()
+	t.menu.Release()
 	instance = nil
 }
 
@@ -988,12 +997,15 @@ func showTrayPopup(t *Tray) {
 
 	labels := t.text()
 
-	items := []popupItem{
-		{id: menuIDOpen, label: labels.open},
-		{id: menuIDSettings, label: labels.settings},
-		{id: menuIDQuit, label: labels.quit},
+	items := []popupmenu.Item{
+		{ID: menuIDOpen, Label: labels.open},
+		{ID: menuIDSettings, Label: labels.settings},
+		{ID: menuIDQuit, Label: labels.quit},
 	}
-	showCustomPopup(items, pt.x, pt.y, func(id uint32) {
+	t.menu.Show(items, pt.x, pt.y, popupmenu.Options{}, func(id uint32, picked bool) {
+		if !picked {
+			return
+		}
 		switch id {
 		case menuIDOpen:
 			// Same cold-start rule as a left click: queue, never drop.

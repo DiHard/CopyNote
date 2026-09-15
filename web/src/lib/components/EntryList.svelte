@@ -255,6 +255,7 @@
         </div>
         <button
           type="button"
+          data-list-focus
           onclick={openCreate}
           class="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-text shadow-sm transition hover:bg-accent-hover"
         >
@@ -274,6 +275,7 @@
         <p class="text-sm text-on-surface-dim">{t("list.noMatch")}</p>
         <button
           type="button"
+          data-list-focus
           onclick={() => openCreateFromSearch(appState.query)}
           class="max-w-full truncate rounded-md border border-outline bg-card px-3 py-1.5 text-sm text-on-surface transition hover:bg-card-hover"
         >
@@ -282,7 +284,7 @@
       </div>
     {:else}
       <div role="list" class="flex flex-col gap-2">
-        {#each renderList as entry (entry.id)}
+        {#each renderList as entry, i (entry.id)}
           <div animate:flip={{ duration: 180, easing: cubicOut }}>
             <EntryCard
               {entry}
@@ -290,6 +292,8 @@
               dragInProgress={draggingId !== null}
               dragDisabled={!canDrag}
               tabbable={entry.id === tabbableId}
+              canMoveUp={canDrag && i > 0}
+              canMoveDown={canDrag && i < renderList.length - 1}
               onDragPointerDown={(e) => onCardPointerDown(e, entry.id)}
               onMoveByKey={(dir) => onKeyboardMove(entry.id, dir)}
               onFocused={() => (activeId = entry.id)}

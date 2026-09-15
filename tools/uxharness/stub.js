@@ -52,7 +52,7 @@
   };
 
   // Spies, for asserting that a binding was called at all.
-  const calls = { resizeWindow: [], hide: 0, copy: [], topmost: [], autoHide: [], hotkey: [] };
+  const calls = { resizeWindow: [], hide: 0, copy: [], topmost: [], autoHide: [], hotkey: [], menu: [] };
   window.__harness = { calls, get entries() { return copy(); } };
 
   // ── Entries ──────────────────────────────────────────────────────
@@ -159,5 +159,18 @@
     const until = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
     settings = { ...settings, relocateRemindAfter: until };
     return reply(until);
+  };
+
+  // ── Entry context menu ───────────────────────────────────────────
+  // Go draws this menu as a window of its own, so nothing opens here: the
+  // request is recorded, and __harness.pickMenu("edit") answers it
+  // (pickMenu("") dismisses it).
+  window.showEntryMenu = (req) => {
+    calls.menu.push(req);
+    return reply();
+  };
+  window.__harness.pickMenu = (id) => {
+    const last = calls.menu[calls.menu.length - 1];
+    if (last) window.__entryMenuClosed?.(last.token, id);
   };
 })();

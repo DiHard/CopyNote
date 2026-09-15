@@ -124,6 +124,15 @@ function Invoke-Page([string]$Expression) {
   return ((& node (Join-Path $PSScriptRoot 'cdp.mjs') $CdpPort $Expression) -join "`n")
 }
 
+# Sends one raw DevTools command to the page. Input.dispatchMouseEvent and
+# Input.dispatchKeyEvent arrive as trusted input without moving the pointer or
+# typing into another window. Params travel base64-encoded, past any quoting.
+function Send-PageCommand([string]$Method, [hashtable]$Params) {
+  $json = $Params | ConvertTo-Json -Compress -Depth 5
+  $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))
+  return ((& node (Join-Path $PSScriptRoot 'cdp.mjs') $CdpPort '--send' $Method $encoded) -join "`n")
+}
+
 function Wait-PageReady([int]$TimeoutSec = 60) {
   $deadline = (Get-Date).AddSeconds($TimeoutSec)
   while ((Get-Date) -lt $deadline) {

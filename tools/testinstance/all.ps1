@@ -1,7 +1,7 @@
 # Builds the test exe, then runs every check in turn. Exits with the total
 # number of failed checks.
 $failed = 0
-foreach ($step in 'build', 'launch', 'hotkey', 'coldstart', 'autorun') {
+foreach ($step in 'build', 'launch', 'hotkey', 'coldstart', 'autorun', 'menu') {
   Write-Host ''
   Write-Host "######## $step"
   try {

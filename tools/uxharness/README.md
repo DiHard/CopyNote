@@ -43,7 +43,10 @@ Appended to the URL:
 | `?hotkeytaken` | Windows refuses every global shortcut — the Settings error path |
 
 `window.__harness.calls` records what the UI asked the bridge to do
-(`resizeWindow` heights, `hide` count, copied ids, topmost/auto-hide values).
+(`resizeWindow` heights, `hide` count, copied ids, topmost/auto-hide values,
+entry context menu requests). Go draws that menu as a window of its own, so
+nothing opens here: `__harness.pickMenu("edit")` answers the last request,
+`pickMenu("")` dismisses it.
 The window height the UI requests is also mirrored into `document.title`.
 
 ## Keeping the stub honest
