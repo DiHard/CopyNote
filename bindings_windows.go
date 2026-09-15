@@ -117,19 +117,22 @@ func bindApplication(w webview2.WebView, hwnd uintptr, svc *service.Service, exe
 		return err == nil, err
 	})
 
-	mustBind("importData", func() (bool, error) {
+	// Resolves to null when the dialog is cancelled, which the page tells apart
+	// from an import that added nothing.
+	mustBind("importData", func() (*service.ImportResult, error) {
 		path, ok := winutil.OpenFileDialog(hwnd, fileFilter)
 		if !ok {
-			return false, nil // user cancelled
+			return nil, nil // user cancelled
 		}
 		raw, err := os.ReadFile(path)
 		if err != nil {
-			return false, fmt.Errorf("read file: %w", err)
+			return nil, fmt.Errorf("read file: %w", err)
 		}
-		if err := svc.ImportData(raw); err != nil {
-			return false, err
+		result, err := svc.ImportData(raw)
+		if err != nil {
+			return nil, err
 		}
-		return true, nil
+		return &result, nil
 	})
 
 	return updates
