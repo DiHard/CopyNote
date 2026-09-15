@@ -177,22 +177,25 @@
     });
   });
 
-  // Delay modal rendering so the window resize animation completes
-  // before the overlay + modal card appear. Without this, the user
-  // briefly sees the overlay on an undersized window.
+  // A modal waits until the window can hold it: on an undersized window the
+  // overlay shows a dark bar at the bottom while the resize animation catches
+  // up. A window that is already tall enough — any list of a few entries —
+  // shows it at once; a fixed wait there only made every add, edit and delete
+  // feel slow.
+  const MODAL_GROW_MS = 180;
   let showModal = $state(false);
-  let modalTimer: number | null = null;
 
   $effect(() => {
-    const modal = appState.modal;
-    if (modal) {
-      // Schedule modal show after resize has time to finish.
-      modalTimer = window.setTimeout(() => { showModal = true; }, 180);
-    } else {
-      if (modalTimer) { clearTimeout(modalTimer); modalTimer = null; }
+    if (!appState.modal) {
       showModal = false;
+      return;
     }
-    return () => { if (modalTimer) clearTimeout(modalTimer); };
+    if (window.innerHeight >= MODAL_MIN_H) {
+      showModal = true;
+      return;
+    }
+    const timer = window.setTimeout(() => { showModal = true; }, MODAL_GROW_MS);
+    return () => clearTimeout(timer);
   });
 
   // Once the modal is on screen the window follows its card: a dragged value
