@@ -14,6 +14,7 @@ declare global {
     copy: (id: string) => Promise<Entry>;
     hide: () => Promise<void>;
     resizeWindow: (contentHeight: number) => Promise<void>;
+    windowPrepared?: (id: number, contentHeight: number) => Promise<void>;
     getSettings: () => Promise<UserSettings>;
     saveSettings: (settings: UserSettings) => Promise<void>;
     exportData: () => Promise<boolean>;
@@ -56,6 +57,8 @@ declare global {
     __openSettings?: () => void;
     /** Called by Go each time the window comes back on screen. */
     __onShow?: () => void;
+    /** Called by Go after the window is parked off-screen. */
+    __onHide?: (id: number, settings: boolean) => Promise<void>;
   }
 }
 

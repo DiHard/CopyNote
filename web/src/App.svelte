@@ -8,7 +8,7 @@
     closeSettings,
     loadUpdateInfo,
     // loadInstallLocation, // temporarily disabled with the relocate feature
-    resetForShow,
+    resetAfterHide,
   } from "./lib/state.svelte";
   import { focusSearch, nextTabStop } from "./lib/focus";
   import { t } from "./lib/i18n";
@@ -18,24 +18,46 @@
   import ConfirmModal from "./lib/components/ConfirmModal.svelte";
   import SettingsView from "./lib/components/SettingsView.svelte";
 
-  /**
-   * Go calls this every time the window comes back on screen. A modal is
-   * left completely alone: it may hold an edit the user was pulled away
-   * from mid-sentence, and discarding that to tidy the view would be worse
-   * than a stale search box.
-   */
+  /** Focus the search box after the native window has come back on screen. */
   async function onWindowShown() {
+    windowVisible = true;
     if (appState.modal) return;
-    resetForShow();
-    // The settings view may have just been swapped out; the search box does
-    // not exist until Svelte has flushed.
     await tick();
     focusSearch();
+  }
+
+  /**
+   * Go calls this after the hide animation has parked the window off-screen.
+   * A modal is left completely alone: it may hold an edit the user was
+   * pulled away from mid-sentence, and discarding that would be worse than a
+   * stale search box.
+   */
+  let windowVisible = true;
+  let preparation = 0;
+
+  async function onWindowHidden(id: number, settings: boolean) {
+    preparation = id;
+    windowVisible = false;
+    if (rafId !== null) cancelAnimationFrame(rafId);
+    rafId = null;
+    if (!appState.modal) resetAfterHide();
+    if (settings) openSettings();
+    await tick();
+    if (preparation !== id) return;
+    // Measure the new DOM while parked and apply its final height without
+    // easing. Let the renderer paint before Go starts the slide-in.
+    fitWindow();
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    if (preparation !== id) return;
+    fitWindow();
+    await window.windowPrepared?.(id, Math.round(targetH));
   }
 
   onMount(async () => {
     window.__openSettings = openSettings;
     window.__onShow = onWindowShown;
+    window.__onHide = onWindowHidden;
     await Promise.all([refresh(), loadSettings()]);
     // Signal Go that the UI is ready — stops tray icon pulse
     // and enables LMB click.
@@ -52,6 +74,7 @@
   onDestroy(() => {
     delete window.__openSettings;
     delete window.__onShow;
+    delete window.__onHide;
   });
 
   // ── Auto-resize window to fit content ──────────────────────────
@@ -89,7 +112,7 @@
 
   function smoothResize(h: number) {
     targetH = h;
-    if (currentH === 0) {
+    if (currentH === 0 || !windowVisible) {
       // Very first call — jump instantly, no animation.
       currentH = h;
       window.resizeWindow?.(Math.round(h));

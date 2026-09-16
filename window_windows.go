@@ -40,12 +40,44 @@ var (
 	lastShownNS          atomic.Int64
 	activationLossNS     atomic.Int64
 	activationLossHideNS atomic.Int64
+	windowGeneration     atomic.Uint64
 	windowHidden         atomic.Bool // true = window is parked off-screen
 	topmostEnabled       atomic.Bool // user preference for always-on-top
 	// autoHideDisabled keeps the window on screen when another program takes
 	// focus. Stored inverted so the zero value is the default behaviour.
 	autoHideDisabled atomic.Bool
+	// windowHiddenCallback is set by main once WebView2 exists. The callback
+	// receives the hide generation so a fast reopen cannot reset the newly
+	// visible window.
+	windowHiddenCallback  func(uint64)
+	windowPrepareCallback func(uint64, bool)
+	windowShownCallback   func()
 )
+
+// Preparation state is owned by the UI thread. A show requested during a
+// slide-out waits for the parked page to acknowledge its final layout.
+var windowPrepared = true
+var windowParked = true
+var showPending bool
+var settingsPending bool
+var preparationID uint64
+
+func prepareParkedWindow() {
+	preparationID++
+	windowPrepareCallback(preparationID, settingsPending)
+}
+
+func completeWindowPreparation(hwnd uintptr, id uint64, height int) {
+	if id != preparationID || !windowHidden.Load() || !windowParked || windowPrepared {
+		return
+	}
+	contentHeightCSS = height
+	applyWindowSize(hwnd, winutil.DpiForWindow(hwnd))
+	windowPrepared = true
+	if showPending {
+		showAndFocus(hwnd)
+	}
+}
 
 // hideGuardWindow is the minimum time after a show during which we
 // will NOT auto-hide on focus loss.
@@ -125,6 +157,9 @@ func trayDPI() uint32 {
 // left running. Cancelled, it stopped on screen with windowHidden already
 // set, and Escape, the ✕ and auto-hide all took it for hidden.
 func resizeToContent(hwnd uintptr, contentHeight int) {
+	if windowParked && !windowPrepared {
+		return // only the preparation acknowledgement supplies the final size
+	}
 	// The frontend measured the content at WebView2's current scale,
 	// which follows the monitor the window is on.
 	contentHeightCSS = contentHeight
@@ -217,7 +252,18 @@ var (
 )
 
 func showAndFocus(hwnd uintptr) {
+	if windowHidden.Load() && !windowPrepared {
+		showPending = true
+		return
+	}
+	showPending = false
+	settingsPending = false
+	windowParked = false
+	if windowShownCallback != nil {
+		defer windowShownCallback()
+	}
 	lastShownNS.Store(time.Now().UnixNano())
+	generation := windowGeneration.Add(1)
 	windowHidden.Store(false)
 
 	// A parked window keeps the DPI it last had on screen; size it for the
@@ -259,7 +305,7 @@ func showAndFocus(hwnd uintptr) {
 	winutil.SetForegroundWindow(hwnd)
 
 	// Animate slide-up.
-	go animateY(hwnd, targetX, startY, targetY, 200*time.Millisecond, easeOutCubic)
+	go animateY(hwnd, targetX, startY, targetY, 200*time.Millisecond, easeOutCubic, generation)
 }
 
 // offScreenX/Y is where we park the window when "hidden". Kept as
@@ -281,15 +327,21 @@ func moveOffScreen(hwnd uintptr) {
 	if windowHidden.Load() {
 		return // already hidden
 	}
+	generation := windowGeneration.Add(1)
+	windowHidden.Store(true)
+	windowPrepared = false
+	windowParked = false
+	showPending = false
+	settingsPending = false
 	wa, ok := winutil.GetWorkArea()
 	wr, ok2 := winutil.GetWindowRect(hwnd)
 	if !ok || !ok2 {
 		parkOffScreen(hwnd)
+		notifyWindowHidden(generation)
 		return
 	}
 	endY := wa.Bottom // below screen
-	windowHidden.Store(true)
-	go animateY(hwnd, wr.Left, wr.Top, endY, 150*time.Millisecond, easeInCubic)
+	go animateY(hwnd, wr.Left, wr.Top, endY, 150*time.Millisecond, easeInCubic, generation)
 }
 
 // parkOffScreen moves the window to the off-screen parking position
@@ -309,7 +361,7 @@ func parkOffScreen(hwnd uintptr) {
 // behind this one on animMu. A slide-out that ran on to the end parked the
 // window right after the user had asked for it back, and marked it hidden
 // while the slide-in put it on screen.
-func animateY(hwnd uintptr, x, fromY, toY int32, duration time.Duration, ease func(float64) float64) {
+func animateY(hwnd uintptr, x, fromY, toY int32, duration time.Duration, ease func(float64) float64, generation uint64) {
 	animMu.Lock()
 	defer animMu.Unlock()
 	cancelAnim.Store(false)
@@ -321,7 +373,7 @@ func animateY(hwnd uintptr, x, fromY, toY int32, duration time.Duration, ease fu
 		if cancelAnim.Load() {
 			return // aborted by resizeToContent or another caller
 		}
-		if windowHidden.Load() != hiding {
+		if windowHidden.Load() != hiding || windowGeneration.Load() != generation {
 			return
 		}
 		t := ease(float64(i) / float64(steps))
@@ -330,12 +382,25 @@ func animateY(hwnd uintptr, x, fromY, toY int32, duration time.Duration, ease fu
 			winutil.SWP_NOSIZE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE)
 		time.Sleep(stepDur)
 	}
-	if hiding && windowHidden.Load() {
+	if hiding && windowHidden.Load() && windowGeneration.Load() == generation {
 		// Park the window exactly. Not parkOffScreen: moveOffScreen has
 		// already marked it hidden, and marking it again here could
 		// overwrite a show that arrived during the last step.
 		winutil.SetWindowPos(hwnd, 0, offScreenX, offScreenY, 0, 0,
 			winutil.SWP_NOSIZE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE)
+		notifyWindowHidden(generation)
+	}
+}
+
+// notifyWindowHidden schedules the frontend reset only after the window is
+// fully parked. The generation check makes the notification harmless if a
+// show request raced with the end of the hide animation.
+func notifyWindowHidden(generation uint64) {
+	if !windowHidden.Load() || windowGeneration.Load() != generation {
+		return
+	}
+	if windowHiddenCallback != nil {
+		windowHiddenCallback(generation)
 	}
 }
 
@@ -423,9 +488,8 @@ func dwmInvisibleBorder(hwnd uintptr, wr winutil.Rect) (right, bottom int32) {
 // the click on the tray icon is what caused that activation loss in
 // the first place, and the user's intent is clearly to hide, not to
 // immediately re-open.
-// toggleVisibility reports whether the window ended up on screen, so the
-// caller knows whether the frontend needs its "the window just appeared"
-// notification.
+// toggleVisibility reports whether it requested a show, which may wait for
+// preparation. showAndFocus sends the frontend notification on actual show.
 type toggleAction uint8
 
 const (

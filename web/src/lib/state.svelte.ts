@@ -265,10 +265,10 @@ export async function copyTopMatch(): Promise<boolean> {
 /**
  * The window is parked off-screen rather than destroyed, so reopening it
  * would otherwise show last session's search query and, if the user closed
- * from Settings, the settings view. Called from Go every time the window
- * comes back on screen.
+ * from Settings, the settings view. Called from Go after the window has been
+ * parked off-screen.
  */
-export function resetForShow(): void {
+export function resetAfterHide(): void {
   state.query = "";
   state.view = "main";
   state.operationError = null;

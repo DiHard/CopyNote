@@ -450,7 +450,7 @@ test("an import passes on what it added and skipped, then reloads the list", asy
   assert.equal(app.state.entries.length, 2);
 });
 
-test("showing the window again clears last session's search and view", async () => {
+test("hiding the window clears last session's search and view", async () => {
   const app = await setup({list: async () => twoEntries});
   await app.refresh();
 
@@ -460,7 +460,7 @@ test("showing the window again clears last session's search and view", async () 
   app.openSettings();
   assert.equal(app.state.view, "settings");
 
-  app.resetForShow();
+  app.resetAfterHide();
   assert.equal(app.state.query, "", "a two-second copy must not start pre-filtered");
   assert.equal(app.state.view, "main", "closing from Settings must not reopen there");
   assert.equal(app.state.operationError, null);

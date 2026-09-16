@@ -49,10 +49,9 @@ var browserArgs = []string{
 	"--no-first-run",
 }
 
-// notifyShown tells the frontend the window just came on screen. The window
-// is only parked off-screen, never destroyed, so without this the UI would
-// still be showing last session's search query — and possibly the settings
-// view — when the user opens it for a two-second copy.
+// notifyShown tells the frontend the window just came on screen, so it can
+// put keyboard focus back in the search box. State is reset by __onHide
+// after the hide animation, while the window is parked off-screen.
 const notifyShown = `window.__onShow && window.__onShow()`
 
 // startedByAutorun reports whether Windows started this process from the
@@ -179,6 +178,29 @@ func main() {
 	defer w.Destroy()
 
 	hwnd := uintptr(w.Window())
+	windowShownCallback = func() { w.Eval(notifyShown) }
+	windowPrepareCallback = func(id uint64, settings bool) {
+		w.Eval(fmt.Sprintf(`window.__onHide && window.__onHide(%d, %t)`, id, settings))
+	}
+	if err := w.Bind("windowPrepared", func(id uint64, height int) {
+		w.Dispatch(func() { completeWindowPreparation(hwnd, id, height) })
+	}); err != nil {
+		log.Fatal(err)
+	}
+	// The hide completion callback is dispatched back to WebView2's UI thread
+	// because the slide animation runs in the background. It is installed
+	// before the tray starts accepting user actions.
+	windowHiddenCallback = func(generation uint64) {
+		if quitting.Load() {
+			return
+		}
+		w.Dispatch(func() {
+			if !quitting.Load() && windowHidden.Load() && windowGeneration.Load() == generation {
+				windowParked = true
+				prepareParkedWindow()
+			}
+		})
+	}
 
 	// 6b. Immediately move the window off-screen so the unstyled
 	//     title-bar window isn't visible during the ~9 s WebView2
@@ -201,14 +223,11 @@ func main() {
 		OnShow: func() {
 			w.Dispatch(func() {
 				showAndFocus(hwnd)
-				w.Eval(notifyShown)
 			})
 		},
 		OnToggle: func() {
 			w.Dispatch(func() {
-				if toggleVisibilityFromTray(hwnd) {
-					w.Eval(notifyShown)
-				}
+				toggleVisibilityFromTray(hwnd)
 			})
 		},
 		IsMainWindowForeground: func() bool {
@@ -216,28 +235,29 @@ func main() {
 		},
 		OnToggleWithFocus: func(wasFocused bool) {
 			w.Dispatch(func() {
-				if toggleVisibilityWithFocus(hwnd, wasFocused) {
-					w.Eval(notifyShown)
-				}
+				toggleVisibilityWithFocus(hwnd, wasFocused)
 			})
 		},
 		OnSettings: func() {
 			w.Dispatch(func() {
-				showAndFocus(hwnd)
-				// Order matters: __onShow returns the UI to the list and
-				// focuses the search box, __openSettings then overrides the
-				// view. Both are queued on the UI thread in this order.
-				w.Eval(notifyShown)
-				w.Eval(`window.__openSettings && window.__openSettings()`)
+				if windowHidden.Load() {
+					showPending = true
+					settingsPending = true
+					windowPrepared = false
+					if windowParked {
+						prepareParkedWindow()
+					}
+				} else {
+					winutil.SetForegroundWindow(hwnd)
+					w.Eval(`window.__openSettings && window.__openSettings()`)
+				}
 			})
 		},
 		// The hotkey means the same thing as a click on the icon: bring the
 		// window up, or put it away if it is already there.
 		OnHotkey: func() {
 			w.Dispatch(func() {
-				if toggleVisibility(hwnd) {
-					w.Eval(notifyShown)
-				}
+				toggleVisibility(hwnd)
 			})
 		},
 		OnQuit: func() {

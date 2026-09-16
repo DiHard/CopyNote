@@ -55,6 +55,9 @@ try {
   Start-Sleep -Milliseconds 300
   [void](Invoke-Page 'window.applyAutoHide(false)')
   $main = [CopyNoteProbe]::MainWindow($p.Id)
+  # Seeding/reloading the page can outlast the startup focus guard. Restore
+  # a window that auto-hid during setup before measuring the tray corner.
+  if ([CopyNoteProbe]::Parked($main)) { Show-FromTray $p.Id }
   Check ([CopyNoteProbe]::WaitOnScreen($p.Id, 10000) -ge 0) 'the window is on screen' ([CopyNoteProbe]::Where($main))
   Start-Sleep -Milliseconds $SettleMs
   $full = [CopyNoteProbe]::Rect($main)

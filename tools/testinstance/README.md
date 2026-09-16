@@ -29,6 +29,7 @@ Ctrl+Alt+N and Ctrl+Alt+M. Don't type meanwhile.
 | `autorun.ps1` | Autorun writes and deletes `Run\CopyNoteTest` and never touches `Run\CopyNote` |
 | `menu.ps1` | The entry context menu opens at the pointer, or under the card for the menu key; the window stays up while it is open; its keys skip the separator and disabled items; activation and focus return to the page; switching windows or the hotkey closes it; the tray icon's menu still works |
 | `slide.ps1` | The window shrinks and grows with its bottom edge in the corner; it is put away when hidden mid-resize — Escape twice quickly, or right after typing — and after the hotkey twice in quick succession; reopened after a search it comes back at full height; Settings from the tray menu ends in the corner. Prints the window's positions while it reopens |
+| `preparation.ps1` | With a deliberately delayed layout acknowledgement, quick reopening from search and Settings waits off-screen, starts with cleared state, and keeps a constant height during slide-in. Uses a fresh temporary profile per run |
 | `trace.ps1` | Not a check: every change of the window's position and focus after a launch, for a window that appears and vanishes. `-FreshProfile` for a first run, `-WithForegroundRights` for a launch the way Explorer does it |
 
 Each check prints `[ok  ]` or `[FAIL]` lines and exits with its number of

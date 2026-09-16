@@ -2,6 +2,28 @@ package main
 
 import "testing"
 
+func TestShowWaitsForHiddenPreparation(t *testing.T) {
+	oldHidden, oldPrepared, oldPending := windowHidden.Load(), windowPrepared, showPending
+	oldGeneration := windowGeneration.Load()
+	t.Cleanup(func() {
+		windowHidden.Store(oldHidden)
+		windowPrepared, showPending = oldPrepared, oldPending
+		windowGeneration.Store(oldGeneration)
+	})
+	windowHidden.Store(true)
+	windowPrepared = false
+	showPending = false
+	windowGeneration.Store(42)
+	showAndFocus(0)
+	if !showPending || !windowHidden.Load() || windowGeneration.Load() != 42 {
+		t.Fatal("a quick show must stay hidden and preserve the pending hide generation")
+	}
+	completeWindowPreparation(0, preparationID+1, 480)
+	if windowPrepared || !showPending {
+		t.Fatal("a stale layout acknowledgement must not release the pending show")
+	}
+}
+
 func TestWindowSizeForDPI(t *testing.T) {
 	tests := []struct {
 		name         string
