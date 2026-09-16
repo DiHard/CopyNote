@@ -243,13 +243,13 @@
   >
     {#if copyState === "copied"}
       <span
-        class="rounded-md bg-success px-2 py-0.5 text-[11px] font-semibold text-on-success shadow-sm"
+        class="inline-flex items-center rounded-md bg-success px-2 py-1 text-[11px] font-semibold leading-none text-on-success shadow-sm"
       >
         {t("card.copied")}
       </span>
     {:else if copyState === "failed"}
       <span
-        class="rounded-md bg-danger px-2 py-0.5 text-[11px] font-semibold text-on-danger shadow-sm"
+        class="inline-flex items-center rounded-md bg-danger px-2 py-1 text-[11px] font-semibold leading-none text-on-danger shadow-sm"
       >
         {t("card.failed")}
       </span>
