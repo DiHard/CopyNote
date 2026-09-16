@@ -170,7 +170,9 @@
 
   <div
     data-no-drag
-    class="flex shrink-0 items-center gap-1 px-1.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+    class="flex shrink-0 items-center gap-1 px-1.5 opacity-0 transition-opacity {isDragging
+      ? ''
+      : 'group-hover:opacity-100'}"
   >
     <!-- Out of the Tab order so the list costs one stop, not three; the key
          is announced instead. -->
