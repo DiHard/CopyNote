@@ -66,6 +66,44 @@ test("a failed preference save is visible and does not poison later saves", asyn
   assert.equal(app.state.settingsError,null);
 });
 
+test("the header pin toggles auto-hide and applies the inverse to the window", async () => {
+  const saved = [];
+  const applied = [];
+  const app = await setup({
+    saveSettings: async settings => saved.push({...settings}),
+    applyAutoHide: async enabled => applied.push(enabled),
+  });
+
+  app.toggleAutoHide();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(app.state.settings.disableAutoHide, true);
+  assert.equal(saved[0].disableAutoHide, true);
+  assert.equal(applied[0], false);
+});
+
+test("a failed pin save reports an error on the main view and allows retry", async () => {
+  let fail = true;
+  const applied = [];
+  const app = await setup({
+    saveSettings: async () => { if (fail) throw new Error("disk full"); },
+    applyAutoHide: async enabled => applied.push(enabled),
+  });
+
+  app.toggleAutoHide();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.match(app.state.operationError, /disk full/);
+  assert.equal(app.state.settings.disableAutoHide, false);
+  assert.equal(app.state.settingsPending, 0);
+  assert.deepEqual(applied, []);
+
+  fail = false;
+  app.toggleAutoHide();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(app.state.operationError, null);
+  assert.equal(app.state.settings.disableAutoHide, true);
+  assert.deepEqual(applied, [false]);
+});
+
 test("cancelled file dialogs do not report success or reload settings", async () => {
   const app = await setup({importData: async()=>null, exportData: async()=>false,
     getSettings: async()=>{throw new Error("must not reload");}});

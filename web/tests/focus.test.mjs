@@ -94,7 +94,7 @@ function fakeTabDom({ cards = 3, tabbableCard = 0, listButton = false, banner = 
     return node;
   };
   const search = el("search");
-  const header = ["new", "settings", "hide"].map((n) => el(n));
+  const header = ["pin", "new", "settings", "hide"].map((n) => el(n));
   const bannerButtons = banner ? ["move", "later"].map((n) => el(n)) : [];
   const cardButtons = Array.from({ length: cards }, (_, i) => {
     const b = el(`card${i}`, { card: i });
@@ -136,7 +136,7 @@ test("the rest follows in document order and the order wraps", async () => {
   const { root, search, header, bannerButtons, cardButtons } = fakeTabDom({ banner: true });
   const focus = await load();
   const walk = [search];
-  for (let i = 0; i < 7; i++) walk.push(focus.nextTabStop(root, walk[walk.length - 1], false));
+  for (let i = 0; i < 8; i++) walk.push(focus.nextTabStop(root, walk[walk.length - 1], false));
   assert.deepEqual(
     walk.map((n) => n.name),
     [search, cardButtons[0], ...header, ...bannerButtons, search].map((n) => n.name),

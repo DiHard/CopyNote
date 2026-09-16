@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { state, openCreate, openSettings, hasUnseenUpdate, copyTopMatch } from "../state.svelte";
+  import { state, openCreate, openSettings, hasUnseenUpdate, copyTopMatch, toggleAutoHide } from "../state.svelte";
   import { SEARCH_ID, focusCardAt } from "../focus";
   import { t } from "../i18n";
 
@@ -67,6 +67,24 @@
   </div>
 
   <div class="flex shrink-0 items-center gap-0.5" style="-webkit-app-region: no-drag">
+    <button
+      type="button"
+      onclick={toggleAutoHide}
+      disabled={state.settingsPending > 0}
+      title={state.settings.disableAutoHide ? t("header.unpin") : t("header.pin")}
+      aria-label={state.settings.disableAutoHide ? t("header.unpin") : t("header.pin")}
+      aria-pressed={state.settings.disableAutoHide}
+      class="rounded p-1.5 transition disabled:cursor-wait disabled:opacity-60 {state.settings.disableAutoHide
+        ? 'bg-accent-soft text-accent hover:bg-accent-soft'
+        : 'text-on-surface-dim hover:bg-surface-hover hover:text-on-surface'}"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 17v5"></path>
+        <path d="M5 17h14"></path>
+        <path d="M17 3H7l2 6-4 4v2h14v-2l-4-4 2-6Z"></path>
+      </svg>
+    </button>
+
     <button
       type="button"
       onclick={openCreate}

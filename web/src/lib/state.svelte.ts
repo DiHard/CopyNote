@@ -397,6 +397,14 @@ export function saveSettings(patch: Partial<UserSettings>): Promise<void> {
   }).finally(() => { state.settingsPending--; });
 }
 
+/** Toggle the header pin, which is the quick way to turn auto-hide off/on. */
+export function toggleAutoHide(): void {
+  state.operationError = null;
+  void saveSettings({ disableAutoHide: !state.settings.disableAutoHide }).catch((error) => {
+    state.operationError = String(error);
+  });
+}
+
 function applyLocale(locale: string): void {
   if (locale === "system") {
     setLocale(systemLocale());

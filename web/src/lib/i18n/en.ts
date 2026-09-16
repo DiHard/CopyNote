@@ -4,6 +4,8 @@ export const en: Record<string, string> = {
   "search.placeholder": "Search\u2026",
   "header.new": "New entry",
   "header.settings": "Settings",
+  "header.pin": "Pin window",
+  "header.unpin": "Unpin window",
   "header.hide": "Hide to tray",
   "header.updateAvailable": "Update available",
 
