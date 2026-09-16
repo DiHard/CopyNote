@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"copynote/internal/hotkey"
 )
 
 func ValidateEntry(label, value string) error {
@@ -26,6 +28,9 @@ func ValidateSettings(s Settings) error {
 	case "system", "en", "ru":
 	default:
 		return fmt.Errorf("invalid locale %q", s.Locale)
+	}
+	if err := hotkey.Valid(s.Hotkey); err != nil {
+		return err
 	}
 	if s.RelocateRemindAfter != "" {
 		if _, err := time.Parse(time.RFC3339, s.RelocateRemindAfter); err != nil {

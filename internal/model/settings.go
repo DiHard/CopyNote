@@ -40,6 +40,11 @@ type Settings struct {
 	// banner stays hidden; "" means no snooze is running. Unlike the
 	// permanent dismissal above, this one wears off on its own.
 	RelocateRemindAfter string `json:"relocateRemindAfter"`
+	// Hotkey is the global shortcut that opens the window, as the user sees
+	// it ("Ctrl+Alt+N"). Empty means the built-in default rather than
+	// "disabled" — an older data.json carries no such key, and a zero value
+	// must not silently switch the feature off. "off" disables it.
+	Hotkey string `json:"hotkey"`
 }
 
 // DefaultSettings returns the initial settings for a fresh install.

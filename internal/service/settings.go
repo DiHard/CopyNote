@@ -89,7 +89,14 @@ func (s *Service) SnoozeRelocatePrompt() (string, error) {
 }
 
 const autorunKeyPath = `Software\Microsoft\Windows\CurrentVersion\Run`
-const autorunValueName = "CopyNote"
+
+// autorunValueName is this installation's entry under autorunKeyPath. A var
+// so a test build can run beside the real application
+// (-X copynote/internal/service.autorunValueName=...). The key is shared by
+// every copy of the program and EnsureAutorunPath rewrites the value on each
+// start, so a test instance using the real name repoints the real autorun
+// entry at itself — or, with fresh settings where autorun is off, deletes it.
+var autorunValueName = "CopyNote"
 
 // AutostartFlag is appended to the autorun registry command line so the
 // process can tell a Windows sign-in from a launch the user performed

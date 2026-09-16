@@ -34,9 +34,12 @@
 
 <svelte:window onkeydown={onKeydown} />
 
+<!-- Scrolls rather than centres, like EntryModal: a long label can make the
+     card taller than the window. -->
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div
-  class="fixed inset-0 z-40 flex items-center justify-center bg-overlay p-4"
+  data-modal
+  class="fixed inset-0 z-40 flex overflow-y-auto bg-overlay p-4 outline-none"
   use:modalFocus
   role="dialog"
   aria-labelledby="modal-title"
@@ -47,7 +50,8 @@
   }}
 >
   <div
-    class="w-full max-w-sm rounded-xl border border-outline bg-surface-alt p-4 shadow-2xl"
+    data-modal-card
+    class="m-auto w-full max-w-sm rounded-xl border border-outline bg-surface-alt p-4 shadow-2xl"
     transition:fade={{ duration: 150 }}
   >
     <h2 id="modal-title" class="mb-1 text-base font-semibold text-on-surface">{t("confirm.delete.title")}</h2>
@@ -73,7 +77,7 @@
         type="button"
         disabled={busy}
         onclick={confirm}
-        class="rounded-md bg-danger px-3 py-1.5 text-sm font-medium text-white shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+        class="rounded-md bg-danger px-3 py-1.5 text-sm font-medium text-on-danger shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {t("confirm.delete")}
       </button>

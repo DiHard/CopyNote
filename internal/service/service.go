@@ -266,9 +266,17 @@ func (s *Service) ExportData() ([]byte, error) {
 	return data, nil
 }
 
+// ImportResult reports what ImportData did with a file's entries.
+type ImportResult struct {
+	Added   int `json:"added"`
+	Skipped int `json:"skipped"`
+}
+
 // ImportData merges entries from a backup JSON blob and overwrites
-// settings. Duplicate entries (same label + value) are skipped.
-func (s *Service) ImportData(raw []byte) error {
+// settings. Duplicate entries (same label + value, whether already in the
+// list or earlier in the file) are skipped and counted, so the UI can say
+// what the import actually did.
+func (s *Service) ImportData(raw []byte) (ImportResult, error) {
 	// Pointer fields distinguish missing/null values from a valid empty backup.
 	var input struct {
 		FormatVersion int             `json:"formatVersion"`
@@ -277,23 +285,23 @@ func (s *Service) ImportData(raw []byte) error {
 		Settings      json.RawMessage `json:"settings"`
 	}
 	if err := json.Unmarshal(raw, &input); err != nil {
-		return fmt.Errorf("invalid backup file: %w", err)
+		return ImportResult{}, fmt.Errorf("invalid backup file: %w", err)
 	}
 	if input.AppVersion == "" || input.Entries == nil || len(input.Settings) == 0 || string(input.Settings) == "null" {
-		return errors.New("invalid backup: appVersion, entries and settings are required")
+		return ImportResult{}, errors.New("invalid backup: appVersion, entries and settings are required")
 	}
 	if input.FormatVersion < 0 || input.FormatVersion > 1 {
-		return errors.New("unsupported backup format version")
+		return ImportResult{}, errors.New("unsupported backup format version")
 	}
 	settings, err := model.DecodeSettings(input.Settings)
 	if err != nil {
-		return fmt.Errorf("invalid settings: %w", err)
+		return ImportResult{}, fmt.Errorf("invalid settings: %w", err)
 	}
 	entries := *input.Entries
 	for i := range entries {
 		entries[i].Label = strings.TrimSpace(entries[i].Label)
 		if err := model.ValidateEntry(entries[i].Label, entries[i].Value); err != nil {
-			return fmt.Errorf("entry %d: %w", i+1, err)
+			return ImportResult{}, fmt.Errorf("entry %d: %w", i+1, err)
 		}
 	}
 
@@ -319,9 +327,11 @@ func (s *Service) ImportData(raw []byte) error {
 	}
 
 	// Append non-duplicate entries with fresh IDs and sequential order.
+	var result ImportResult
 	now := s.now()
 	for _, e := range entries {
 		if existing[key{e.Label, e.Value}] {
+			result.Skipped++
 			continue
 		}
 		maxOrder++
@@ -334,7 +344,11 @@ func (s *Service) ImportData(raw []byte) error {
 			UpdatedAt: now,
 		})
 		existing[key{e.Label, e.Value}] = true
+		result.Added++
 	}
 
-	return s.commitSettingsLocked(next)
+	if err := s.commitSettingsLocked(next); err != nil {
+		return ImportResult{}, err
+	}
+	return result, nil
 }

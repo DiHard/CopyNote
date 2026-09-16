@@ -109,25 +109,27 @@ func trayDPI() uint32 {
 
 // resizeToContent adjusts the window height to fit contentHeight CSS
 // pixels reported by the frontend, clamped to [minWindowHeight,
-// workAreaHeight - 2*margin]. The window is re-anchored to the
-// bottom-right tray corner after resizing.
+// workAreaHeight - 2*margin]. A visible window whose size changed is
+// re-anchored to the bottom-right tray corner.
+//
+// The frontend animates the height and reports every frame of it, for about
+// a quarter of a second after whatever changed the content, so these calls
+// keep arriving in the middle of slides. Only a visible window that really
+// changed size cancels one: a slide-in aimed for the old height would stop
+// short of the corner. A hidden window is resized in place and its slide-out
+// left running. Cancelled, it stopped on screen with windowHidden already
+// set, and Escape, the ✕ and auto-hide all took it for hidden.
 func resizeToContent(hwnd uintptr, contentHeight int) {
-	// Cancel any running slide animation so it doesn't overwrite
-	// our position after we re-anchor.
-	cancelAnim.Store(true)
-
 	// The frontend measured the content at WebView2's current scale,
 	// which follows the monitor the window is on.
 	contentHeightCSS = contentHeight
-	applyWindowSize(hwnd, winutil.DpiForWindow(hwnd))
-
-	// Only re-anchor to the tray corner if the window is currently
-	// on-screen. If it's parked off-screen (hidden), just resize in
-	// place — otherwise the window would jump into view without the
-	// user clicking the tray icon.
-	if !windowHidden.Load() {
-		anchorToTrayCorner(hwnd)
+	if !applyWindowSize(hwnd, winutil.DpiForWindow(hwnd)) || windowHidden.Load() {
+		// Nothing moved, or the window is parked or sliding away — and a
+		// parked window must not jump into view.
+		return
 	}
+	cancelAnim.Store(true)
+	anchorToTrayCorner(hwnd)
 }
 
 // installSubclass installs a subclass WndProc on hwnd that intercepts
@@ -265,6 +267,8 @@ const (
 // edge, then parking it at offScreenX/Y. Unlike SW_HIDE this keeps
 // WS_VISIBLE set so WebView2's renderer is never throttled.
 func moveOffScreen(hwnd uintptr) {
+	// A context menu must not outlive the window it belongs to.
+	entryMenu.Close()
 	if windowHidden.Load() {
 		return // already hidden
 	}
@@ -287,19 +291,29 @@ func parkOffScreen(hwnd uintptr) {
 		winutil.SWP_NOSIZE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE)
 }
 
-// animateY slides the window from startY to endY over duration.
+// animateY slides the window from fromY to toY over duration.
 // Uses SetWindowPos from a background goroutine (safe for top-level
 // windows — Windows marshals the call internally).
+//
+// A slide whose direction no longer matches windowHidden gives way at once
+// to the show or hide that flipped it — usually the opposite slide, queued
+// behind this one on animMu. A slide-out that ran on to the end parked the
+// window right after the user had asked for it back, and marked it hidden
+// while the slide-in put it on screen.
 func animateY(hwnd uintptr, x, fromY, toY int32, duration time.Duration, ease func(float64) float64) {
 	animMu.Lock()
 	defer animMu.Unlock()
 	cancelAnim.Store(false)
 
+	hiding := toY > fromY
 	const steps = 20
 	stepDur := duration / steps
 	for i := 1; i <= steps; i++ {
 		if cancelAnim.Load() {
 			return // aborted by resizeToContent or another caller
+		}
+		if windowHidden.Load() != hiding {
+			return
 		}
 		t := ease(float64(i) / float64(steps))
 		y := fromY + int32(float64(toY-fromY)*t)
@@ -307,10 +321,12 @@ func animateY(hwnd uintptr, x, fromY, toY int32, duration time.Duration, ease fu
 			winutil.SWP_NOSIZE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE)
 		time.Sleep(stepDur)
 	}
-	// Ensure final position is exact.
-	if toY > fromY {
-		// Hiding — park off-screen.
-		parkOffScreen(hwnd)
+	if hiding && windowHidden.Load() {
+		// Park the window exactly. Not parkOffScreen: moveOffScreen has
+		// already marked it hidden, and marking it again here could
+		// overwrite a show that arrived during the last step.
+		winutil.SetWindowPos(hwnd, 0, offScreenX, offScreenY, 0, 0,
+			winutil.SWP_NOSIZE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE)
 	}
 }
 

@@ -67,16 +67,16 @@ test("a failed preference save is visible and does not poison later saves", asyn
 });
 
 test("cancelled file dialogs do not report success or reload settings", async () => {
-  const app = await setup({importData: async()=>false, exportData: async()=>false,
+  const app = await setup({importData: async()=>null, exportData: async()=>false,
     getSettings: async()=>{throw new Error("must not reload");}});
-  assert.equal(await app.importData(),false);
+  assert.equal(await app.importData(),null);
   assert.equal(await app.exportData(),false);
   assert.equal(app.state.settingsError,null);
 });
 
 test("import and a following preference write use the imported snapshot", async () => {
   const writes=[];
-  const app=await setup({importData:async()=>true, list:async()=>[],
+  const app=await setup({importData:async()=>({added:0,skipped:0}), list:async()=>[],
     getSettings:async()=>({...app.state.settings,theme:"dark"}),
     saveSettings:async value=>writes.push({...value})});
   const imported=app.importData();
@@ -370,13 +370,46 @@ test("Enter copies nothing when the filter matches nothing", async () => {
 test("a failed clipboard write is reported and does not hide the window", async () => {
   const app = await setup({
     list: async () => twoEntries,
-    copy: async () => {throw new Error("clipboard is locked");},
+    copy: async () => {throw new Error("clipboard: EmptyClipboard: Access is denied.");},
   });
   await app.refresh();
 
   assert.equal(await app.copyTopMatch(), false);
-  assert.match(app.state.operationError, /clipboard is locked/);
-  assert.doesNotMatch(app.state.operationError, /^Error:/, "the Error: prefix is stripped");
+  assert.deepEqual(
+    app.state.copyError,
+    {busy: false, detail: "EmptyClipboard: Access is denied."},
+    "Go's wording, without the Error: and clipboard: prefixes",
+  );
+});
+
+test("a busy clipboard gets a sentence, and the next good copy clears it", async () => {
+  let busy = true;
+  const app = await setup({
+    list: async () => twoEntries,
+    // go-webview2 rejects with Go's error text as a plain string.
+    copy: async () => {
+      if (busy) throw "clipboard: OpenClipboard busy after 5 attempts: Access is denied.";
+      return null;
+    },
+  });
+  await app.refresh();
+
+  await assert.rejects(app.copyEntry("1"), undefined, "the card still learns that the copy failed");
+  assert.equal(app.state.copyError.busy, true);
+
+  busy = false;
+  await app.copyEntry("1");
+  assert.equal(app.state.copyError, null);
+});
+
+test("an import passes on what it added and skipped, then reloads the list", async () => {
+  const app = await setup({
+    importData: async () => ({added: 2, skipped: 1}),
+    list: async () => twoEntries,
+    getSettings: async () => ({...app.state.settings}),
+  });
+  assert.deepEqual(await app.importData(), {added: 2, skipped: 1});
+  assert.equal(app.state.entries.length, 2);
 });
 
 test("showing the window again clears last session's search and view", async () => {
@@ -385,6 +418,7 @@ test("showing the window again clears last session's search and view", async () 
 
   app.state.query = "почта";
   app.state.operationError = "stale failure";
+  app.state.copyError = {busy: true, detail: "OpenClipboard busy"};
   app.openSettings();
   assert.equal(app.state.view, "settings");
 
@@ -392,4 +426,92 @@ test("showing the window again clears last session's search and view", async () 
   assert.equal(app.state.query, "", "a two-second copy must not start pre-filtered");
   assert.equal(app.state.view, "main", "closing from Settings must not reopen there");
   assert.equal(app.state.operationError, null);
+  assert.equal(app.state.copyError, null, "last session's failure is not news");
+});
+
+test("the first entry teaches copying before it warns about Downloads", async () => {
+  const app = await setup({
+    getInstallLocation: async () => location(),
+    list: async () => [],
+    create: async (label, value) => ({id: "1", label, value, order: 0}),
+    copy: async () => null,
+  });
+  await app.loadInstallLocation();
+  await app.refresh();
+
+  await app.createEntry("Email", "me@example.com");
+  assert.equal(app.state.showFirstCopyHint, true, "the hint appears when it can first be tried");
+  assert.equal(app.shouldShowRelocateBanner(), false, "the warning must not drown it");
+
+  await app.copyEntry("1");
+  assert.equal(app.state.showFirstCopyHint, false, "a successful copy retires the hint");
+  assert.equal(app.shouldShowRelocateBanner(), true, "and the banner takes its turn");
+});
+
+test("an entry added to a list that already had some shows no hint", async () => {
+  const app = await setup({
+    list: async () => [anEntry],
+    create: async (label, value) => ({id: "2", label, value, order: 0}),
+  });
+  await app.refresh();
+  await app.createEntry("Second", "value");
+  assert.equal(app.state.showFirstCopyHint, false, "existing users are not taught again");
+});
+
+test("the empty-search action prefills the form with what was typed", async () => {
+  const app = await setup({list: async () => [anEntry]});
+  await app.refresh();
+
+  app.openCreate();
+  assert.deepEqual(app.state.modal, {kind: "create", label: ""});
+
+  app.openCreateFromSearch("  ИНН для ООО  ");
+  assert.deepEqual(app.state.modal, {kind: "create", label: "ИНН для ООО"}, "trimmed");
+});
+
+test("a shortcut Windows accepts is stored", async () => {
+  const saved = [];
+  const app = await setup({
+    applyHotkey: async () => {},
+    saveSettings: async settings => { saved.push(settings.hotkey); },
+  });
+  await app.applyHotkey("Ctrl+Shift+F5");
+  assert.equal(app.state.hotkeyError, null);
+  assert.equal(app.state.settings.hotkey, "Ctrl+Shift+F5");
+  assert.deepEqual(saved, ["Ctrl+Shift+F5"]);
+});
+
+test("a shortcut Windows refuses is reported and never stored", async () => {
+  const saved = [];
+  const app = await setup({
+    applyHotkey: async () => { throw new Error("Hot key is already registered."); },
+    saveSettings: async settings => { saved.push(settings.hotkey); },
+  });
+  await app.applyHotkey("Ctrl+Alt+N");
+  assert.deepEqual(
+    app.state.hotkeyError,
+    {combo: "Ctrl+Alt+N", taken: true, detail: "Hot key is already registered"},
+    "the ordinary refusal is recognised; the Error: prefix and trailing period are gone",
+  );
+  assert.deepEqual(saved, [], "a shortcut that does not work must not be persisted");
+  assert.equal(app.state.settings.hotkey, "", "the previous preference stays in place");
+});
+
+test("an unexpected hotkey failure keeps Windows' wording and names the default", async () => {
+  const app = await setup({
+    applyHotkey: async () => { throw new Error("Error: Access is denied."); },
+  });
+  await app.applyHotkey("");
+  assert.deepEqual(
+    app.state.hotkeyError,
+    {combo: "Ctrl+Alt+N", taken: false, detail: "Access is denied"},
+    "an empty preference is reported as the default combination, never as a blank",
+  );
+});
+
+test("the empty preference is shown as the default combination", async () => {
+  const app = await setup();
+  assert.equal(app.hotkeyLabel(), app.DEFAULT_HOTKEY, "an older data.json has no hotkey key at all");
+  app.state.settings = {...app.state.settings, hotkey: "Ctrl+Shift+F5"};
+  assert.equal(app.hotkeyLabel(), "Ctrl+Shift+F5");
 });

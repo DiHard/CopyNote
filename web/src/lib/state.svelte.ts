@@ -1,4 +1,4 @@
-import type { Entry, InstallLocation, ModalState, UpdateInfo, UpdateProgress, UserSettings, ViewMode } from "./types";
+import type { Entry, ImportResult, InstallLocation, ModalState, UpdateInfo, UpdateProgress, UserSettings, ViewMode } from "./types";
 import { createTaskQueue } from "./taskQueue";
 import { api } from "./api";
 import { setLocale, systemLocale } from "./i18n";
@@ -50,6 +50,23 @@ export const state = $state<{
   /** Session-only: "remind me later" was clicked, so the banner is gone
    *  now regardless of whether the write has landed yet. */
   relocateSnoozeClicked: boolean;
+  /** Session-only: the user just filled an empty list, so the hint about
+   *  clicking a card is worth showing — that is the first moment it can
+   *  actually be tried. Deliberately not persisted: no settings field to
+   *  migrate, and installations that already have entries never see it. */
+  showFirstCopyHint: boolean;
+  /** Why Windows refused the global shortcut, if it did. Unlike the other
+   *  preferences this one can fail outside the app's control. `taken` is the
+   *  ordinary case — another program owns the combination — and gets a plain
+   *  sentence; anything else falls back to Windows' own wording in `detail`.
+   *  Kept structured rather than as a finished string so a language switch
+   *  re-renders it. */
+  hotkeyError: { combo: string; taken: boolean; detail: string } | null;
+  /** Why the last copy failed, if it did. Another program holding the
+   *  clipboard open is the ordinary case and gets a plain sentence; anything
+   *  else keeps Go's wording in `detail`. Structured like hotkeyError, so a
+   *  language switch re-renders it. */
+  copyError: { busy: boolean; detail: string } | null;
 }>({
   entries: [],
   query: "",
@@ -66,6 +83,7 @@ export const state = $state<{
     disableAutoHide: false,
     relocatePromptDismissed: false,
     relocateRemindAfter: "",
+    hotkey: "",
     lastSeenUpdateVersion: "",
   },
   settingsError: null,
@@ -77,7 +95,55 @@ export const state = $state<{
   installLocation: null,
   relocate: { kind: "idle" },
   relocateSnoozeClicked: false,
+  showFirstCopyHint: false,
+  hotkeyError: null,
+  copyError: null,
 });
+
+/** The combination Go falls back to when the preference is empty. */
+export const DEFAULT_HOTKEY = "Ctrl+Alt+N";
+export const HOTKEY_OFF = "off";
+
+/** What to print for the stored preference. */
+export function hotkeyLabel(): string {
+  const h = state.settings.hotkey;
+  return h === "" ? DEFAULT_HOTKEY : h;
+}
+
+/**
+ * Registers the combination first and only stores it once Windows accepted
+ * it — persisting a shortcut that does not work would leave the user with a
+ * setting that lies. Another program owning the combination is the ordinary
+ * failure here, not an exception.
+ */
+/**
+ * Turns whatever the bridge threw into something Settings can phrase. The
+ * combination comes from what was asked for, never from the error text — an
+ * empty preference means the default and must not print as a blank.
+ */
+export function describeHotkeyError(
+  spec: string,
+  error: unknown,
+): { combo: string; taken: boolean; detail: string } {
+  const detail = String(error).replace(/^(Error:\s*)+/, "").replace(/\.\s*$/, "");
+  return {
+    combo: spec.trim() === "" ? DEFAULT_HOTKEY : spec,
+    // ERROR_HOTKEY_ALREADY_REGISTERED is the refusal people actually hit.
+    taken: /already registered/i.test(detail),
+    detail,
+  };
+}
+
+export async function applyHotkey(spec: string): Promise<void> {
+  state.hotkeyError = null;
+  try {
+    await api.applyHotkey(spec);
+  } catch (error) {
+    state.hotkeyError = describeHotkeyError(spec, error);
+    return;
+  }
+  await saveSettings({ hotkey: spec }).catch(() => {});
+}
 
 /**
  * True when there is an update available AND the user has not yet
@@ -120,6 +186,7 @@ export async function createEntry(
   label: string,
   value: string,
 ): Promise<Entry> {
+  const wasEmpty = state.entries.length === 0;
   const created = await api.create(label, value);
   // Server sets order=0 for the new entry and shifts existing ones.
   // Mirror locally: bump all existing orders by 1, prepend the new entry.
@@ -127,6 +194,7 @@ export async function createEntry(
     created,
     ...state.entries.map((e) => ({ ...e, order: e.order + 1 })),
   ];
+  if (wasEmpty) state.showFirstCopyHint = true;
   return created;
 }
 
@@ -149,8 +217,31 @@ export async function deleteEntry(id: string): Promise<void> {
     .map((e, i) => ({ ...e, order: i }));
 }
 
+/**
+ * Turns a failed clipboard write into something the error line can phrase.
+ * Go reports "OpenClipboard busy" once another program has held the
+ * clipboard through all of its retries (clipboard.openClipboardWithRetry).
+ */
+export function describeCopyError(error: unknown): { busy: boolean; detail: string } {
+  const detail = String(error).replace(/^(Error:\s*)+/, "").replace(/^clipboard:\s*/, "");
+  return { busy: /OpenClipboard busy/.test(detail), detail };
+}
+
+/** Rejects when the clipboard write fails, after recording why in copyError. */
 export async function copyEntry(id: string): Promise<void> {
-  await api.copy(id);
+  try {
+    await api.copy(id);
+  } catch (error) {
+    state.copyError = describeCopyError(error);
+    throw error;
+  }
+  state.copyError = null;
+  // The hint has done its job the moment a copy succeeds.
+  state.showFirstCopyHint = false;
+}
+
+export function dismissFirstCopyHint(): void {
+  state.showFirstCopyHint = false;
 }
 
 /**
@@ -164,10 +255,9 @@ export async function copyTopMatch(): Promise<boolean> {
   if (!first) return false;
   try {
     await copyEntry(first.id);
-    state.operationError = null;
     return true;
-  } catch (error) {
-    state.operationError = String(error).replace(/^Error:\s*/, "");
+  } catch {
+    // copyEntry has recorded why; the window stays up to show it.
     return false;
   }
 }
@@ -182,6 +272,7 @@ export function resetForShow(): void {
   state.query = "";
   state.view = "main";
   state.operationError = null;
+  state.copyError = null;
 }
 
 /**
@@ -213,8 +304,15 @@ export async function reorderEntries(orderedIds: string[]): Promise<void> {
   }
 }
 
+// Two functions rather than one with a default argument: both call sites
+// pass this straight to `onclick`, which would hand it a MouseEvent.
 export function openCreate(): void {
-  state.modal = { kind: "create" };
+  state.modal = { kind: "create", label: "" };
+}
+
+/** "Nothing found" offers to save what was typed, so the form starts filled. */
+export function openCreateFromSearch(query: string): void {
+  state.modal = { kind: "create", label: query.trim() };
 }
 export function openEdit(entry: Entry): void {
   state.modal = { kind: "edit", entry };
@@ -249,11 +347,12 @@ export function exportData(): Promise<boolean> {
   return enqueueSettings(() => api.exportData());
 }
 
-export function importData(): Promise<boolean> {
+/** Resolves to what the import did, or null when the file dialog was cancelled. */
+export function importData(): Promise<ImportResult | null> {
   return enqueueSettings(async () => {
-    const imported = await api.importData();
-    if (imported) await Promise.all([refresh(), loadSettings()]);
-    return imported;
+    const result = await api.importData();
+    if (result) await Promise.all([refresh(), loadSettings()]);
+    return result;
   });
 }
 
@@ -270,6 +369,12 @@ export async function loadSettings(): Promise<void> {
   applyLocale(state.settings.locale);
   window.applyTopmost?.(state.settings.topmost);
   window.applyAutoHide?.(!state.settings.disableAutoHide);
+  // The tray already registered this at startup; re-applying is cheap and is
+  // the only way a conflict detected back then reaches the Settings screen,
+  // where the user can actually do something about it.
+  window.applyHotkey?.(state.settings.hotkey).catch((error) => {
+    state.hotkeyError = describeHotkeyError(state.settings.hotkey, error);
+  });
 }
 
 export function saveSettings(patch: Partial<UserSettings>): Promise<void> {
@@ -468,6 +573,14 @@ export function canOfferRelocate(): boolean {
   return loc !== null && loc.canRelocate && !loc.permanent;
 }
 
+/** The folder name alone — the full path is too long for 420 px and the
+ *  name is what makes "you are running from Downloads" land. */
+export function installFolderName(): string {
+  const dir = state.installLocation?.dir ?? "";
+  const parts = dir.split(/[\\/]/).filter(Boolean);
+  return parts.length > 0 ? parts[parts.length - 1] : dir;
+}
+
 /** How many entries the user must have before the banner is worth showing.
  *  Raise it to hold the warning back further. */
 const RELOCATE_BANNER_MIN_ENTRIES = 1;
@@ -491,6 +604,10 @@ export function shouldShowRelocateBanner(): boolean {
     canOfferRelocate() &&
     !state.settings.relocatePromptDismissed &&
     !relocateSnoozed() &&
+    // The first entry is also when the "click a card to copy" hint appears.
+    // Stacking a disk-cleanup warning on top of the one lesson the app ever
+    // teaches would drown it; the banner waits for the hint to retire.
+    !state.showFirstCopyHint &&
     state.entries.length >= RELOCATE_BANNER_MIN_ENTRIES
   );
 }

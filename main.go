@@ -33,14 +33,15 @@ import (
 //go:embed all:web/dist
 var distFS embed.FS
 
+// singletonName is the single-instance mutex. A var so a test build can run
+// beside the real application (-X main.singletonName=...). The tray class and
+// show message names in internal/tray and the autorun value name in
+// internal/service take the same override; CLAUDE.md lists the full set.
+var singletonName = `Local\dev.copynote.app.singleton`
+
 // Chromium switches passed to WebView2 to disable background services
 // that add startup latency on first navigation (Safe Browsing updater,
 // domain reliability telemetry, component updater, etc.).
-// singletonName is the single-instance mutex. A var so a test build can run
-// beside the real application (-X main.singletonName=...; the tray class and
-// show message names in internal/tray have the same override).
-var singletonName = `Local\dev.copynote.app.singleton`
-
 var browserArgs = []string{
 	"--disable-background-networking",
 	"--disable-component-update",
@@ -126,9 +127,11 @@ func main() {
 
 	// 3c. Load settings early so topmost preference is known before the
 	//     first showAndFocus call.
+	var startupHotkey string
 	if s, err := svc.GetSettings(); err == nil {
 		topmostEnabled.Store(s.Topmost)
 		autoHideDisabled.Store(s.DisableAutoHide)
+		startupHotkey = s.Hotkey
 	} else {
 		topmostEnabled.Store(true) // default
 	}
@@ -194,6 +197,7 @@ func main() {
 		// sign-in must not. The autorun registry entry carries the flag,
 		// so its absence means a person started this.
 		ShowOnStart: !startedByAutorun(),
+		Hotkey:      startupHotkey,
 		OnShow: func() {
 			w.Dispatch(func() {
 				showAndFocus(hwnd)
@@ -215,6 +219,15 @@ func main() {
 				// view. Both are queued on the UI thread in this order.
 				w.Eval(notifyShown)
 				w.Eval(`window.__openSettings && window.__openSettings()`)
+			})
+		},
+		// The hotkey means the same thing as a click on the icon: bring the
+		// window up, or put it away if it is already there.
+		OnHotkey: func() {
+			w.Dispatch(func() {
+				if toggleVisibility(hwnd) {
+					w.Eval(notifyShown)
+				}
 			})
 		},
 		OnQuit: func() {

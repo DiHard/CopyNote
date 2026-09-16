@@ -96,7 +96,7 @@ func TestImportValidatesBeforeSideEffects(t *testing.T) {
 			s, path, _ := newTestService(t)
 			called := false
 			s.setAutorun = func(bool) error { called = true; return nil }
-			if err := s.ImportData([]byte(raw)); err == nil {
+			if _, err := s.ImportData([]byte(raw)); err == nil {
 				t.Fatal("accepted invalid backup")
 			}
 			if called || len(s.List()) != 0 {
@@ -124,7 +124,7 @@ func TestImportFailureIsAtomicAndRestoresAutorun(t *testing.T) {
 	var calls []bool
 	s.setAutorun = func(v bool) error { calls = append(calls, v); return nil }
 	s.saveStore = func(string, model.Store) error { return errors.New("disk full") }
-	if err := s.ImportData(backup(t, []model.Entry{{Label: "new"}}, settings)); err == nil {
+	if _, err := s.ImportData(backup(t, []model.Entry{{Label: "new"}}, settings)); err == nil {
 		t.Fatal("expected failure")
 	}
 	if !reflect.DeepEqual(calls, []bool{true, false}) {
@@ -151,11 +151,20 @@ func TestImportDeduplicatesAndPersistsSettingsTogether(t *testing.T) {
 	settings := model.DefaultSettings()
 	settings.Theme = "dark"
 	raw := backup(t, []model.Entry{{Label: " A ", Value: "a"}, {ID: "old", Label: "B", Value: "b"}, {Label: "B", Value: "b"}}, settings)
-	if err := s.ImportData(raw); err != nil {
+	first, err := s.ImportData(raw)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.ImportData(raw); err != nil {
+	// " A " trims to the entry already there, and B is in the file twice.
+	if first != (ImportResult{Added: 1, Skipped: 2}) {
+		t.Fatalf("first import: %+v", first)
+	}
+	again, err := s.ImportData(raw)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if again != (ImportResult{Skipped: 3}) {
+		t.Fatalf("second import: %+v", again)
 	}
 	reloaded, err := New(path)
 	if err != nil {
@@ -174,7 +183,7 @@ func TestImportDeduplicatesAndPersistsSettingsTogether(t *testing.T) {
 		t.Fatal(err)
 	}
 	other, _, _ := newTestService(t)
-	if err := other.ImportData(exported); err != nil || len(other.List()) != 2 {
+	if _, err := other.ImportData(exported); err != nil || len(other.List()) != 2 {
 		t.Fatalf("round trip: %v", err)
 	}
 }

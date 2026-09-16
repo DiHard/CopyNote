@@ -76,3 +76,88 @@ test("focusCardAt clamps instead of throwing", async () => {
   focus.focusCardAt(-5);
   assert.equal(doc.activeElement, cards[0]);
 });
+
+// nextTabStop reads a little more: the tab stops under a root, the attributes
+// its selectors ask about, and closest() for buttons inside a card.
+function fakeTabDom({ cards = 3, tabbableCard = 0, listButton = false, banner = false } = {}) {
+  const doc = { activeElement: null };
+  const el = (name, attrs = {}) => {
+    const node = {
+      name,
+      attrs,
+      tabIndex: 0,
+      disabled: false,
+      getClientRects: () => [{}],
+      closest: (sel) => (sel === "[data-entry-id]" && attrs.card !== undefined ? node : null),
+      focus() { doc.activeElement = node; },
+    };
+    return node;
+  };
+  const search = el("search");
+  const header = ["new", "settings", "hide"].map((n) => el(n));
+  const bannerButtons = banner ? ["move", "later"].map((n) => el(n)) : [];
+  const cardButtons = Array.from({ length: cards }, (_, i) => {
+    const b = el(`card${i}`, { card: i });
+    b.tabIndex = i === tabbableCard ? 0 : -1;
+    return b;
+  });
+  const edit = el("edit", { card: 0 });
+  edit.tabIndex = -1;
+  const add = listButton ? [el("add", { listFocus: true })] : [];
+  const offscreen = el("display-none");
+  offscreen.getClientRects = () => [];
+  const all = [search, ...header, ...bannerButtons, ...cardButtons, edit, ...add, offscreen];
+  const root = {
+    querySelectorAll: () => all,
+    querySelector: () =>
+      all.find((n) => (n.attrs.card !== undefined && n.tabIndex === 0) || n.attrs.listFocus) ?? null,
+  };
+  doc.getElementById = (id) => (id === "entry-search" ? search : null);
+  globalThis.document = doc;
+  return { root, search, header, bannerButtons, cardButtons, edit, add, offscreen };
+}
+
+test("Tab from the search box reaches the list before the header buttons", async () => {
+  const { root, search, header, cardButtons } = fakeTabDom();
+  const focus = await load();
+  assert.equal(focus.nextTabStop(root, search, false), cardButtons[0]);
+  assert.equal(focus.nextTabStop(root, cardButtons[0], false), header[0]);
+  assert.equal(focus.nextTabStop(root, header[0], true), cardButtons[0], "Shift+Tab walks the same order back");
+  assert.equal(focus.nextTabStop(root, cardButtons[0], true), search);
+});
+
+test("Tab lands on the card that last had focus", async () => {
+  const { root, search, cardButtons } = fakeTabDom({ tabbableCard: 2 });
+  const focus = await load();
+  assert.equal(focus.nextTabStop(root, search, false), cardButtons[2]);
+});
+
+test("the rest follows in document order and the order wraps", async () => {
+  const { root, search, header, bannerButtons, cardButtons } = fakeTabDom({ banner: true });
+  const focus = await load();
+  const walk = [search];
+  for (let i = 0; i < 7; i++) walk.push(focus.nextTabStop(root, walk[walk.length - 1], false));
+  assert.deepEqual(
+    walk.map((n) => n.name),
+    [search, cardButtons[0], ...header, ...bannerButtons, search].map((n) => n.name),
+  );
+});
+
+test("with no entries the empty screen's button takes the list's place", async () => {
+  const { root, search, add } = fakeTabDom({ cards: 0, listButton: true });
+  const focus = await load();
+  assert.equal(focus.nextTabStop(root, search, false), add[0]);
+});
+
+test("Tab from a card's own button carries on after the card", async () => {
+  const { root, header, edit } = fakeTabDom();
+  const focus = await load();
+  assert.equal(focus.nextTabStop(root, edit, false), header[0]);
+});
+
+test("focus outside the order is left to the browser", async () => {
+  const { root, offscreen } = fakeTabDom();
+  const focus = await load();
+  assert.equal(focus.nextTabStop(root, offscreen, false), null);
+  assert.equal(focus.nextTabStop(root, null, false), null);
+});
