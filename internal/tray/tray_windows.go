@@ -570,6 +570,7 @@ func trayWndProc(hwnd, msgID, wParam, lParam uintptr) uintptr {
 		// PostQuitMessage must run on the thread whose GetMessage loop is
 		// being stopped; posting WM_QUIT to the window itself is insufficient.
 		procPostQuitMessage.Call(0)
+		return 0
 
 	case msgApplyHotkey:
 		if t == nil {
@@ -941,8 +942,8 @@ func (t *Tray) RefreshTip() {
 const msgRefreshTip = winutil.WM_APP + 4
 
 // msgStop is handled by trayWndProc, which then posts WM_QUIT to the tray
-// thread's queue. WM_APP+5 keeps it separate from the other tray commands.
-const msgStop = winutil.WM_APP + 5
+// thread's queue. WM_APP+6 keeps it separate from the other tray commands.
+const msgStop = winutil.WM_APP + 6
 
 // applyTip updates the hover text of an icon already in the tray.
 // Must run on the tray's OS thread.
