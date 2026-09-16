@@ -460,7 +460,9 @@ test("hiding the window clears last session's search and view", async () => {
   app.openSettings();
   assert.equal(app.state.view, "settings");
 
+  const resetBefore = app.state.listResetToken;
   app.resetAfterHide();
+  assert.equal(app.state.listResetToken, resetBefore + 1, "the list position is reset too");
   assert.equal(app.state.query, "", "a two-second copy must not start pre-filtered");
   assert.equal(app.state.view, "main", "closing from Settings must not reopen there");
   assert.equal(app.state.operationError, null);

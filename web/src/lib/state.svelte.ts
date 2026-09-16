@@ -67,6 +67,9 @@ export const state = $state<{
    *  else keeps Go's wording in `detail`. Structured like hotkeyError, so a
    *  language switch re-renders it. */
   copyError: { busy: boolean; detail: string } | null;
+  /** Bumps after the native window hides so EntryList can clear its DOM-only
+   *  scroll and roving-focus position. */
+  listResetToken: number;
 }>({
   entries: [],
   query: "",
@@ -98,6 +101,7 @@ export const state = $state<{
   showFirstCopyHint: false,
   hotkeyError: null,
   copyError: null,
+  listResetToken: 0,
 });
 
 /** The combination Go falls back to when the preference is empty. */
@@ -264,15 +268,22 @@ export async function copyTopMatch(): Promise<boolean> {
 
 /**
  * The window is parked off-screen rather than destroyed, so reopening it
- * would otherwise show last session's search query and, if the user closed
- * from Settings, the settings view. Called from Go after the window has been
- * parked off-screen.
+ * would otherwise show last session's search query, view, scroll position and
+ * keyboard entry point. Called from Go after the window has been parked
+ * off-screen. A modal remains intact, but its background list is reset too.
  */
 export function resetAfterHide(): void {
+  resetListPosition();
+  if (state.modal) return;
   state.query = "";
   state.view = "main";
   state.operationError = null;
   state.copyError = null;
+}
+
+/** Reset only the transient list position, without changing the current view. */
+export function resetListPosition(): void {
+  state.listResetToken++;
 }
 
 /**

@@ -9,6 +9,7 @@
     loadUpdateInfo,
     // loadInstallLocation, // temporarily disabled with the relocate feature
     resetAfterHide,
+    resetListPosition,
   } from "./lib/state.svelte";
   import { focusSearch, nextTabStop } from "./lib/focus";
   import { t } from "./lib/i18n";
@@ -22,6 +23,9 @@
   async function onWindowShown() {
     windowVisible = true;
     if (appState.modal) return;
+    // WebView2 may restore the previously focused card while the native
+    // window comes back. Reset the list entry point before restoring search.
+    resetListPosition();
     await tick();
     focusSearch();
   }
@@ -54,7 +58,7 @@
     windowVisible = false;
     if (rafId !== null) cancelAnimationFrame(rafId);
     rafId = null;
-    if (!appState.modal) resetAfterHide();
+    resetAfterHide();
     if (settings) openSettings();
     await tick();
     if (preparation !== id) return;

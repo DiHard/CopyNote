@@ -12,6 +12,7 @@
     // shouldShowRelocateBanner, // temporarily disabled with the relocate UI
   } from "../state.svelte";
   import { t } from "../i18n";
+  import { SEARCH_ID } from "../focus";
   import type { Entry } from "../types";
   import EntryCard from "./EntryCard.svelte";
   // import RelocateBanner from "./RelocateBanner.svelte"; // temporarily disabled
@@ -55,6 +56,15 @@
   const tabbableId = $derived(
     renderList.some((e) => e.id === activeId) ? activeId : (renderList[0]?.id ?? null),
   );
+
+  // The native window stays mounted while it is parked off-screen. Reset the
+  // DOM-only position whenever a hide completes, so a tray reopen starts at
+  // the top and Tab enters at the first card.
+  $effect(() => {
+    void appState.listResetToken;
+    activeId = null;
+    if (listEl) listEl.scrollTop = 0;
+  });
 
   // ── Handlers ─────────────────────────────────────────────────────
   function onCardPointerDown(e: PointerEvent, id: string): void {
@@ -119,6 +129,9 @@
         dragOrder.every((e, i) => e.id === filtered[i].id);
       if (!same) {
         suppressNextClick = true;
+        // The dragged card may now be lower down; the new visual top should
+        // be the list's Tab entry point.
+        activeId = null;
         void reorderEntries(dragOrder.map((e) => e.id));
       }
     }
@@ -223,7 +236,16 @@
     if (newIdx < 0 || newIdx >= arr.length) return;
     const ids = arr.map((e) => e.id);
     [ids[idx], ids[newIdx]] = [ids[newIdx], ids[idx]];
+    // Reordering changes the visual top of the list.
+    activeId = null;
     void reorderEntries(ids);
+  }
+
+  function onWindowFocusIn(e: FocusEvent): void {
+    // Search is the stable entry point for a fresh keyboard pass. WebView2
+    // can restore a card focus during show, so clear the stale card here too.
+    const target = e.target as HTMLElement | null;
+    if (target?.id === SEARCH_ID) activeId = null;
   }
 
   // Suppress the synthetic click that fires after a drag-mouseup, so a
@@ -259,6 +281,7 @@
 </script>
 
 <svelte:window
+  onfocusin={onWindowFocusIn}
   onpointermove={onWindowPointerMove}
   onpointerup={onWindowPointerUp}
   onpointercancel={onWindowPointerCancel}

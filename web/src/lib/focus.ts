@@ -58,8 +58,9 @@ function isTabStop(el: HTMLElement): boolean {
 }
 
 /**
- * The main view's Tab order: the search box, then the list — the card that
- * last had focus, or the button the empty and no-match screens offer
+ * The main view's Tab order: the search box, then the first visible card when
+ * entering from search, or the card that last had focus when returning from
+ * elsewhere — or the button the empty and no-match screens offer
  * (`data-list-focus`) — then everything else in document order, wrapping
  * around. The header buttons come before the list in the document, so plain
  * Tab went from the search box to "+", ⚙ and ✕ first; now a few letters, Tab
@@ -71,8 +72,14 @@ function isTabStop(el: HTMLElement): boolean {
 export function nextTabStop(root: HTMLElement, from: Element | null, backwards: boolean): HTMLElement | null {
   const stops = Array.from(root.querySelectorAll<HTMLElement>(TAB_STOP_CANDIDATES)).filter(isTabStop);
   const search = document.getElementById(SEARCH_ID);
-  const list = root.querySelector<HTMLElement>('[data-card-focus][tabindex="0"], [data-list-focus]');
-  const head = [search, list].filter((el): el is HTMLElement => el !== null && stops.includes(el));
+  const rememberedList = root.querySelector<HTMLElement>('[data-card-focus][tabindex="0"], [data-list-focus]');
+  const firstCard = root.querySelector<HTMLElement>("[data-card-focus]");
+  // Search is the fresh entry point: always start at the first visible card,
+  // even if WebView2 restored focus to a lower card while showing the window.
+  const list = from === search ? (firstCard ?? rememberedList) : rememberedList;
+  const head = [search, list].filter((el): el is HTMLElement =>
+    el !== null && (el === firstCard || stops.includes(el)),
+  );
   const order = [...head, ...stops.filter((el) => !head.includes(el))];
 
   let at = order.indexOf(from as HTMLElement);

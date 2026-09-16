@@ -109,8 +109,10 @@ function fakeTabDom({ cards = 3, tabbableCard = 0, listButton = false, banner = 
   const all = [search, ...header, ...bannerButtons, ...cardButtons, edit, ...add, offscreen];
   const root = {
     querySelectorAll: () => all,
-    querySelector: () =>
-      all.find((n) => (n.attrs.card !== undefined && n.tabIndex === 0) || n.attrs.listFocus) ?? null,
+    querySelector: (sel) => {
+      if (sel === "[data-card-focus]") return cardButtons[0] ?? null;
+      return all.find((n) => (n.attrs.card !== undefined && n.tabIndex === 0) || n.attrs.listFocus) ?? null;
+    },
   };
   doc.getElementById = (id) => (id === "entry-search" ? search : null);
   globalThis.document = doc;
@@ -126,10 +128,10 @@ test("Tab from the search box reaches the list before the header buttons", async
   assert.equal(focus.nextTabStop(root, cardButtons[0], true), search);
 });
 
-test("Tab lands on the card that last had focus", async () => {
+test("Tab from search enters the first card even when another card was last focused", async () => {
   const { root, search, cardButtons } = fakeTabDom({ tabbableCard: 2 });
   const focus = await load();
-  assert.equal(focus.nextTabStop(root, search, false), cardButtons[2]);
+  assert.equal(focus.nextTabStop(root, search, false), cardButtons[0]);
 });
 
 test("the rest follows in document order and the order wraps", async () => {
