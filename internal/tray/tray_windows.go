@@ -77,6 +77,17 @@ type Tray struct {
 	// nil.
 	OnToggle func()
 
+	// IsMainWindowForeground reports whether the main window had focus when
+	// the tray icon was pressed. It is sampled on WM_LBUTTONDOWN, before the
+	// shell can temporarily activate the notification area.
+	IsMainWindowForeground func() bool
+
+	// OnToggleWithFocus is used for physical tray clicks when the focus state
+	// was captured on mouse-down. The bool is the state before the click.
+	// OnToggle remains the fallback for programmatic callback messages that
+	// contain no mouse-down event.
+	OnToggleWithFocus func(wasFocused bool)
+
 	// OnSettings is invoked from the tray thread when the user picks
 	// Settings from the popup menu.
 	OnSettings func()
@@ -116,6 +127,11 @@ type Tray struct {
 
 	// menu is the right-click menu. Tray thread only.
 	menu popupmenu.Menu
+
+	// The physical tray click can change the foreground window before its
+	// button-up callback arrives, so retain the state captured on button-down.
+	toggleMouseDown        bool
+	toggleMouseDownFocused bool
 
 	// hotkeyMu guards the combination SetHotkey hands to the tray thread.
 	hotkeyMu      sync.Mutex
@@ -488,10 +504,18 @@ func trayWndProc(hwnd, msgID, wParam, lParam uintptr) uintptr {
 	case trayCallbackMsg:
 		// lParam is the actual mouse event from the tray icon.
 		switch uint32(lParam) {
+		case winutil.WM_LBUTTONDOWN:
+			if t != nil && t.IsMainWindowForeground != nil {
+				t.toggleMouseDown = true
+				t.toggleMouseDownFocused = t.IsMainWindowForeground()
+			}
 		case winutil.WM_LBUTTONUP:
 			if t == nil {
 				break
 			}
+			wasMouseDown := t.toggleMouseDown
+			wasFocused := t.toggleMouseDownFocused
+			t.toggleMouseDown = false
 			// Cold start: remember the click instead of dropping it. A
 			// second click must not toggle the queued request back off —
 			// there is no window on screen for the user to be toggling.
@@ -500,6 +524,8 @@ func trayWndProc(hwnd, msgID, wParam, lParam uintptr) uintptr {
 				break
 			}
 			switch {
+			case wasMouseDown && t.OnToggleWithFocus != nil:
+				t.OnToggleWithFocus(wasFocused)
 			case t.OnToggle != nil:
 				t.OnToggle()
 			case t.OnShow != nil:

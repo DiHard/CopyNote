@@ -23,12 +23,15 @@ A lightweight Windows tray utility for storing and instantly copying frequently 
 - **CRUD management** &mdash; create, edit, delete entries
 - **Instant search** &mdash; filter entries by label or value as you type
 - **System tray integration** &mdash; lives in the notification area, slide-up/down animation on toggle
-- **Auto-hide on focus loss** &mdash; click outside and the window quietly slides away
+- **Auto-hide on focus loss** &mdash; enabled by default; click outside and the window quietly slides away, or disable it in Settings
 - **Light & dark theme** &mdash; follows system or manual override (Win11-inspired palette)
 - **Localization** &mdash; English and Russian, auto-detected from system language
 - **Import / Export** &mdash; backup all entries and settings to a single JSON file, restore with merge (deduplication by label+value)
 - **Autorun** &mdash; optional start at Windows login (via Registry)
 - **Single instance** &mdash; launching again brings the existing window to front
+- **Global hotkey** &mdash; configurable shortcut (Ctrl+Alt+N by default) toggles the window from any app; it can be turned off
+- **Keyboard workflow** &mdash; Enter copies the top search match, arrows move through the list, and F2/Delete manage the focused entry
+- **Entry context menu** &mdash; right-click, the menu key or Shift+F10 opens actions for copying, editing, deleting and reordering
 - **One-click updates** &mdash; Settings shows new releases; one click downloads the signed build, verifies the signature and restarts. No installer, no admin rights
 - **Adaptive tray icon** &mdash; auto-switches light/dark on theme change; pulse animation during startup
 - **Silent startup** &mdash; no visible window or taskbar icon during WebView2 initialization
@@ -46,7 +49,7 @@ Download the latest `copynote.exe` from [Releases](https://github.com/DiHard/Cop
 
 Later releases install from *Settings → Updates* with one click: the app checks GitHub Releases at startup (this can be turned off), downloads the new `copynote.exe` next to the running one, verifies its ed25519 signature and restarts itself.
 
-The app starts minimized to the system tray. Left-click the tray icon to open.
+When launched manually, the app opens its window as soon as WebView2 is ready. A Windows sign-in through Autorun starts it quietly in the system tray. Left-click the tray icon to toggle the window.
 
 ## Building from source
 
@@ -110,12 +113,20 @@ No data is stored next to the executable &mdash; safe to put it anywhere.
 
 | Key | Context | Action |
 |-----|---------|--------|
-| `Escape` | Main window | Hide to tray |
+| `Ctrl+Alt+N` | Anywhere | Toggle the window (configurable or disabled in Settings) |
+| `Escape` | Search / main window | Clear the search; with an empty search, hide to tray |
 | `Escape` | Settings | Back to main view |
 | `Escape` | Any modal | Close modal |
+| `Enter` | Search | Copy the top match and hide the window when copying succeeds |
 | `Enter` | Create/Edit form | Save |
 | `Enter` | Delete confirmation | Activate the focused button (Cancel is focused initially) |
-| `Tab` | Entry list | Navigate copy, edit and delete controls |
+| `↓` | Search | Move focus to the first entry |
+| `↑` / `↓` | Focused entry | Move focus through the entry list |
+| `F2` | Focused entry | Edit the entry |
+| `Delete` | Focused entry | Delete the entry |
+| `Ctrl+↑` / `Ctrl+↓` | Focused entry | Move the entry up or down |
+| `Tab` | Main view | Move between search, the entry list and header controls; the list uses one Tab stop |
+| Menu key / `Shift+F10` | Focused entry | Open the entry context menu |
 
 ## License
 

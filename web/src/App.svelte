@@ -7,7 +7,7 @@
     openSettings,
     closeSettings,
     loadUpdateInfo,
-    loadInstallLocation,
+    // loadInstallLocation, // temporarily disabled with the relocate feature
     resetForShow,
   } from "./lib/state.svelte";
   import { focusSearch, nextTabStop } from "./lib/focus";
@@ -43,8 +43,10 @@
     // Background update check — fire-and-forget, runs after the UI is
     // already interactive so it never blocks startup.
     void loadUpdateInfo();
-    // Where the exe lives decides whether the relocate banner shows.
-    void loadInstallLocation();
+    // Temporarily disabled while investigating antivirus detections related
+    // to copying the executable. Keep the loader so the feature can be
+    // restored without reworking the startup flow.
+    // void loadInstallLocation();
   });
 
   onDestroy(() => {

@@ -9,14 +9,14 @@
     forceCheckUpdateInfo,
     installUpdate,
     isUpdateInstalling,
-    canOfferRelocate,
+    // canOfferRelocate, // temporarily disabled with the relocate UI
     applyHotkey,
     hotkeyLabel,
     DEFAULT_HOTKEY,
     HOTKEY_OFF,
-    relocateApp,
-    relocateAppTo,
-    installFolderName,
+    // relocateApp, // temporarily disabled with the relocate UI
+    // relocateAppTo, // temporarily disabled with the relocate UI
+    // installFolderName, // temporarily disabled with the relocate UI
   } from "../state.svelte";
   import { t, availableLocales } from "../i18n";
   import type { UserSettings } from "../types";
@@ -215,10 +215,12 @@
 
   let folderError = $state<string | null>(null);
 
-  const relocating = $derived(appState.relocate.kind === "moving");
-  const relocateError = $derived(
-    appState.relocate.kind === "failed" ? appState.relocate.error : null,
-  );
+  // Temporarily disabled with the relocate UI while investigating antivirus
+  // detections related to copying the executable.
+  // const relocating = $derived(appState.relocate.kind === "moving");
+  // const relocateError = $derived(
+  //   appState.relocate.kind === "failed" ? appState.relocate.error : null,
+  // );
 
   async function onOpenAppFolder() {
     folderError = null;
@@ -289,19 +291,16 @@
           class="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-input-border bg-input text-accent"
         />
       </label>
+      <!-- Temporarily disabled while investigating antivirus detections
+           related to copying the executable. Keep this UI in the source so
+           the feature can be restored without redesigning the settings page.
       {#if canOfferRelocate()}
-        <!-- Running from a download folder: offer to put it somewhere that
-             survives a disk cleanup. Unlike the banner this ignores the
-             dismissal, so dismissing never hides the action for good. It sits
-             under autorun because autorun is what a cleanup would break. -->
         <div class="mt-1.5 rounded-lg border border-outline bg-card px-2.5 py-2">
           <div class="flex items-start justify-between gap-3">
             <span class="min-w-0">
               <span class="block text-sm" title={appState.installLocation?.dir ?? ""}
                 >{t("relocate.title", { folder: installFolderName() })}</span
               >
-              <!-- Once the move runs, why to move is moot; what matters is that
-                   the window is about to close itself. -->
               <span class="mt-0.5 block text-[11px] leading-snug text-on-surface-dim"
                 >{relocating ? t("relocate.willRestart") : t("relocate.body")}</span
               >
@@ -333,6 +332,7 @@
           {/if}
         </div>
       {/if}
+      -->
       <label
         class="mt-1.5 flex cursor-pointer items-start justify-between gap-3 rounded-lg border border-outline bg-card px-2.5 py-2"
       >

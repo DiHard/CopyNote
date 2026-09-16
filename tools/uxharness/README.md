@@ -38,10 +38,14 @@ Appended to the URL:
 | *(none)* | eight sample entries, exe in a program folder |
 | `?empty` | no entries — the onboarding empty screen |
 | `?many` | 30 entries — list scrolling and the window-height clamp |
-| `?downloads` | exe in Downloads — the relocate banner |
+| `?downloads` | Reserved for the relocate banner; relocation is temporarily disabled in the current build |
 | `?update` | a signed release is available — the in-app update flow |
 | `?hotkeytaken` | Windows refuses every global shortcut — the Settings error path |
 | `?copybusy` | another program holds the clipboard — the copy error line |
+
+The `?downloads` data is still present in the stub for future re-enablement,
+but the current frontend does not request the install location and therefore
+does not render the relocation banner.
 
 `window.__harness.calls` records what the UI asked the bridge to do
 (`resizeWindow` heights, `hide` count, copied ids, topmost/auto-hide values,

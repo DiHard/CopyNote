@@ -17,7 +17,7 @@ import (
 
 	"github.com/jchv/go-webview2"
 
-	"copynote/internal/relocate"
+	// "copynote/internal/relocate" // temporarily disabled; see cleanup below
 	"copynote/internal/service"
 	"copynote/internal/singleton"
 	"copynote/internal/tray"
@@ -206,7 +206,17 @@ func main() {
 		},
 		OnToggle: func() {
 			w.Dispatch(func() {
-				if toggleVisibility(hwnd) {
+				if toggleVisibilityFromTray(hwnd) {
+					w.Eval(notifyShown)
+				}
+			})
+		},
+		IsMainWindowForeground: func() bool {
+			return winutil.GetForegroundWindow() == hwnd
+		},
+		OnToggleWithFocus: func(wasFocused bool) {
+			w.Dispatch(func() {
+				if toggleVisibilityWithFocus(hwnd, wasFocused) {
 					w.Eval(notifyShown)
 				}
 			})
@@ -259,13 +269,14 @@ func main() {
 					log.Printf("remove previous version: %v", err)
 				}
 			}()
-			// A move left the executable behind in its old folder; the
-			// process that started this one may still be holding it.
-			go func() {
-				if err := relocate.RunPendingCleanup(filepath.Dir(dataFile), exePath, time.Minute); err != nil {
-					log.Printf("clean up moved executable: %v", err)
-				}
-			}()
+			// Temporarily disabled together with the relocate UI/binding while
+			// investigating antivirus detections of copied executables. Keep this
+			// cleanup code intact so the move feature can be restored as a unit.
+			// go func() {
+			// 	if err := relocate.RunPendingCleanup(filepath.Dir(dataFile), exePath, time.Minute); err != nil {
+			// 		log.Printf("clean up moved executable: %v", err)
+			// 	}
+			// }()
 		}
 	}); err != nil {
 		log.Fatal(err)

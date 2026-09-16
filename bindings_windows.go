@@ -72,8 +72,10 @@ func bindApplication(w webview2.WebView, hwnd uintptr, svc *service.Service, exe
 	updates := bridge.NewAsync(w)
 	bindUpdates(w, updates, svc, exePath)
 
-	// Moving the executable out of a download folder; see relocate_windows.go.
-	bindRelocate(w, svc, hwnd, exePath, dataDir)
+	// Temporarily disabled while investigating antivirus detections of copied
+	// executables. The implementation remains in relocate_windows.go and can
+	// be restored by uncommenting this binding when the investigation is done.
+	// bindRelocate(w, svc, hwnd, exePath, dataDir)
 
 	// The entry list's context menu; see entrymenu_windows.go.
 	bindEntryMenu(w, hwnd)

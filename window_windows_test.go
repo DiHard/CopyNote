@@ -25,3 +25,25 @@ func TestWindowSizeForDPI(t *testing.T) {
 		}
 	}
 }
+
+func TestToggleActionForState(t *testing.T) {
+	const hwnd = uintptr(42)
+	tests := []struct {
+		name       string
+		hidden     bool
+		foreground uintptr
+		want       toggleAction
+	}{
+		{"hidden window is shown", true, 0, toggleShow},
+		{"focused window is hidden", false, hwnd, toggleHide},
+		{"visible inactive window is focused", false, 7, toggleFocus},
+		{"no foreground window focuses visible window", false, 0, toggleFocus},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := toggleActionForState(tt.hidden, tt.foreground, hwnd); got != tt.want {
+				t.Fatalf("toggleActionForState(%t, %d, %d) = %d, want %d", tt.hidden, tt.foreground, hwnd, got, tt.want)
+			}
+		})
+	}
+}

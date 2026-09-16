@@ -115,13 +115,11 @@
     outline-offset: 2px;
   }
 
-  /* Text fields the Windows 11 way: the border turns accent and its bottom
-     edge doubles. On any focus, not only from the keyboard, since a caret
-     alone is easy to miss. */
+  /* Text fields turn their border accent on focus. On any focus, not only
+     from the keyboard, since a caret alone is easy to miss. */
   :is(input:not([type="checkbox"]), textarea, select):focus {
     outline: 1px solid var(--color-input-focus);
     outline-offset: -1px;
-    box-shadow: inset 0 -1px 0 var(--color-input-focus);
   }
 
   /* A card takes focus through its copy button, but the ring goes around the

@@ -19,6 +19,10 @@ import (
 // painted), used to suppress an immediate auto-hide if a focus race
 // fires WM_ACTIVATEAPP=false within ~300 ms of the show.
 //
+// activationLossNS records the last time the visible window lost
+// WM_ACTIVATEAPP foreground. This is used by a tray click to recover the
+// state before Explorer temporarily activated the notification area.
+//
 // activationLossHideNS records the last time WM_ACTIVATEAPP hid the
 // window. This is used by toggleVisibility to avoid a race where a
 // left click on the tray icon triggers both:
@@ -34,6 +38,7 @@ var (
 	wndProcCB            uintptr
 	quitting             atomic.Bool
 	lastShownNS          atomic.Int64
+	activationLossNS     atomic.Int64
 	activationLossHideNS atomic.Int64
 	windowHidden         atomic.Bool // true = window is parked off-screen
 	topmostEnabled       atomic.Bool // user preference for always-on-top
@@ -165,11 +170,15 @@ func installSubclass(hwnd uintptr, tr *tray.Tray) {
 			// The user can turn this off to keep the window up while working
 			// in another program; it is then closed only on purpose (the ✕,
 			// Escape, or the tray icon).
-			if wParam == 0 && !autoHideDisabled.Load() {
+			if wParam == 0 {
 				elapsed := time.Now().UnixNano() - lastShownNS.Load()
 				if elapsed > int64(hideGuardWindow) && !windowHidden.Load() {
-					activationLossHideNS.Store(time.Now().UnixNano())
-					moveOffScreen(h)
+					now := time.Now().UnixNano()
+					activationLossNS.Store(now)
+					if !autoHideDisabled.Load() {
+						activationLossHideNS.Store(now)
+						moveOffScreen(h)
+					}
 				}
 			}
 		case winutil.WM_SETTINGCHANGE:
@@ -404,8 +413,10 @@ func dwmInvisibleBorder(hwnd uintptr, wr winutil.Rect) (right, bottom int32) {
 	return br, bb
 }
 
-// toggleVisibility hides the window if it's currently visible and on
-// screen, otherwise shows and focuses it.
+// toggleVisibility hides the window if it's currently visible and focused,
+// otherwise shows and focuses it. A visible but inactive window is not a
+// toggle-to-hide target: clicking the tray icon is the user's way to return
+// to that window.
 //
 // Special case: if the window was hidden by WM_ACTIVATEAPP within the
 // last few hundred milliseconds, treat the toggle as "stay hidden" —
@@ -415,7 +426,60 @@ func dwmInvisibleBorder(hwnd uintptr, wr winutil.Rect) (right, bottom int32) {
 // toggleVisibility reports whether the window ended up on screen, so the
 // caller knows whether the frontend needs its "the window just appeared"
 // notification.
+type toggleAction uint8
+
+const (
+	toggleShow toggleAction = iota
+	toggleHide
+	toggleFocus
+)
+
+func toggleActionForState(hidden bool, foreground, hwnd uintptr) toggleAction {
+	if hidden {
+		return toggleShow
+	}
+	if foreground != hwnd {
+		return toggleFocus
+	}
+	return toggleHide
+}
+
 func toggleVisibility(hwnd uintptr) (shown bool) {
+	return toggleVisibilityWithForeground(hwnd, winutil.GetForegroundWindow())
+}
+
+// toggleVisibilityWithFocus uses the focus state captured when a physical
+// tray click started. This avoids treating the shell's temporary activation
+// of the notification area as proof that the window was inactive.
+func toggleVisibilityWithFocus(hwnd uintptr, focused bool) (shown bool) {
+	if !focused && !windowHidden.Load() {
+		focused = activationLossWasRecent()
+	}
+	foreground := uintptr(0)
+	if focused {
+		foreground = hwnd
+	}
+	return toggleVisibilityWithForeground(hwnd, foreground)
+}
+
+// toggleVisibilityFromTray is the fallback for a callback message that has
+// no preceding mouse-down (for example, a posted test message). A recent
+// activation loss still lets it distinguish an active window whose focus was
+// taken by Explorer from one that was already inactive.
+func toggleVisibilityFromTray(hwnd uintptr) (shown bool) {
+	return toggleVisibilityWithFocus(hwnd, winutil.GetForegroundWindow() == hwnd)
+}
+
+func activationLossWasRecent() bool {
+	t := activationLossNS.Load()
+	if t == 0 {
+		return false
+	}
+	activationLossNS.Store(0)
+	return time.Since(time.Unix(0, t)) < toggleDebounce
+}
+
+func toggleVisibilityWithForeground(hwnd, foreground uintptr) (shown bool) {
 	if t := activationLossHideNS.Load(); t != 0 {
 		if time.Since(time.Unix(0, t)) < toggleDebounce {
 			activationLossHideNS.Store(0)
@@ -423,10 +487,18 @@ func toggleVisibility(hwnd uintptr) (shown bool) {
 		}
 		activationLossHideNS.Store(0)
 	}
-	if !windowHidden.Load() {
+
+	switch toggleActionForState(windowHidden.Load(), foreground, hwnd) {
+	case toggleFocus:
+		// The window remains on screen when auto-hide is disabled. Bring it
+		// back to the foreground without resetting the current UI state.
+		winutil.SetForegroundWindow(hwnd)
+		return false
+	case toggleHide:
 		moveOffScreen(hwnd)
 		return false
 	}
+
 	showAndFocus(hwnd)
 	return true
 }

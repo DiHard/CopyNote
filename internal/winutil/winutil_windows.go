@@ -46,6 +46,7 @@ const (
 	WM_ACTIVATEAPP   = 0x001C
 	WM_COMMAND       = 0x0111
 	WM_USER          = 0x0400
+	WM_LBUTTONDOWN   = 0x0201
 	WM_LBUTTONUP     = 0x0202
 	WM_RBUTTONUP     = 0x0205
 	WM_APP           = 0x8000
@@ -68,6 +69,7 @@ var (
 
 	procShowWindow                   = moduser32.NewProc("ShowWindow")
 	procSetForegroundWindow          = moduser32.NewProc("SetForegroundWindow")
+	procGetForegroundWindow          = moduser32.NewProc("GetForegroundWindow")
 	procClientToScreen               = moduser32.NewProc("ClientToScreen")
 	procIsIconic                     = moduser32.NewProc("IsIconic")
 	procIsWindowVisible              = moduser32.NewProc("IsWindowVisible")
@@ -145,6 +147,13 @@ func ShowWindow(hwnd uintptr, cmd int) bool {
 func SetForegroundWindow(hwnd uintptr) bool {
 	r, _, _ := procSetForegroundWindow.Call(hwnd)
 	return r != 0
+}
+
+// GetForegroundWindow returns the top-level window that currently receives
+// keyboard input, or zero when there is no foreground window.
+func GetForegroundWindow() uintptr {
+	r, _, _ := procGetForegroundWindow.Call()
+	return r
 }
 
 // ClientToScreen converts a point in hwnd's client area to screen coordinates.

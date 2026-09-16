@@ -8,13 +8,13 @@
     openCreate,
     openCreateFromSearch,
     reorderEntries,
-    shouldShowRelocateBanner,
     dismissFirstCopyHint,
+    // shouldShowRelocateBanner, // temporarily disabled with the relocate UI
   } from "../state.svelte";
   import { t } from "../i18n";
   import type { Entry } from "../types";
   import EntryCard from "./EntryCard.svelte";
-  import RelocateBanner from "./RelocateBanner.svelte";
+  // import RelocateBanner from "./RelocateBanner.svelte"; // temporarily disabled
 
   const filtered = $derived(filterEntries(appState.entries, appState.query));
   const canDrag = $derived(appState.query.trim() === "");
@@ -224,13 +224,9 @@
      wrapper so App can measure the content's true height. -->
 <div bind:this={listEl} data-scroller class="min-h-0 flex-1 overflow-y-auto">
   <div data-scroll-content class="px-3 py-3">
-    <!-- Inside the scroller on purpose: only the search box is worth pinning.
-         The banner is 130 px, which is a third of a laptop-sized window, and
-         nailing it to the top would nag harder than the snooze buttons
-         suggest it should. -->
-    {#if shouldShowRelocateBanner()}
-      <RelocateBanner />
-    {/if}
+    <!-- The relocate banner is temporarily disabled while investigating
+         antivirus detections related to copying the executable. The component
+         remains in the source for a later, one-line restoration. -->
     {#if appState.loading}
       <div
         class="flex min-h-[7rem] items-center justify-center text-sm text-on-surface-dim"
