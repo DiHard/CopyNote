@@ -49,9 +49,11 @@ var (
 	// windowHiddenCallback is set by main once WebView2 exists. The callback
 	// receives the hide generation so a fast reopen cannot reset the newly
 	// visible window.
-	windowHiddenCallback  func(uint64)
-	windowPrepareCallback func(uint64, bool)
-	windowShownCallback   func()
+	windowHiddenCallback             func(uint64)
+	windowPrepareCallback            func(uint64, bool)
+	windowShownCallback              func()
+	windowTransitionStartedCallback  func(uint64)
+	windowTransitionFinishedCallback func(uint64)
 )
 
 // Preparation state is owned by the UI thread. A show requested during a
@@ -293,6 +295,9 @@ func showAndFocus(hwnd uintptr) {
 	targetX := wa.Right - width - margin + borderRight
 	targetY := wa.Bottom - height - margin + borderBottom
 	startY := wa.Bottom // start just below the screen
+	if windowTransitionStartedCallback != nil {
+		windowTransitionStartedCallback(generation)
+	}
 
 	// Place at starting position. Use TOPMOST if the user has it
 	// enabled (default true) — draws above the overflow tray popup.
@@ -340,6 +345,9 @@ func moveOffScreen(hwnd uintptr) {
 		notifyWindowHidden(generation)
 		return
 	}
+	if windowTransitionStartedCallback != nil {
+		windowTransitionStartedCallback(generation)
+	}
 	endY := wa.Bottom // below screen
 	go animateY(hwnd, wr.Left, wr.Top, endY, 150*time.Millisecond, easeInCubic, generation)
 }
@@ -371,6 +379,7 @@ func animateY(hwnd uintptr, x, fromY, toY int32, duration time.Duration, ease fu
 	stepDur := duration / steps
 	for i := 1; i <= steps; i++ {
 		if cancelAnim.Load() {
+			finishWindowTransition(generation, hiding)
 			return // aborted by resizeToContent or another caller
 		}
 		if windowHidden.Load() != hiding || windowGeneration.Load() != generation {
@@ -389,6 +398,18 @@ func animateY(hwnd uintptr, x, fromY, toY int32, duration time.Duration, ease fu
 		winutil.SetWindowPos(hwnd, 0, offScreenX, offScreenY, 0, 0,
 			winutil.SWP_NOSIZE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE)
 		notifyWindowHidden(generation)
+	}
+	finishWindowTransition(generation, hiding)
+}
+
+// finishWindowTransition unlocks pointer input only for the animation that
+// still owns the window. A stale animation must not unlock a newer one.
+func finishWindowTransition(generation uint64, hiding bool) {
+	if windowGeneration.Load() != generation || windowHidden.Load() != hiding {
+		return
+	}
+	if windowTransitionFinishedCallback != nil {
+		windowTransitionFinishedCallback(generation)
 	}
 }
 

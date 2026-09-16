@@ -16,6 +16,8 @@
   import EntryCard from "./EntryCard.svelte";
   // import RelocateBanner from "./RelocateBanner.svelte"; // temporarily disabled
 
+  let { interactionDisabled = false }: { interactionDisabled?: boolean } = $props();
+
   const filtered = $derived(filterEntries(appState.entries, appState.query));
   const canDrag = $derived(appState.query.trim() === "");
 
@@ -56,6 +58,7 @@
 
   // ── Handlers ─────────────────────────────────────────────────────
   function onCardPointerDown(e: PointerEvent, id: string): void {
+    if (interactionDisabled) return;
     if (!canDrag) return;
     if (e.button !== 0) return;
     const target = e.target as HTMLElement | null;
@@ -65,8 +68,26 @@
     pendingDrag = { id, x: e.clientX, y: e.clientY };
   }
 
+  function cancelDrag(): void {
+    pendingDrag = null;
+    draggingId = null;
+    dragOrder = null;
+    stopAutoScroll();
+  }
+
   function onWindowPointerMove(e: PointerEvent): void {
+    if (interactionDisabled) {
+      // A pointerdown may have happened just before the native slide started.
+      // Do not let a later move turn that stale press into a drag.
+      if (pendingDrag || draggingId) suppressNextClick = true;
+      cancelDrag();
+      return;
+    }
     if (pendingDrag && !draggingId) {
+      if ((e.buttons & 1) === 0) {
+        pendingDrag = null;
+        return;
+      }
       const dx = e.clientX - pendingDrag.x;
       const dy = e.clientY - pendingDrag.y;
       if (Math.hypot(dx, dy) > DRAG_THRESHOLD) {
@@ -75,6 +96,11 @@
       }
     }
     if (draggingId) {
+      if ((e.buttons & 1) === 0) {
+        suppressNextClick = true;
+        cancelDrag();
+        return;
+      }
       e.preventDefault();
       updateDragOrder(e.clientY);
       updateAutoScroll(e.clientY);
@@ -82,6 +108,11 @@
   }
 
   function onWindowPointerUp(): void {
+    if (interactionDisabled) {
+      if (pendingDrag || draggingId) suppressNextClick = true;
+      cancelDrag();
+      return;
+    }
     if (draggingId && dragOrder) {
       const same =
         dragOrder.length === filtered.length &&
@@ -91,10 +122,18 @@
         void reorderEntries(dragOrder.map((e) => e.id));
       }
     }
-    pendingDrag = null;
-    draggingId = null;
-    dragOrder = null;
-    stopAutoScroll();
+    cancelDrag();
+  }
+
+  function onWindowPointerCancel(): void {
+    cancelDrag();
+  }
+
+  function onWindowBlur(): void {
+    // The native window can slide away before WebView2 receives pointerup.
+    // A blur means the in-progress gesture is no longer safe to complete.
+    if (pendingDrag || draggingId) suppressNextClick = true;
+    cancelDrag();
   }
 
   function onWindowKeyDown(e: KeyboardEvent): void {
@@ -102,10 +141,7 @@
       // Cancel drag — restore original order.
       e.preventDefault();
       e.stopPropagation();
-      pendingDrag = null;
-      draggingId = null;
-      dragOrder = null;
-      stopAutoScroll();
+      cancelDrag();
     }
   }
 
@@ -201,6 +237,15 @@
     stopAutoScroll();
   });
 
+  // Cancel a gesture immediately when the native window starts moving. The
+  // transparent shield in App.svelte also prevents a new pointerdown.
+  $effect(() => {
+    if (interactionDisabled) {
+      if (pendingDrag || draggingId) suppressNextClick = true;
+      cancelDrag();
+    }
+  });
+
   // While dragging, pin the cursor and disable text selection globally.
   $effect(() => {
     if (draggingId) {
@@ -216,6 +261,8 @@
 <svelte:window
   onpointermove={onWindowPointerMove}
   onpointerup={onWindowPointerUp}
+  onpointercancel={onWindowPointerCancel}
+  onblur={onWindowBlur}
   onkeydown={onWindowKeyDown}
 />
 
@@ -284,7 +331,7 @@
           {entry}
           isDragging={entry.id === draggingId}
           dragInProgress={draggingId !== null}
-          dragDisabled={!canDrag}
+          dragDisabled={!canDrag || interactionDisabled}
           tabbable={entry.id === tabbableId}
           canMoveUp={canDrag && i > 0}
           canMoveDown={canDrag && i < renderList.length - 1}

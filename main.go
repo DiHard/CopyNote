@@ -54,6 +54,13 @@ var browserArgs = []string{
 // after the hide animation, while the window is parked off-screen.
 const notifyShown = `window.__onShow && window.__onShow()`
 
+// notifyTransitionStarted/Finished keep pointer input away from the page
+// while the native window is moving under the cursor. The generation lets
+// the frontend ignore a late completion from an animation that was replaced
+// by a newer show/hide request.
+const notifyTransitionStarted = `window.__onWindowTransition && window.__onWindowTransition(true, %d)`
+const notifyTransitionFinished = `window.__onWindowTransition && window.__onWindowTransition(false, %d)`
+
 // startedByAutorun reports whether Windows started this process from the
 // autorun registry entry rather than the user starting it. applyAutorun
 // appends the flag to the registered command line; anything without it —
@@ -179,6 +186,19 @@ func main() {
 
 	hwnd := uintptr(w.Window())
 	windowShownCallback = func() { w.Eval(notifyShown) }
+	windowTransitionStartedCallback = func(generation uint64) {
+		w.Eval(fmt.Sprintf(notifyTransitionStarted, generation))
+	}
+	windowTransitionFinishedCallback = func(generation uint64) {
+		if quitting.Load() {
+			return
+		}
+		w.Dispatch(func() {
+			if !quitting.Load() {
+				w.Eval(fmt.Sprintf(notifyTransitionFinished, generation))
+			}
+		})
+	}
 	windowPrepareCallback = func(id uint64, settings bool) {
 		w.Eval(fmt.Sprintf(`window.__onHide && window.__onHide(%d, %t)`, id, settings))
 	}

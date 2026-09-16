@@ -57,6 +57,8 @@ declare global {
     __openSettings?: () => void;
     /** Called by Go each time the window comes back on screen. */
     __onShow?: () => void;
+    /** Called by Go at the start/end of a native show or hide animation. */
+    __onWindowTransition?: (active: boolean, generation: number) => void;
     /** Called by Go after the window is parked off-screen. */
     __onHide?: (id: number, settings: boolean) => Promise<void>;
   }

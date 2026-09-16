@@ -33,7 +33,21 @@
    * stale search box.
    */
   let windowVisible = true;
+  let windowTransitioning = $state(false);
+  let windowTransitionGeneration = 0;
   let preparation = 0;
+
+  function onWindowTransition(active: boolean, generation: number) {
+    // An old animation can finish after a newer show/hide has started. Only
+    // the current generation is allowed to release the interaction shield.
+    if (generation < windowTransitionGeneration) return;
+    if (active) {
+      windowTransitionGeneration = generation;
+      windowTransitioning = true;
+    } else if (generation === windowTransitionGeneration) {
+      windowTransitioning = false;
+    }
+  }
 
   async function onWindowHidden(id: number, settings: boolean) {
     preparation = id;
@@ -57,6 +71,7 @@
   onMount(async () => {
     window.__openSettings = openSettings;
     window.__onShow = onWindowShown;
+    window.__onWindowTransition = onWindowTransition;
     window.__onHide = onWindowHidden;
     await Promise.all([refresh(), loadSettings()]);
     // Signal Go that the UI is ready — stops tray icon pulse
@@ -74,6 +89,7 @@
   onDestroy(() => {
     delete window.__openSettings;
     delete window.__onShow;
+    delete window.__onWindowTransition;
     delete window.__onHide;
   });
 
@@ -286,7 +302,7 @@
       {#if appState.operationError}
         <p role="alert" class="shrink-0 px-3 text-xs text-danger">{t("operation.error", {error: appState.operationError})}</p>
       {/if}
-      <EntryList />
+      <EntryList interactionDisabled={windowTransitioning} />
     </main>
 
     {#if showModal && appState.modal?.kind === "create"}
@@ -298,3 +314,13 @@
     {/if}
   {/if}
 {/key}
+
+{#if windowTransitioning}
+  <!-- The native window moves beneath the cursor during a slide. This shield
+       absorbs pointer input until the final window position is stable. -->
+  <div
+    data-window-transition-shield
+    aria-hidden="true"
+    class="fixed inset-0 z-50 cursor-default"
+  ></div>
+{/if}
