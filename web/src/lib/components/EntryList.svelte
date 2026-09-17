@@ -399,7 +399,7 @@
           <button
             type="button"
             onclick={dismissFirstCopyHint}
-            title={t("list.firstCopyHint.dismiss")}
+            data-tooltip={t("list.firstCopyHint.dismiss")}
             aria-label={t("list.firstCopyHint.dismiss")}
             class="-mr-1 shrink-0 rounded p-1.5 text-on-surface-dim transition hover:bg-surface-hover hover:text-on-surface"
           >

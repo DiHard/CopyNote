@@ -71,7 +71,7 @@
       type="button"
       onclick={toggleAutoHide}
       disabled={state.settingsPending > 0}
-      title={state.settings.disableAutoHide ? t("header.unpin") : t("header.pin")}
+      data-tooltip={state.settings.disableAutoHide ? t("header.unpin") : t("header.pin")}
       aria-label={state.settings.disableAutoHide ? t("header.unpin") : t("header.pin")}
       aria-pressed={state.settings.disableAutoHide}
       class="rounded p-1.5 transition disabled:cursor-wait disabled:opacity-60 {state.settings.disableAutoHide
@@ -88,7 +88,8 @@
     <button
       type="button"
       onclick={openCreate}
-      title={t("header.new")}
+      data-tooltip={t("header.new")}
+      aria-label={t("header.new")}
       class="rounded p-1.5 text-on-surface-dim transition hover:bg-surface-hover hover:text-on-surface"
     >
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -100,7 +101,8 @@
     <button
       type="button"
       onclick={openSettings}
-      title={t("header.settings")}
+      data-tooltip={t("header.settings")}
+      aria-label={t("header.settings")}
       class="relative rounded p-1.5 text-on-surface-dim transition hover:bg-surface-hover hover:text-on-surface"
     >
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -118,7 +120,8 @@
     <button
       type="button"
       onclick={hideWindow}
-      title={t("header.hide")}
+      data-tooltip={t("header.hide")}
+      aria-label={t("header.hide")}
       class="rounded p-1.5 text-on-surface-dim transition hover:bg-surface-hover hover:text-on-surface"
     >
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

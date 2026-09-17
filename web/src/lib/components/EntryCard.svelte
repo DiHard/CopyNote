@@ -36,6 +36,10 @@
   let copyState = $state<CopyState>("idle");
   let timer: number | null = null;
 
+  function copyHintId(): string {
+    return "entry-copy-hint-" + entry.id.replace(/[^a-zA-Z0-9_-]/g, "-");
+  }
+
   function flash(state: CopyState) {
     if (timer !== null) clearTimeout(timer);
     copyState = state;
@@ -153,7 +157,8 @@
     onfocus={() => onFocused?.()}
     onclick={onCopy}
     onkeydown={onKeyDown}
-    title={dragDisabled ? t("card.copy") : t("card.copyOrDrag")}
+    data-tooltip={dragDisabled ? t("card.copy") : t("card.copyOrDrag")}
+    aria-describedby={copyHintId()}
     class="flex min-w-0 flex-1 items-start px-3 py-2.5 text-left {dragInProgress
       ? 'cursor-grabbing'
       : 'cursor-pointer'}"
@@ -168,6 +173,10 @@
     </div>
   </button>
 
+  <span id={copyHintId()} class="sr-only">
+    {dragDisabled ? t("card.copy") : t("card.copyOrDrag")}
+  </span>
+
   <div
     data-no-drag
     class="flex shrink-0 items-center gap-1 px-1.5 opacity-0 transition-opacity {isDragging
@@ -180,7 +189,7 @@
       type="button"
       tabindex="-1"
       aria-keyshortcuts="F2"
-      title={t("card.edit")}
+      data-tooltip={t("card.edit")}
       aria-label={t("card.edit")}
       onclick={() => openEdit(entry)}
       class="rounded p-1.5 text-on-surface-dim hover:bg-surface-hover hover:text-on-surface"
@@ -207,7 +216,7 @@
       type="button"
       tabindex="-1"
       aria-keyshortcuts="Delete"
-      title={t("card.delete")}
+      data-tooltip={t("card.delete")}
       aria-label={t("card.delete")}
       onclick={() => openDelete(entry)}
       class="rounded p-1.5 text-on-surface-dim hover:bg-danger-dim hover:text-danger"

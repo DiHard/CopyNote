@@ -244,7 +244,8 @@
       type="button"
       onclick={closeSettings}
       class="rounded-md p-1 text-on-surface-dim transition hover:bg-surface-hover hover:text-on-surface"
-      title={t("settings.back")}
+      data-tooltip={t("settings.back")}
+      aria-label={t("settings.back")}
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -298,7 +299,7 @@
         <div class="mt-1.5 rounded-lg border border-outline bg-card px-2.5 py-2">
           <div class="flex items-start justify-between gap-3">
             <span class="min-w-0">
-              <span class="block text-sm" title={appState.installLocation?.dir ?? ""}
+              <span class="block text-sm" data-tooltip={appState.installLocation?.dir ?? ""}
                 >{t("relocate.title", { folder: installFolderName() })}</span
               >
               <span class="mt-0.5 block text-[11px] leading-snug text-on-surface-dim"

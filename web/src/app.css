@@ -70,6 +70,9 @@
   --t-input-border: #d1d1d1;
   --t-input-focus: #005fb8;
   --t-update-dot: #ea580c; /* orange-600 — darker for light-mode contrast */
+  --t-tooltip: #252525;
+  --t-tooltip-text: #ffffff;
+  --t-tooltip-border: rgba(255, 255, 255, 0.16);
 }
 
 /* ── Dark (matches Windows 11 dark Calendar widget) ── */
@@ -99,6 +102,9 @@
   --t-input-border: #4d4d4d;
   --t-input-focus: #60cdff;
   --t-update-dot: #fb923c; /* orange-400 — lighter for dark-mode contrast */
+  --t-tooltip: #f3f3f3;
+  --t-tooltip-text: #1a1a1a;
+  --t-tooltip-border: rgba(0, 0, 0, 0.14);
 }
 
 /*
@@ -130,6 +136,90 @@
   [data-entry-id]:has([data-card-focus]:focus-visible) {
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;
+  }
+}
+
+/* ── App tooltips ────────────────────────────────────────────────
+   Tooltips are rendered by TooltipHost at the document body level. A fixed
+   bubble can escape the list's overflow, then clamp itself to the window
+   edges instead of being clipped by a card or a header button. */
+[data-tooltip-host] {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+[data-app-tooltip] {
+  position: absolute;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(320px, calc(100vw - 24px));
+  padding: 7px 10px;
+  border: 1px solid var(--t-tooltip-border);
+  border-radius: 7px;
+  background: var(--t-tooltip);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.18),
+    0 2px 6px rgba(0, 0, 0, 0.12);
+  color: var(--t-tooltip-text);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  text-align: left;
+  white-space: normal;
+  visibility: hidden;
+  opacity: 0;
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease,
+    visibility 0s linear 140ms;
+}
+
+[data-app-tooltip][data-placement="top"] {
+  transform: translateY(4px);
+}
+
+[data-app-tooltip][data-placement="bottom"] {
+  transform: translateY(-4px);
+}
+
+[data-app-tooltip][data-ready="true"] {
+  visibility: visible;
+  opacity: 1;
+  transform: translateY(0);
+  transition-delay: 0s;
+}
+
+[data-app-tooltip]::before {
+  content: "";
+  position: absolute;
+  left: var(--tooltip-arrow-left);
+  width: 8px;
+  height: 8px;
+  transform: translateX(-50%) rotate(45deg);
+  background: var(--t-tooltip);
+}
+
+[data-app-tooltip][data-placement="top"]::before {
+  bottom: -4px;
+  border-right: 1px solid var(--t-tooltip-border);
+  border-bottom: 1px solid var(--t-tooltip-border);
+}
+
+[data-app-tooltip][data-placement="bottom"]::before {
+  top: -4px;
+  border-top: 1px solid var(--t-tooltip-border);
+  border-left: 1px solid var(--t-tooltip-border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-app-tooltip] {
+    transition-duration: 0ms;
   }
 }
 

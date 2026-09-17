@@ -18,6 +18,7 @@
   import EntryModal from "./lib/components/EntryModal.svelte";
   import ConfirmModal from "./lib/components/ConfirmModal.svelte";
   import SettingsView from "./lib/components/SettingsView.svelte";
+  import TooltipHost from "./lib/components/TooltipHost.svelte";
 
   /** Focus the search box after the native window has come back on screen. */
   async function onWindowShown() {
@@ -328,3 +329,5 @@
     class="fixed inset-0 z-50 cursor-default"
   ></div>
 {/if}
+
+<TooltipHost />
