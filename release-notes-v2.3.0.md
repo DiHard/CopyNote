@@ -19,6 +19,8 @@
 - Import now reports how many entries were added and how many duplicates
   were skipped. Settings also explains how import, export, startup, theme,
   language and update checks work, with an explicit **System** language option.
+- Pin the window directly from the header to keep it open, or unpin it to
+  restore automatic hiding.
 
 ### Bug fixes
 
@@ -36,6 +38,12 @@
   technology.
 - Failed copying now explains when another program is using the clipboard.
   The copy-status badge no longer covers an entry's edit and delete buttons.
+- Reopening CopyNote from the tray now resets the list to the top and starts
+  keyboard navigation at the first entry instead of restoring a stale card.
+- Prevented accidental card drags and clicks while the window is sliding on or
+  off screen.
+- Entry actions no longer stay visible just because a card has keyboard focus,
+  keeping the list compact while keyboard shortcuts remain available.
 
 ### Changes
 
