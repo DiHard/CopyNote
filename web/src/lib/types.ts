@@ -100,3 +100,28 @@ export interface EntryMenuRequest {
   keyboard: boolean;
   items: MenuItem[];
 }
+
+/** Result of the last manual "Check for updates" click. Used only by
+ * the Settings view to show a transient status line. */
+export type UpdateCheckStatus =
+  | { kind: "idle" }
+  | { kind: "checking" }
+  | { kind: "upToDate" }
+  | { kind: "available" }
+  | { kind: "failed" };
+
+/** Where an in-app update currently is. Failure keeps the running version. */
+export type UpdateInstallStatus =
+  | { kind: "idle" }
+  | { kind: "downloading"; done: number; total: number }
+  | { kind: "verifying" }
+  | { kind: "applying" }
+  | { kind: "restarting" }
+  | { kind: "failed"; error: string };
+
+/** Where the "move me somewhere permanent" action is. A move ends with
+ * the process restarting, so "moving" has no success state to return to. */
+export type RelocateStatus =
+  | { kind: "idle" }
+  | { kind: "moving" }
+  | { kind: "failed"; error: string };

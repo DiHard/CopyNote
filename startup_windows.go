@@ -72,8 +72,8 @@ func fatalStartup(format string, args ...any) {
 	os.Exit(1)
 }
 
-func openService(path string) (*service.Service, error) {
-	svc, err := service.New(path)
+func openService(path string, deps service.Dependencies) (*service.Service, error) {
+	svc, err := service.NewWithDependencies(path, deps)
 	if err == nil {
 		return svc, nil
 	}
@@ -96,5 +96,5 @@ func openService(path string) (*service.Service, error) {
 		return nil, restoreErr
 	}
 	log.Print("restored previous data snapshot")
-	return service.New(path)
+	return service.NewWithDependencies(path, deps)
 }

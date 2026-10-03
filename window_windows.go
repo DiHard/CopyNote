@@ -274,27 +274,12 @@ func showAndFocus(hwnd uintptr) {
 	applyWindowSize(hwnd, dpi)
 
 	// Compute the target (tray corner) position.
-	wa, ok := winutil.GetWorkArea()
+	targetX, targetY, startY, ok := trayCornerPosition(hwnd, dpi)
 	if !ok {
 		anchorToTrayCorner(hwnd)
 		winutil.SetForegroundWindow(hwnd)
 		return
 	}
-	wr, ok := winutil.GetWindowRect(hwnd)
-	if !ok {
-		anchorToTrayCorner(hwnd)
-		winutil.SetForegroundWindow(hwnd)
-		return
-	}
-	width := wr.Right - wr.Left
-	height := wr.Bottom - wr.Top
-
-	borderRight, borderBottom := dwmInvisibleBorder(hwnd, wr)
-	margin := winutil.ScaleForDPI(trayCornerMargin, dpi)
-
-	targetX := wa.Right - width - margin + borderRight
-	targetY := wa.Bottom - height - margin + borderBottom
-	startY := wa.Bottom // start just below the screen
 	if windowTransitionStartedCallback != nil {
 		windowTransitionStartedCallback(generation)
 	}
@@ -448,13 +433,28 @@ func easeInCubic(t float64) float64 {
 // querying DWMWA_EXTENDED_FRAME_BOUNDS for the truly visible rect
 // and offsetting the target position accordingly.
 func anchorToTrayCorner(hwnd uintptr) {
-	wa, ok := winutil.GetWorkArea()
+	x, y, _, ok := trayCornerPosition(hwnd, trayDPI())
 	if !ok {
 		return
 	}
+	winutil.SetWindowPos(
+		hwnd,
+		0,
+		x, y, 0, 0,
+		winutil.SWP_NOSIZE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE,
+	)
+}
+
+// trayCornerPosition is shared by immediate positioning and the slide-in target.
+// bottom is the off-screen animation start just below the work area.
+func trayCornerPosition(hwnd uintptr, dpi uint32) (x, y, bottom int32, ok bool) {
+	wa, ok := winutil.GetWorkArea()
+	if !ok {
+		return 0, 0, 0, false
+	}
 	wr, ok := winutil.GetWindowRect(hwnd)
 	if !ok {
-		return
+		return 0, 0, 0, false
 	}
 	width := wr.Right - wr.Left
 	height := wr.Bottom - wr.Top
@@ -463,16 +463,11 @@ func anchorToTrayCorner(hwnd uintptr) {
 	// If DWM is unreachable (virtualized env, etc.), fall back to
 	// raw GetWindowRect bounds.
 	borderRight, borderBottom := dwmInvisibleBorder(hwnd, wr)
-	margin := winutil.ScaleForDPI(trayCornerMargin, trayDPI())
+	margin := winutil.ScaleForDPI(trayCornerMargin, dpi)
 
-	x := wa.Right - width - margin + borderRight
-	y := wa.Bottom - height - margin + borderBottom
-	winutil.SetWindowPos(
-		hwnd,
-		0,
-		x, y, 0, 0,
-		winutil.SWP_NOSIZE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE,
-	)
+	x = wa.Right - width - margin + borderRight
+	y = wa.Bottom - height - margin + borderBottom
+	return x, y, wa.Bottom, true
 }
 
 // dwmInvisibleBorder returns the right/bottom offsets of the window's

@@ -3,14 +3,11 @@ package service
 import (
 	"errors"
 	"fmt"
-	"io/fs"
 	"log"
-	"os"
 	"path/filepath"
 	"time"
 
 	"copynote/internal/model"
-	"golang.org/x/sys/windows/registry"
 )
 
 func (s *Service) GetSettings() (model.Settings, error) {
@@ -69,6 +66,9 @@ func (s *Service) commitSettingsLocked(next model.Store) error {
 		}
 		return err
 	}
+	if s.settingsSaved != nil {
+		s.settingsSaved()
+	}
 	return nil
 }
 
@@ -86,43 +86,6 @@ func (s *Service) SnoozeRelocatePrompt() (string, error) {
 		return "", err
 	}
 	return until, nil
-}
-
-const autorunKeyPath = `Software\Microsoft\Windows\CurrentVersion\Run`
-
-// autorunValueName is this installation's entry under autorunKeyPath. A var
-// so a test build can run beside the real application
-// (-X copynote/internal/service.autorunValueName=...). The key is shared by
-// every copy of the program and EnsureAutorunPath rewrites the value on each
-// start, so a test instance using the real name repoints the real autorun
-// entry at itself — or, with fresh settings where autorun is off, deletes it.
-var autorunValueName = "CopyNote"
-
-// AutostartFlag is appended to the autorun registry command line so the
-// process can tell a Windows sign-in from a launch the user performed
-// themselves — only the latter should surface the window. EnsureAutorunPath
-// rewrites the value on every start, so installations made before this
-// flag existed pick it up on their next run.
-const AutostartFlag = "--autostart"
-
-func applyAutorun(enabled bool) error {
-	k, _, err := registry.CreateKey(registry.CURRENT_USER, autorunKeyPath, registry.SET_VALUE|registry.QUERY_VALUE)
-	if err != nil {
-		return err
-	}
-	defer k.Close()
-	if enabled {
-		exe, err := os.Executable()
-		if err != nil {
-			return err
-		}
-		return k.SetStringValue(autorunValueName, `"`+exe+`" `+AutostartFlag)
-	}
-	err = k.DeleteValue(autorunValueName)
-	if errors.Is(err, registry.ErrNotExist) {
-		return nil
-	}
-	return err
 }
 
 // Reconcile the external registry state after a move or interrupted settings save.
@@ -146,16 +109,5 @@ func (s *Service) loadSettingsLocked() (model.Settings, error) {
 		return *s.store.Settings, nil
 	}
 	// One-way migration: after the next successful commit data.json is authoritative.
-	raw, err := os.ReadFile(s.settingsPath())
-	if errors.Is(err, fs.ErrNotExist) {
-		return model.DefaultSettings(), nil
-	}
-	if err != nil {
-		return model.Settings{}, fmt.Errorf("read settings: %w", err)
-	}
-	settings, err := model.DecodeSettings(raw)
-	if err != nil {
-		return model.Settings{}, fmt.Errorf("parse settings: %w", err)
-	}
-	return settings, nil
+	return s.loadSettings(s.settingsPath())
 }

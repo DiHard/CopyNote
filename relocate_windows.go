@@ -37,13 +37,7 @@ type installLocation struct {
 }
 
 func bindRelocate(w webview2.WebView, svc *service.Service, hwnd uintptr, exePath, dataDir string) {
-	mustBind := func(name string, fn any) {
-		if err := w.Bind(name, fn); err != nil {
-			log.Fatalf("bind %s: %v", name, err)
-		}
-	}
-
-	mustBind("getInstallLocation", func() installLocation {
+	mustBind(w, "getInstallLocation", func() installLocation {
 		loc := installLocation{
 			Path:        exePath,
 			Permanent:   relocate.IsPermanent(exePath),
@@ -63,7 +57,7 @@ func bindRelocate(w webview2.WebView, svc *service.Service, hwnd uintptr, exePat
 	})
 
 	// Returns "" when the user cancels, which the page treats as "do nothing".
-	mustBind("pickInstallFolder", func(title string) string {
+	mustBind(w, "pickInstallFolder", func(title string) string {
 		dir, ok := winutil.PickFolder(hwnd, title)
 		if !ok {
 			return ""
@@ -76,7 +70,7 @@ func bindRelocate(w webview2.WebView, svc *service.Service, hwnd uintptr, exePat
 	// delete, and asks main to quit and start that copy. The original is
 	// deliberately still on disk when this returns: if the new copy fails to
 	// start, the user's existing file still works.
-	mustBind("relocateApp", func(targetDir string) (string, error) {
+	mustBind(w, "relocateApp", func(targetDir string) (string, error) {
 		if exePath == "" {
 			return "", errors.New("executable path is unavailable")
 		}
@@ -109,11 +103,11 @@ func bindRelocate(w webview2.WebView, svc *service.Service, hwnd uintptr, exePat
 		return newPath, nil
 	})
 
-	mustBind("dismissRelocatePrompt", func() error {
+	mustBind(w, "dismissRelocatePrompt", func() error {
 		return svc.UpdateSettings(func(s *model.Settings) { s.RelocatePromptDismissed = true })
 	})
 
 	// Snoozing needs the service's clock, so unlike the permanent dismissal
 	// above it lives there rather than inline here.
-	mustBind("snoozeRelocatePrompt", svc.SnoozeRelocatePrompt)
+	mustBind(w, "snoozeRelocatePrompt", svc.SnoozeRelocatePrompt)
 }

@@ -65,8 +65,17 @@ function Assert-Built {
 
 # Fresh settings and no entries for the next launch: autorun off, default hotkey.
 function Reset-TestData {
-  $dir = Join-Path $WorkDir 'appdata'
-  if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
+  $root = [IO.Path]::GetFullPath($WorkDir)
+  $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+  if (-not $root.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase) -or
+      -not [IO.Path]::GetFileName($root).StartsWith('copynote-testinstance', [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Refusing to clear test data outside the test directory: $root"
+  }
+  $dir = [IO.Path]::GetFullPath((Join-Path $root 'appdata'))
+  if (-not $dir.StartsWith($root + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Refusing to clear test data outside $root"
+  }
+  if (Test-Path -LiteralPath $dir) { Remove-Item -LiteralPath $dir -Recurse -Force }
 }
 
 # Starts the test build with its own data, log and WebView2 profile, and

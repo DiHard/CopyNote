@@ -152,6 +152,9 @@ success. If an entry's value is empty, copying uses its label.
 
 ## Development checks
 
+Follow the project's pragmatic [development principles](docs/DEVELOPMENT_PRINCIPLES.md)
+for DRY, KISS and SOLID, compatibility and validation.
+
 Run Go checks from the repository root:
 
 ```powershell

@@ -62,7 +62,7 @@ const notifyTransitionStarted = `window.__onWindowTransition && window.__onWindo
 const notifyTransitionFinished = `window.__onWindowTransition && window.__onWindowTransition(false, %d)`
 
 // startedByAutorun reports whether Windows started this process from the
-// autorun registry entry rather than the user starting it. applyAutorun
+// autorun registry entry rather than the user starting it. autorun.SetEnabled
 // appends the flag to the registered command line; anything without it —
 // a double click, a relaunch after an update or a move — is the user
 // asking for the app, and the window should come up on its own.
@@ -123,7 +123,8 @@ func main() {
 		fatalStartup("APPDATA env var is not set")
 	}
 	dataFile := filepath.Join(appDataRoaming, "CopyNote", "data.json")
-	svc, err := openService(dataFile)
+	trayCtrl := &tray.Tray{}
+	svc, err := openService(dataFile, service.Dependencies{SettingsSaved: trayCtrl.RefreshTip})
 	if err != nil {
 		fatalStartup("service init: %v", err)
 	}
@@ -234,7 +235,7 @@ func main() {
 	// 8. Tray. Runs on a dedicated OS-locked goroutine; communicates
 	//    with the webview UI thread via w.Dispatch. Built before the
 	//    bindings so a language change can reach the icon's hover text.
-	trayCtrl := &tray.Tray{
+	*trayCtrl = tray.Tray{
 		// Double-clicking the exe has to do something visible; a Windows
 		// sign-in must not. The autorun registry entry carries the flag,
 		// so its absence means a person started this.

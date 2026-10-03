@@ -4,6 +4,11 @@
 
 All communication with the user, plans, comments in code reviews, and commit descriptions MUST be in Russian. Code itself (variable names, comments in source) stays in English.
 
+## Development Principles
+
+Follow [docs/DEVELOPMENT_PRINCIPLES.md](docs/DEVELOPMENT_PRINCIPLES.md): apply DRY,
+KISS and SOLID pragmatically, with compatibility and observable behavior first.
+
 ## What is this?
 
 Windows 11 tray utility for storing and quickly copying text snippets.
@@ -33,7 +38,8 @@ CopyNote/
 ├── internal/
 │   ├── model/        # Entry, Store, Settings structs + UUID gen
 │   ├── storage/      # Atomic JSON Load/Save (%APPDATA%\CopyNote\data.json)
-│   ├── service/      # CRUD logic, clipboard, settings (mutex-protected)
+│   ├── service/      # CRUD and settings transactions, injected dependencies
+│   ├── autorun/      # Windows sign-in registry adapter
 │   ├── clipboard/    # Win32 clipboard (CF_UNICODETEXT, no cgo)
 │   ├── singleton/    # Named mutex for single-instance enforcement
 │   ├── tray/         # System tray icon and its right-click menu
@@ -49,7 +55,12 @@ CopyNote/
 │   │   └── lib/
 │   │       ├── api.ts              # Typed Go bridge wrappers
 │   │       ├── types.ts            # Entry, Settings, ModalState interfaces
-│   │       ├── state.svelte.ts     # Reactive state (Runes), actions, theme logic
+│   │       ├── state.svelte.ts     # Stable action facade and view navigation
+│   │       ├── appState.svelte.ts  # Shared reactive state (Runes)
+│   │       ├── entries.ts          # CRUD, copying and list state
+│   │       ├── settings.ts         # Settings queue, hotkey, theme and locale
+│   │       ├── updates.ts          # Update checks and installation
+│   │       ├── relocation.ts       # Dormant relocation actions
 │   │       ├── i18n/
 │   │       │   ├── index.ts        # t() function, setLocale, systemLocale
 │   │       │   ├── en.ts           # English dictionary (~45 keys)
@@ -145,7 +156,7 @@ All bridge calls return Promises. The Go side persists to disk on every mutation
 - **Rounded corners**: DWM `DWMWCP_ROUND`
 - **Silent startup**: window created off-screen (-10000,-10000) with WS_EX_TOOLWINDOW from the start
 - **Prepare after hide**: after slide-out parks the window, Go calls `window.__onHide(id, settings)`. The page clears the previous search/view/errors and resets the list scroll plus Tab entry point (preserving an open modal), flushes the DOM, and measures the final height without easing. After two animation frames it acknowledges with `windowPrepared(id, height)`; Go applies that height before releasing a queued show. A show during slide-out does not cancel the pending reset, and a show after preparation needs no extra wait. Preparation IDs reject stale acknowledgements, including when the tray requests Settings during preparation. Settings is prepared off-screen as the requested destination. `__onShow` runs only when native showing actually begins and restores search focus. `tools/testinstance/preparation.ps1` delays the acknowledgement deliberately and checks quick reopening from search/Settings and constant height during slide-in.
-- **Show on a user launch**: starting the exe by hand surfaces the window as soon as the UI is ready; a Windows sign-in does not. `applyAutorun` appends `service.AutostartFlag` (`--autostart`) to the `Run` value, `startedByAutorun` looks for it, and `tray.ShowOnStart` carries the answer. `EnsureAutorunPath` rewrites the registry value on every start, so installations made before the flag existed migrate themselves. A relaunch after an update or a move passes no arguments and therefore also shows the window — which is what those flows already asked for separately
+- **Show on a user launch**: starting the exe by hand surfaces the window as soon as the UI is ready; a Windows sign-in does not. `autorun.SetEnabled` appends `service.AutostartFlag` (`--autostart`) to the `Run` value, `startedByAutorun` looks for it, and `tray.ShowOnStart` carries the answer. `EnsureAutorunPath` rewrites the registry value on every start. A relaunch passes `--wait-for-pid` and the parent PID, without `--autostart`, so it also shows the window. The child waits for the parent before creating WebView2; the parent returns immediately after starting it and must not wait for the child's tray.
 - **No SW_HIDE**: visibility managed via off-screen positioning to prevent WebView2 renderer throttling
 - **Auto-hide**: `WM_ACTIVATEAPP` wParam=0 moves off-screen after 300ms guard, unless `settings.disableAutoHide` is set — then the window stays up until the ✕, Escape or the tray icon closes it
 - **Entry context menu**: right click, the menu key or Shift+F10, or a long press on a card opens `internal/popupmenu` — the tray's own menu, not HTML: with one or two entries the window is barely taller than the menu, and only a window of its own can run past the edges. `entrymenu_windows.go` shows it **on the UI thread, owned by the main window**. Activation then stays within one thread, so the main window gets no `WM_ACTIVATEAPP` and auto-hide leaves it alone while the menu is open; when the menu closes Windows activates the owner again, and go-webview2's `AutoFocus` puts keyboard focus back into the page. Shown on the tray thread instead, it would hide the window it belongs to. `moveOffScreen` closes it, so it never outlives the window. The menu answers `WM_GETDLGCODE` with `DLGC_WANTALLKEYS`: go-webview2's loop runs every UI-thread message through `IsDialogMessage`, which otherwise swallows the arrows, Enter and Escape as dialog navigation — the tray thread's own loop never had that problem. The page sends the items (labels are localized there) with a token and gets `__entryMenuClosed(token, id)` back; a menu replaced by a newer one resolves to `""` at once, so its late answer is ignored (`lib/entryMenu.ts`). `tools/testinstance/menu.ps1` checks all of this in the real exe.
@@ -280,7 +291,20 @@ CSS variables in `app.css` define a Windows 11–inspired palette:
 
 ## Frontend State Management
 
-Single `state` object in `lib/state.svelte.ts` (Svelte 5 Runes):
+Single `state` object in `lib/appState.svelte.ts` (Svelte 5 Runes), re-exported by
+`lib/state.svelte.ts` for components. Feature actions live in `entries.ts`,
+`settings.ts`, `updates.ts` and `relocation.ts`; they import the shared store
+directly to avoid cycles through the facade. Settings saves, import/export and
+hotkey changes share one queue. A failed hotkey preference write restores the
+previous registration and reports any rollback failure.
+
+The service takes external operations through `service.Dependencies`. Production
+defaults live in `dependencies_windows.go`; ordinary tests replace clipboard and
+autorun at construction. A successful settings save, update or import triggers
+`SettingsSaved`, wired to `tray.RefreshTip`, so every locale change reaches the
+tray. This callback only enqueues work and must never call back into Service.
+
+Reactive state example:
 ```ts
 export const state = $state({
   entries: [] as Entry[],

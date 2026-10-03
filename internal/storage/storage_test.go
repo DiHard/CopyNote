@@ -11,6 +11,31 @@ import (
 	"copynote/internal/model"
 )
 
+func TestLoadSettingsUsesSharedDefaultsAndValidation(t *testing.T) {
+	for _, raw := range []string{
+		`{"theme":"system","locale":"en"}`,
+		`{"theme":"dark","locale":"ru","topmost":false}`,
+		`{"theme":"system","locale":"en","topmost":null}`,
+		`{"theme":"system","locale":"en","disableAutoHide":null}`,
+		`{"theme":"system"}`,
+	} {
+		t.Run(raw, func(t *testing.T) {
+			want, wantErr := model.DecodeSettings([]byte(raw))
+			path := filepath.Join(testutil.TempDir(t), "data.json")
+			if err := os.WriteFile(path, []byte(`{"version":2,"entries":[],"settings":`+raw+`}`), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			got, err := Load(path)
+			if (err != nil) != (wantErr != nil) {
+				t.Fatalf("Load error = %v, DecodeSettings error = %v", err, wantErr)
+			}
+			if err == nil && (got.Settings == nil || *got.Settings != want) {
+				t.Fatalf("Load settings = %#v, want %#v", got.Settings, want)
+			}
+		})
+	}
+}
+
 func TestLoad_MissingFile(t *testing.T) {
 	dir := testutil.TempDir(t)
 	path := filepath.Join(dir, "nope.json")

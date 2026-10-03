@@ -235,12 +235,8 @@ func TestSettingsRegistryFailureDoesNotPersistPreference(t *testing.T) {
 	}
 }
 
-// storage.decode unmarshals data.json straight into model.Store, so a
-// *Settings gets Go's zero value for every key the file does not carry —
-// DefaultSettings never runs on this path. Any preference whose default is
-// "on" therefore has to be stored inverted, or every existing installation
-// silently loses it on upgrade. This pins that down for the window's
-// auto-hide, which is the newest such field.
+// Older snapshots must retain defaults for missing preferences and preserve
+// explicit values. The inverted fields remain compatible with older builds.
 func TestSettingsAbsentFromAnOlderFileKeepDefaultBehaviour(t *testing.T) {
 	dir := testutil.TempDir(t)
 	path := filepath.Join(dir, "data.json")

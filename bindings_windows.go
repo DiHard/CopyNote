@@ -2,7 +2,6 @@ package main
 
 import (
 	"copynote/internal/bridge"
-	"copynote/internal/model"
 	"copynote/internal/service"
 	"copynote/internal/storage"
 	"copynote/internal/tray"
@@ -16,54 +15,47 @@ import (
 	"path/filepath"
 )
 
+func mustBind(w webview2.WebView, name string, fn any) {
+	if err := w.Bind(name, fn); err != nil {
+		log.Fatalf("bind %s: %v", name, err)
+	}
+}
+
 func bindApplication(w webview2.WebView, hwnd uintptr, svc *service.Service, exePath, dataDir string, tr *tray.Tray) *bridge.Async {
 	// 7. Bind CRUD bridge methods.
-	mustBind := func(name string, fn any) {
-		if err := w.Bind(name, fn); err != nil {
-			log.Fatalf("bind %s: %v", name, err)
-		}
-	}
-	mustBind("list", svc.List)
-	mustBind("create", svc.Create)
-	mustBind("update", svc.Update)
-	mustBind("remove", svc.Delete) // "delete" is a JS operator, use "remove"
-	mustBind("reorder", svc.Reorder)
-	mustBind("copy", svc.Copy)
-	mustBind("hide", func() {
+	mustBind(w, "list", svc.List)
+	mustBind(w, "create", svc.Create)
+	mustBind(w, "update", svc.Update)
+	mustBind(w, "remove", svc.Delete) // "delete" is a JS operator, use "remove"
+	mustBind(w, "reorder", svc.Reorder)
+	mustBind(w, "copy", svc.Copy)
+	mustBind(w, "hide", func() {
 		w.Dispatch(func() {
 			moveOffScreen(hwnd)
 		})
 	})
-	mustBind("getSettings", svc.GetSettings)
-	// The tray's hover text is localized, so a language change has to reach
-	// it the same way it already reaches the popup menu.
-	mustBind("saveSettings", func(settings model.Settings) error {
-		if err := svc.SaveSettings(settings); err != nil {
-			return err
-		}
-		tr.RefreshTip()
-		return nil
-	})
-	mustBind("resizeWindow", func(contentHeight int) {
+	mustBind(w, "getSettings", svc.GetSettings)
+	mustBind(w, "saveSettings", svc.SaveSettings)
+	mustBind(w, "resizeWindow", func(contentHeight int) {
 		w.Dispatch(func() {
 			resizeToContent(hwnd, contentHeight)
 		})
 	})
 
-	mustBind("openExternal", func(url string) {
+	mustBind(w, "openExternal", func(url string) {
 		winutil.OpenURL(url)
 	})
 
 	// The app is portable, and a self-update leaves its .old fallback next to
 	// the exe, so the folder is worth a way in from the UI.
-	mustBind("openAppFolder", func() error {
+	mustBind(w, "openAppFolder", func() error {
 		if exePath == "" {
 			return errors.New("executable path is unavailable")
 		}
 		return winutil.OpenFolder(filepath.Dir(exePath))
 	})
 
-	mustBind("getVersion", func() string {
+	mustBind(w, "getVersion", func() string {
 		return version.Version
 	})
 
@@ -81,18 +73,18 @@ func bindApplication(w webview2.WebView, hwnd uintptr, svc *service.Service, exe
 	bindEntryMenu(w, hwnd)
 
 	// Read on every focus loss, so a plain atomic store is all it takes.
-	mustBind("applyAutoHide", func(enabled bool) {
+	mustBind(w, "applyAutoHide", func(enabled bool) {
 		autoHideDisabled.Store(!enabled)
 	})
 
 	// Unlike the other preferences this one can be refused by Windows — the
 	// combination may already belong to another program — so the error goes
 	// back to the UI instead of into the log.
-	mustBind("applyHotkey", func(setting string) error {
+	mustBind(w, "applyHotkey", func(setting string) error {
 		return tr.SetHotkey(setting)
 	})
 
-	mustBind("applyTopmost", func(enabled bool) {
+	mustBind(w, "applyTopmost", func(enabled bool) {
 		topmostEnabled.Store(enabled)
 		w.Dispatch(func() {
 			zOrder := winutil.HWND_NOTOPMOST
@@ -106,7 +98,7 @@ func bindApplication(w webview2.WebView, hwnd uintptr, svc *service.Service, exe
 
 	const fileFilter = "CopyNote Backup (*.json)|*.json|All Files|*.*"
 
-	mustBind("exportData", func() (bool, error) {
+	mustBind(w, "exportData", func() (bool, error) {
 		data, err := svc.ExportData()
 		if err != nil {
 			return false, err
@@ -121,7 +113,7 @@ func bindApplication(w webview2.WebView, hwnd uintptr, svc *service.Service, exe
 
 	// Resolves to null when the dialog is cancelled, which the page tells apart
 	// from an import that added nothing.
-	mustBind("importData", func() (*service.ImportResult, error) {
+	mustBind(w, "importData", func() (*service.ImportResult, error) {
 		path, ok := winutil.OpenFileDialog(hwnd, fileFilter)
 		if !ok {
 			return nil, nil // user cancelled

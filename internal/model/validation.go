@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -8,9 +9,11 @@ import (
 	"copynote/internal/hotkey"
 )
 
+var ErrEmptyLabel = errors.New("label must not be empty")
+
 func ValidateEntry(label, value string) error {
 	if strings.TrimSpace(label) == "" {
-		return fmt.Errorf("label must not be empty")
+		return ErrEmptyLabel
 	}
 	if strings.ContainsRune(label, 0) || strings.ContainsRune(value, 0) {
 		return fmt.Errorf("text must not contain NUL characters")

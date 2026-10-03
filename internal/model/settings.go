@@ -23,17 +23,16 @@ import (
 // so an existing installation sees the offer once. It only hides the
 // banner: the action stays reachable from Settings.
 type Settings struct {
-	Autorun                 bool   `json:"autorun"`
-	Theme                   string `json:"theme"`   // "light" | "dark" | "system"
-	Locale                  string `json:"locale"`  // "en" | "ru" | "system"
-	Topmost                 bool   `json:"topmost"` // keep window above all others
-	DisableUpdateCheck      bool   `json:"disableUpdateCheck"`
+	Autorun            bool   `json:"autorun"`
+	Theme              string `json:"theme"`   // "light" | "dark" | "system"
+	Locale             string `json:"locale"`  // "en" | "ru" | "system"
+	Topmost            bool   `json:"topmost"` // keep window above all others
+	DisableUpdateCheck bool   `json:"disableUpdateCheck"`
 	// DisableAutoHide keeps the window on screen when another program takes
 	// focus, instead of parking it off-screen. Inverted like the field above
-	// for the same reason: storage.decode unmarshals into a zero Settings, so
-	// a key missing from an older data.json must mean the default — and the
-	// default is that the window hides.
-	DisableAutoHide bool `json:"disableAutoHide"`
+	// for compatibility with existing files: a missing key must keep the
+	// default behaviour, which is that the window hides.
+	DisableAutoHide         bool   `json:"disableAutoHide"`
 	LastSeenUpdateVersion   string `json:"lastSeenUpdateVersion"`
 	RelocatePromptDismissed bool   `json:"relocatePromptDismissed"`
 	// RelocateRemindAfter is an RFC3339 instant before which the move
@@ -60,7 +59,17 @@ func DefaultSettings() Settings {
 	}
 }
 
-// DecodeSettings preserves defaults for fields absent in older exports.
+// UnmarshalJSON keeps every JSON entry point on the same defaults and validation.
+func (s *Settings) UnmarshalJSON(raw []byte) error {
+	decoded, err := DecodeSettings(raw)
+	if err != nil {
+		return err
+	}
+	*s = decoded
+	return nil
+}
+
+// DecodeSettings preserves defaults for fields absent in older files and exports.
 // Explicit nulls and missing core fields are malformed, not default values.
 func DecodeSettings(raw []byte) (Settings, error) {
 	var fields map[string]json.RawMessage
@@ -75,12 +84,14 @@ func DecodeSettings(raw []byte) (Settings, error) {
 			return Settings{}, fmt.Errorf("setting %s must not be null", key)
 		}
 	}
-	s := DefaultSettings()
+	// A method-free type avoids recursing through UnmarshalJSON.
+	type settingsJSON Settings
+	s := settingsJSON(DefaultSettings())
 	if err := json.Unmarshal(raw, &s); err != nil {
 		return Settings{}, err
 	}
-	if err := ValidateSettings(s); err != nil {
+	if err := ValidateSettings(Settings(s)); err != nil {
 		return Settings{}, err
 	}
-	return s, nil
+	return Settings(s), nil
 }

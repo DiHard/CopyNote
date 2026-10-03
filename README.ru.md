@@ -153,6 +153,9 @@ go run tools/genicon/main.go          # создаёт assets/icon-dark.ico + ic
 
 ## Проверки разработки
 
+При изменении программы следуем [принципам разработки](docs/DEVELOPMENT_PRINCIPLES.md):
+практическое применение DRY, KISS и SOLID с сохранением совместимости и поведения.
+
 Из корня репозитория:
 
 ```powershell

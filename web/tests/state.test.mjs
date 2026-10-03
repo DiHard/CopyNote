@@ -33,6 +33,72 @@ const deferred = () => {
   return {promise, resolve, reject};
 };
 
+test("a failed hotkey save restores the previous registration and keeps the saved state", async () => {
+  const registrations = [];
+  const app = await setup({
+    applyHotkey: async spec => registrations.push(spec),
+    saveSettings: async () => { throw new Error("disk full"); },
+  });
+  await app.applyHotkey("Ctrl+Shift+F5");
+  assert.deepEqual(registrations, ["Ctrl+Shift+F5", ""]);
+  assert.equal(app.state.settings.hotkey, "");
+  assert.match(app.state.settingsError, /disk full/);
+  assert.equal(app.state.hotkeyError, null);
+  assert.equal(app.state.settingsPending, 0);
+});
+
+test("a failed hotkey rollback is visible and later changes still work", async () => {
+  let fail = true;
+  const registrations = [];
+  const app = await setup({
+    applyHotkey: async spec => {
+      registrations.push(spec);
+      if (fail && spec === "") throw new Error("already registered");
+    },
+    saveSettings: async () => { if (fail) throw new Error("disk full"); },
+  });
+  await app.applyHotkey("Ctrl+Shift+F5");
+  assert.match(app.state.settingsError, /disk full/);
+  assert.match(app.state.hotkeyError.detail, /restore hotkey/);
+  assert.equal(app.state.hotkeyError.combo, app.DEFAULT_HOTKEY);
+  assert.equal(app.state.hotkeyError.taken, false);
+  fail = false;
+  await app.applyHotkey("Ctrl+Shift+F6");
+  assert.equal(app.state.settings.hotkey, "Ctrl+Shift+F6");
+  assert.equal(app.state.hotkeyError, null);
+  assert.equal(app.state.settingsError, null);
+  assert.equal(app.state.settingsPending, 0);
+});
+
+test("hotkey registration and rollback stay inside the import and settings queue", async () => {
+  const registration = deferred();
+  const calls = [];
+  let fail = true;
+  const app = await setup({
+    importData: async () => ({added: 0, skipped: 0}),
+    list: async () => [],
+    getSettings: async () => ({...app.state.settings, hotkey: "Ctrl+Shift+F4"}),
+    applyHotkey: async spec => {
+      calls.push(spec);
+      if (spec === "Ctrl+Shift+F4" && calls.length === 1) await registration.promise;
+    },
+    saveSettings: async settings => {
+      calls.push(`save:${settings.hotkey}`);
+      if (fail) { fail = false; throw new Error("disk full"); }
+    },
+  });
+  const imported = app.importData();
+  const shortcut = app.applyHotkey("Ctrl+Shift+F5");
+  const locale = app.saveSettings({locale: "ru"});
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(calls, ["Ctrl+Shift+F4"]);
+  registration.resolve();
+  await Promise.all([imported, shortcut, locale]);
+  assert.deepEqual(calls, ["Ctrl+Shift+F4", "Ctrl+Shift+F5", "save:Ctrl+Shift+F5", "Ctrl+Shift+F4", "save:Ctrl+Shift+F4"]);
+  assert.equal(app.state.settings.hotkey, "Ctrl+Shift+F4");
+  assert.equal(app.state.settings.locale, "ru");
+});
+
 test("rapid setting changes keep both patches", async () => {
   const first = deferred();
   const writes = [];

@@ -381,7 +381,8 @@
             <button
               type="button"
               onclick={() => void applyHotkey(HOTKEY_OFF)}
-              class="text-[11px] text-on-surface-dim transition hover:text-on-surface"
+              disabled={appState.settingsPending > 0 || dataBusy}
+              class="text-[11px] text-on-surface-dim transition hover:text-on-surface disabled:opacity-60"
             >
               {t("settings.hotkey.disable")}
             </button>
@@ -389,7 +390,8 @@
             <button
               type="button"
               onclick={() => void applyHotkey(DEFAULT_HOTKEY)}
-              class="text-[11px] text-accent transition hover:underline"
+              disabled={appState.settingsPending > 0 || dataBusy}
+              class="text-[11px] text-accent transition hover:underline disabled:opacity-60"
             >
               {t("settings.hotkey.enable", { keys: DEFAULT_HOTKEY })}
             </button>

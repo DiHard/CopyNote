@@ -23,14 +23,15 @@ func newTestService(t *testing.T) (*Service, string, *time.Time) {
 	t.Helper()
 	dir := testutil.TempDir(t)
 	path := filepath.Join(dir, "data.json")
-	s, err := New(path)
+	clock := time.Date(2026, 4, 9, 10, 0, 0, 0, time.UTC)
+	s, err := NewWithDependencies(path, Dependencies{
+		Now:        func() time.Time { return clock },
+		WriteText:  func(string) error { return nil },
+		SetAutorun: func(bool) error { return nil },
+	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	clock := time.Date(2026, 4, 9, 10, 0, 0, 0, time.UTC)
-	s.now = func() time.Time { return clock }
-	s.writeText = func(string) error { return nil }
-	s.setAutorun = func(bool) error { return nil }
 	return s, path, &clock
 }
 

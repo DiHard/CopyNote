@@ -16,7 +16,6 @@ import (
 
 	"copynote/internal/bridge"
 	"copynote/internal/service"
-	"copynote/internal/tray"
 	"copynote/internal/updater"
 	"copynote/internal/version"
 )
@@ -54,11 +53,6 @@ type updateInfo struct {
 const installPromiseTimeout = 10 * time.Minute
 
 func bindUpdates(w webview2.WebView, updates *bridge.Async, svc *service.Service, exePath string) {
-	mustBind := func(name string, fn any) {
-		if err := w.Bind(name, fn); err != nil {
-			log.Fatalf("bind %s: %v", name, err)
-		}
-	}
 	mustAsync := func(name string, timeout time.Duration, fn func(context.Context) (any, error)) {
 		if err := updates.BindTimeout(name, timeout, fn); err != nil {
 			log.Fatalf("bind %s: %v", name, err)
@@ -113,13 +107,13 @@ func bindUpdates(w webview2.WebView, updates *bridge.Async, svc *service.Service
 		return map[string]string{"version": info.Version}, nil
 	})
 
-	mustBind("updateProgress", func() updateProgress {
+	mustBind(w, "updateProgress", func() updateProgress {
 		progressMu.Lock()
 		defer progressMu.Unlock()
 		return installProgress
 	})
 
-	mustBind("restartApp", func() error {
+	mustBind(w, "restartApp", func() error {
 		if !updateReady.Load() {
 			return errors.New("no update has been installed")
 		}
@@ -136,8 +130,8 @@ func setProgress(stage updater.Stage, done, total int64) {
 	progressMu.Unlock()
 }
 
-// relaunch starts the replaced executable and asks it to show its window,
-// the same way a second launch would. The child waits for this process to
+// relaunch starts the replaced executable. ShowOnStart opens its window once
+// it is ready. The child waits for this process to
 // exit before initializing WebView2, because both processes cannot safely
 // use the same WebView2 user-data directory at the same time.
 func relaunch(exePath string) {
@@ -149,8 +143,5 @@ func relaunch(exePath string) {
 	}
 	log.Printf("relaunched %s as pid %d", exePath, cmd.Process.Pid)
 	_ = cmd.Process.Release()
-	// The new instance is still starting WebView2; the tray holds the
-	// request until the UI is ready, so the updated window comes up.
-	delivered := tray.ShowRunningInstance(15 * time.Second)
-	log.Printf("show request delivered to the new instance: %v", delivered)
+	// Return immediately so the child can finish waiting for this process.
 }

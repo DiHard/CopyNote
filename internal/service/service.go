@@ -12,16 +12,14 @@ import (
 	"sync"
 	"time"
 
-	"copynote/internal/clipboard"
 	"copynote/internal/model"
-	"copynote/internal/storage"
 	"copynote/internal/version"
 )
 
 // Errors returned from Service operations. These are surfaced to the
 // JS side as rejected promises and can be matched via error message.
 var (
-	ErrEmptyLabel    = errors.New("label must not be empty")
+	ErrEmptyLabel    = model.ErrEmptyLabel
 	ErrNotFound      = errors.New("entry not found")
 	ErrReorderLength = errors.New("reorder list size mismatch")
 	ErrReorderDup    = errors.New("reorder list has duplicate id")
@@ -30,31 +28,53 @@ var (
 // Service holds the in-memory store and persists mutations to disk.
 // Safe for concurrent use.
 type Service struct {
-	mu    sync.Mutex
-	path  string
-	store model.Store
-	// now is overridable for deterministic tests.
-	now func() time.Time
-	// writeText is overridable for tests; defaults to clipboard.WriteText.
-	writeText  func(string) error
-	setAutorun func(bool) error
-	saveStore  func(string, model.Store) error
+	mu            sync.Mutex
+	path          string
+	store         model.Store
+	now           func() time.Time
+	writeText     func(string) error
+	setAutorun    func(bool) error
+	saveStore     func(string, model.Store) error
+	loadSettings  func(string) (model.Settings, error)
+	settingsSaved func()
+}
+
+// Dependencies are the external operations used by Service. Nil functions use
+// the production adapters, so callers only supply the operations they replace.
+type Dependencies struct {
+	LoadStore          func(string) (model.Store, error)
+	SaveStore          func(string, model.Store) error
+	LoadLegacySettings func(string) (model.Settings, error)
+	WriteText          func(string) error
+	SetAutorun         func(bool) error
+	Now                func() time.Time
+	// SettingsSaved runs after a successful settings commit under the service
+	// lock. It must not call Service or block; enqueue UI work instead.
+	SettingsSaved func()
 }
 
 // New loads the store from path and returns a ready-to-use Service.
 // If the file does not exist, the service starts with an empty store.
 func New(path string) (*Service, error) {
-	s, err := storage.Load(path)
+	return NewWithDependencies(path, Dependencies{})
+}
+
+// NewWithDependencies makes storage and OS effects replaceable at construction.
+func NewWithDependencies(path string, deps Dependencies) (*Service, error) {
+	deps = withDefaults(deps)
+	s, err := deps.LoadStore(path)
 	if err != nil {
 		return nil, fmt.Errorf("load store: %w", err)
 	}
 	return &Service{
-		path:       path,
-		store:      s,
-		now:        func() time.Time { return time.Now().UTC() },
-		writeText:  clipboard.WriteText,
-		setAutorun: applyAutorun,
-		saveStore:  storage.Save,
+		path:          path,
+		store:         s,
+		now:           deps.Now,
+		writeText:     deps.WriteText,
+		setAutorun:    deps.SetAutorun,
+		saveStore:     deps.SaveStore,
+		loadSettings:  deps.LoadLegacySettings,
+		settingsSaved: deps.SettingsSaved,
 	}, nil
 }
 
@@ -72,9 +92,6 @@ func (s *Service) List() []model.Entry {
 // all existing entries down by one. Returns the newly created entry.
 func (s *Service) Create(label, value string) (model.Entry, error) {
 	label = strings.TrimSpace(label)
-	if label == "" {
-		return model.Entry{}, ErrEmptyLabel
-	}
 	if err := model.ValidateEntry(label, value); err != nil {
 		return model.Entry{}, err
 	}
@@ -105,9 +122,6 @@ func (s *Service) Create(label, value string) (model.Entry, error) {
 // createdAt are preserved; updatedAt is refreshed.
 func (s *Service) Update(id, label, value string) (model.Entry, error) {
 	label = strings.TrimSpace(label)
-	if label == "" {
-		return model.Entry{}, ErrEmptyLabel
-	}
 	if err := model.ValidateEntry(label, value); err != nil {
 		return model.Entry{}, err
 	}
