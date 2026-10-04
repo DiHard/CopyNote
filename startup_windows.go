@@ -34,7 +34,7 @@ func waitForRelaunchParent() {
 			// The parent may have exited before this process opened its handle.
 			return
 		}
-		defer windows.CloseHandle(h)
+		defer func() { _ = windows.CloseHandle(h) }() // The parent wait result is independent of handle cleanup.
 		_, _ = windows.WaitForSingleObject(h, windows.INFINITE)
 		return
 	}

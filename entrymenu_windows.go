@@ -1,13 +1,15 @@
 package main
 
 import (
-	"copynote/internal/popupmenu"
-	"copynote/internal/winutil"
 	"encoding/json"
 	"fmt"
-	"github.com/jchv/go-webview2"
 	"log"
 	"math"
+
+	"github.com/jchv/go-webview2"
+
+	"copynote/internal/popupmenu"
+	"copynote/internal/winutil"
 )
 
 // The entry list's context menu is the tray icon's owner-drawn popup

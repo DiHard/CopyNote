@@ -1,0 +1,39 @@
+version: "2"
+run:
+  timeout: 5m
+linters:
+  default: none
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - ineffassign
+    - unused
+    - errorlint
+    - nolintlint
+  settings:
+    staticcheck:
+      checks: ["SA*", "S1*"]
+    errcheck:
+      # Win32 APIs define failure through r1; LazyProc.Call returns last-error even on success.
+      exclude-functions:
+        - "(*golang.org/x/sys/windows.LazyProc).Call"
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+  exclusions:
+    paths:
+      - third_party
+      - web/node_modules
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - copynote
+  exclusions:
+    paths:
+      - third_party
+      - web/node_modules

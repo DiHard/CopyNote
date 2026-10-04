@@ -7,6 +7,7 @@
     openSettings,
     closeSettings,
     loadUpdateInfo,
+    hideWindow,
     // loadInstallLocation, // temporarily disabled with the relocate feature
     resetAfterHide,
     resetListPosition,
@@ -66,29 +67,38 @@
     // Measure the new DOM while parked and apply its final height without
     // easing. Let the renderer paint before Go starts the slide-in.
     fitWindow();
-    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
-    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => resolve()),
+    );
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => resolve()),
+    );
     if (preparation !== id) return;
     fitWindow();
     await window.windowPrepared?.(id, Math.round(targetH));
   }
 
-  onMount(async () => {
+  onMount(() => {
     window.__openSettings = openSettings;
-    window.__onShow = onWindowShown;
+    window.__onShow = () => {
+      void onWindowShown().catch(reportNativeError);
+    };
     window.__onWindowTransition = onWindowTransition;
     window.__onHide = onWindowHidden;
-    await Promise.all([refresh(), loadSettings()]);
-    // Signal Go that the UI is ready — stops tray icon pulse
-    // and enables LMB click.
-    window.notifyReady?.();
-    // Background update check — fire-and-forget, runs after the UI is
-    // already interactive so it never blocks startup.
-    void loadUpdateInfo();
-    // Temporarily disabled while investigating antivirus detections related
-    // to copying the executable. Keep the loader so the feature can be
-    // restored without reworking the startup flow.
-    // void loadInstallLocation();
+    async function initialize() {
+      await Promise.all([refresh(), loadSettings()]);
+      // Signal Go that the UI is ready — stops tray icon pulse
+      // and enables LMB click.
+      await window.notifyReady?.();
+      // Background update check — fire-and-forget, runs after the UI is
+      // already interactive so it never blocks startup.
+      void loadUpdateInfo();
+      // Temporarily disabled while investigating antivirus detections related
+      // to copying the executable. Keep the loader so the feature can be
+      // restored without reworking the startup flow.
+      // void loadInstallLocation();
+    }
+    void initialize().catch(reportNativeError);
   });
 
   onDestroy(() => {
@@ -118,16 +128,24 @@
   let targetH = 0;
   let rafId: number | null = null;
 
+  function reportNativeError(error: unknown) {
+    appState.operationError = String(error);
+  }
+
+  function resizeNativeWindow(height: number) {
+    void window.resizeWindow?.(height).catch(reportNativeError);
+  }
+
   function animateStep() {
     const diff = targetH - currentH;
     if (Math.abs(diff) < 1) {
       currentH = targetH;
-      window.resizeWindow?.(Math.round(currentH));
+      resizeNativeWindow(Math.round(currentH));
       rafId = null;
       return;
     }
     currentH += diff * EASE;
-    window.resizeWindow?.(Math.round(currentH));
+    resizeNativeWindow(Math.round(currentH));
     rafId = requestAnimationFrame(animateStep);
   }
 
@@ -136,7 +154,7 @@
     if (currentH === 0 || !windowVisible) {
       // Very first call — jump instantly, no animation.
       currentH = h;
-      window.resizeWindow?.(Math.round(h));
+      resizeNativeWindow(Math.round(h));
       return;
     }
     // Both expanding and shrinking use smooth animation.
@@ -154,7 +172,9 @@
   /** Flex children never collapse their margins, so a plain sum is exact. */
   function outerHeight(el: HTMLElement): number {
     const cs = getComputedStyle(el);
-    return el.offsetHeight + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom);
+    return (
+      el.offsetHeight + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom)
+    );
   }
 
   /**
@@ -166,7 +186,9 @@
   function desiredHeight(): number {
     const shell = document.querySelector<HTMLElement>("[data-shell]");
     const scroller = shell?.querySelector<HTMLElement>("[data-scroller]");
-    const content = scroller?.querySelector<HTMLElement>("[data-scroll-content]");
+    const content = scroller?.querySelector<HTMLElement>(
+      "[data-scroll-content]",
+    );
     if (!shell || !scroller || !content) {
       // No shell yet (or a view that has no scroller): fall back to the
       // document, which is what this used to measure all the time.
@@ -190,7 +212,11 @@
     const card = overlay?.querySelector<HTMLElement>("[data-modal-card]");
     if (!overlay || !card) return 0;
     const cs = getComputedStyle(overlay);
-    return card.offsetHeight + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+    return (
+      card.offsetHeight +
+      parseFloat(cs.paddingTop) +
+      parseFloat(cs.paddingBottom)
+    );
   }
 
   /** Asks Go for the height the current view and modal need. */
@@ -240,7 +266,9 @@
       showModal = true;
       return;
     }
-    const timer = window.setTimeout(() => { showModal = true; }, MODAL_GROW_MS);
+    const timer = window.setTimeout(() => {
+      showModal = true;
+    }, MODAL_GROW_MS);
     return () => clearTimeout(timer);
   });
 
@@ -259,12 +287,21 @@
 
   /** Global keyboard shortcuts. */
   function onGlobalKeydown(e: KeyboardEvent) {
-	if (e.defaultPrevented) return;
+    if (e.defaultPrevented) return;
     // Tab from the search box reaches the list before the header buttons; see
     // nextTabStop. Modals trap Tab themselves, and Settings keeps the default.
-    if (e.key === "Tab" && !e.altKey && !e.ctrlKey && !e.metaKey && !appState.modal && appState.view === "main") {
+    if (
+      e.key === "Tab" &&
+      !e.altKey &&
+      !e.ctrlKey &&
+      !e.metaKey &&
+      !appState.modal &&
+      appState.view === "main"
+    ) {
       const shell = document.querySelector<HTMLElement>("main[data-shell]");
-      const next = shell ? nextTabStop(shell, document.activeElement, e.shiftKey) : null;
+      const next = shell
+        ? nextTabStop(shell, document.activeElement, e.shiftKey)
+        : null;
       if (next) {
         e.preventDefault();
         next.focus();
@@ -276,7 +313,7 @@
       if (appState.view === "settings") {
         closeSettings();
       } else {
-        window.hide();
+        void hideWindow();
       }
     }
   }
@@ -305,7 +342,9 @@
         </p>
       {/if}
       {#if appState.operationError}
-        <p role="alert" class="shrink-0 px-3 text-xs text-danger">{t("operation.error", {error: appState.operationError})}</p>
+        <p role="alert" class="shrink-0 px-3 text-xs text-danger">
+          {t("operation.error", { error: appState.operationError })}
+        </p>
       {/if}
       <EntryList interactionDisabled={windowTransitioning} />
     </main>

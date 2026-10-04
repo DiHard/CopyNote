@@ -22,7 +22,7 @@ var relaunchTarget atomic.Pointer[string]
 
 // installLocation is the JSON shape the page reads to decide whether to
 // offer the move.
-type installLocation struct {
+type installLocation struct { //nolint:unused // Retained for the temporarily disabled relocation bindings.
 	// Path is the running executable, Dir the folder holding it.
 	Path string `json:"path"`
 	Dir  string `json:"dir"`
@@ -36,7 +36,7 @@ type installLocation struct {
 	CanRelocate bool `json:"canRelocate"`
 }
 
-func bindRelocate(w webview2.WebView, svc *service.Service, hwnd uintptr, exePath, dataDir string) {
+func bindRelocate(w webview2.WebView, svc *service.Service, hwnd uintptr, exePath, dataDir string) { //nolint:unused // Relocation stays disabled until a separate feature change.
 	mustBind(w, "getInstallLocation", func() installLocation {
 		loc := installLocation{
 			Path:        exePath,

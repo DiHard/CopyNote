@@ -86,7 +86,11 @@ func TestApplyRestoresRunningVersionWhenSwapFails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer held.Close()
+	t.Cleanup(func() {
+		if err := held.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 
 	if err := Apply(exe); err == nil {
 		t.Fatal("swap succeeded despite the locked staged binary")
@@ -117,23 +121,24 @@ func TestApplyOnRunningExecutable(t *testing.T) {
 	}
 	dst, err := os.Create(StagingPath(exe))
 	if err != nil {
-		src.Close()
+		_ = src.Close()
 		t.Fatal(err)
 	}
 	_, err = io.Copy(dst, src)
-	src.Close()
-	dst.Close()
+	err = errors.Join(err, src.Close(), dst.Close())
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	if err := Apply(exe); err != nil {
-		os.Remove(StagingPath(exe))
+		_ = os.Remove(StagingPath(exe))
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
 		// Put the running image back under its own name.
-		os.Remove(exe)
+		if err := os.Remove(exe); err != nil {
+			t.Error(err)
+		}
 		if err := os.Rename(PreviousPath(exe), exe); err != nil {
 			t.Error(err)
 		}

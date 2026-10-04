@@ -1,0 +1,10 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": ["tests/*.test.mjs", "src/lib/components/RelocateBanner.svelte"],
+  "project": ["src/**/*.{ts,svelte,css}", "tests/*.test.mjs"],
+  "svelte": true,
+  "vite": true,
+  "ignoreExportsUsedInFile": true,
+  "ignore": ["src/lib/relocation.ts"],
+  "ignoreDependencies": ["prettier-plugin-svelte"]
+}

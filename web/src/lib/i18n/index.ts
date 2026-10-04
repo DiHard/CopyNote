@@ -46,11 +46,6 @@ export function t(key: string, params?: Record<string, string>): string {
   return str;
 }
 
-/** Get the current locale code (e.g., "en", "ru"). */
-export function getLocale(): string {
-  return currentLocale;
-}
-
 /** The shipped languages, each named in itself. "Same as Windows" is not a
  *  language: Settings adds that choice, translated. */
 export const availableLocales = [

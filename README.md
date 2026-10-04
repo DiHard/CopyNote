@@ -47,7 +47,7 @@ A lightweight Windows tray utility for storing and instantly copying frequently 
 
 Download the latest `copynote.exe` from [Releases](https://github.com/DiHard/CopyNote/releases) and run it. That's it &mdash; no installer, no dependencies beyond WebView2.
 
-Later releases install from *Settings → Updates* with one click: the app checks GitHub Releases at startup (this can be turned off), downloads the new `copynote.exe` next to the running one, verifies its ed25519 signature and restarts itself.
+Later releases install from _Settings → Updates_ with one click: the app checks GitHub Releases at startup (this can be turned off), downloads the new `copynote.exe` next to the running one, verifies its ed25519 signature and restarts itself.
 
 When launched manually, the app opens its window as soon as WebView2 is ready. A Windows sign-in through Autorun starts it quietly in the system tray. Left-click the tray icon to toggle the window.
 
@@ -55,9 +55,9 @@ When launched manually, the app opens its window as soon as WebView2 is ready. A
 
 ### Prerequisites
 
-| Tool | Version |
-|------|---------|
-| [Go](https://go.dev/dl/) | 1.25+ |
+| Tool                           | Version                              |
+| ------------------------------ | ------------------------------------ |
+| [Go](https://go.dev/dl/)       | 1.25+                                |
 | [Node.js](https://nodejs.org/) | 22+ (only for building the frontend) |
 
 ### Steps
@@ -90,43 +90,43 @@ go run tools/genicon/main.go          # writes assets/icon-dark.ico + icon-light
 
 ## Data storage
 
-| What | Where |
-|------|-------|
-| Entries and settings | `%APPDATA%\CopyNote\data.json` |
-| Previous saved snapshot | `%APPDATA%\CopyNote\data.json.bak` |
-| Diagnostic log | `%LOCALAPPDATA%\CopyNote\copynote.log` |
-| WebView2 cache | `%LOCALAPPDATA%\CopyNote\WebView2\` |
+| What                    | Where                                  |
+| ----------------------- | -------------------------------------- |
+| Entries and settings    | `%APPDATA%\CopyNote\data.json`         |
+| Previous saved snapshot | `%APPDATA%\CopyNote\data.json.bak`     |
+| Diagnostic log          | `%LOCALAPPDATA%\CopyNote\copynote.log` |
+| WebView2 cache          | `%LOCALAPPDATA%\CopyNote\WebView2\`    |
 
 No data is stored next to the executable &mdash; safe to put it anywhere.
 
 ## Tech stack
 
-| Layer | Technology |
-|-------|-----------|
-| Backend | Go (stdlib + [go-webview2](https://github.com/jchv/go-webview2)) |
-| Frontend | Svelte 5, TypeScript, Tailwind CSS 4 |
-| Bundler | Vite + vite-plugin-singlefile |
-| UI host | Microsoft Edge WebView2 |
-| System integration | Win32 API via `golang.org/x/sys/windows` (no cgo) |
+| Layer              | Technology                                                       |
+| ------------------ | ---------------------------------------------------------------- |
+| Backend            | Go (stdlib + [go-webview2](https://github.com/jchv/go-webview2)) |
+| Frontend           | Svelte 5, TypeScript, Tailwind CSS 4                             |
+| Bundler            | Vite 8 + web/singlefile.ts                                       |
+| UI host            | Microsoft Edge WebView2                                          |
+| System integration | Win32 API via `golang.org/x/sys/windows` (no cgo)                |
 
 ## Keyboard shortcuts
 
-| Key | Context | Action |
-|-----|---------|--------|
-| `Ctrl+Alt+N` | Anywhere | Toggle the window (configurable or disabled in Settings) |
-| `Escape` | Search / main window | Clear the search; with an empty search, hide to tray |
-| `Escape` | Settings | Back to main view |
-| `Escape` | Any modal | Close modal |
-| `Enter` | Search | Copy the top match and hide the window when copying succeeds |
-| `Enter` | Create/Edit form | Save |
-| `Enter` | Delete confirmation | Activate the focused button (Cancel is focused initially) |
-| `↓` | Search | Move focus to the first entry |
-| `↑` / `↓` | Focused entry | Move focus through the entry list |
-| `F2` | Focused entry | Edit the entry |
-| `Delete` | Focused entry | Delete the entry |
-| `Ctrl+↑` / `Ctrl+↓` | Focused entry | Move the entry up or down |
-| `Tab` | Main view | Move between search, the entry list and header controls; the list uses one Tab stop |
-| Menu key / `Shift+F10` | Focused entry | Open the entry context menu |
+| Key                    | Context              | Action                                                                              |
+| ---------------------- | -------------------- | ----------------------------------------------------------------------------------- |
+| `Ctrl+Alt+N`           | Anywhere             | Toggle the window (configurable or disabled in Settings)                            |
+| `Escape`               | Search / main window | Clear the search; with an empty search, hide to tray                                |
+| `Escape`               | Settings             | Back to main view                                                                   |
+| `Escape`               | Any modal            | Close modal                                                                         |
+| `Enter`                | Search               | Copy the top match and hide the window when copying succeeds                        |
+| `Enter`                | Create/Edit form     | Save                                                                                |
+| `Enter`                | Delete confirmation  | Activate the focused button (Cancel is focused initially)                           |
+| `↓`                    | Search               | Move focus to the first entry                                                       |
+| `↑` / `↓`              | Focused entry        | Move focus through the entry list                                                   |
+| `F2`                   | Focused entry        | Edit the entry                                                                      |
+| `Delete`               | Focused entry        | Delete the entry                                                                    |
+| `Ctrl+↑` / `Ctrl+↓`    | Focused entry        | Move the entry up or down                                                           |
+| `Tab`                  | Main view            | Move between search, the entry list and header controls; the list uses one Tab stop |
+| Menu key / `Shift+F10` | Focused entry        | Open the entry context menu                                                         |
 
 ## License
 

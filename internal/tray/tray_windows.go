@@ -167,7 +167,6 @@ const (
 
 // Win32 constants used in this file.
 const (
-	cwUseDefault = 0x80000000
 
 	// Shell_NotifyIcon actions and flags
 	nimAdd     = 0x00000000
@@ -177,8 +176,6 @@ const (
 	nifIcon    = 0x00000002
 	nifTip     = 0x00000004
 	nifState   = 0x00000008
-
-	nisHidden = 0x00000001
 
 	pulseTimerID    = 42
 	pulseIntervalMs = 80 // ms between animation frames (~12 fps)
@@ -491,9 +488,7 @@ func copyTip(dst *[128]uint16, s string) {
 		u16 = u16[:len(dst)]
 		u16[len(u16)-1] = 0
 	}
-	for i := range u16 {
-		dst[i] = u16[i]
-	}
+	copy(dst[:], u16)
 }
 
 // trayWndProc dispatches messages received by the hidden tray window.
@@ -917,7 +912,8 @@ func registerHotkey(t *Tray, spec hotkey.Spec) uintptr {
 	if r != 0 {
 		return 0
 	}
-	if errno, ok := err.(windows.Errno); ok && errno != 0 {
+	var errno windows.Errno
+	if errors.As(err, &errno) && errno != 0 {
 		return uintptr(errno)
 	}
 	return uintptr(windows.ERROR_HOTKEY_ALREADY_REGISTERED)

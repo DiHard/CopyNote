@@ -1,10 +1,10 @@
 import { defineConfig } from "vite";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
-import { viteSingleFile } from "vite-plugin-singlefile";
+import { singleFile } from "./singlefile.ts";
 
 export default defineConfig({
-  plugins: [svelte(), tailwindcss(), viteSingleFile()],
+  plugins: [svelte(), tailwindcss(), singleFile()],
   build: {
     outDir: "dist",
     emptyOutDir: true,
@@ -13,9 +13,9 @@ export default defineConfig({
     // over the local HTTP server with no separate assets to fetch.
     assetsInlineLimit: 100_000_000,
     cssCodeSplit: false,
-    rollupOptions: {
+    rolldownOptions: {
       output: {
-        inlineDynamicImports: true,
+        codeSplitting: false,
       },
     },
   },

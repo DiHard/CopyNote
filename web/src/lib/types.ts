@@ -41,9 +41,9 @@ export interface UserSettings {
 
 /** Matches Go updater.ReleaseInfo JSON shape plus the bridge's selfUpdate flag. */
 export interface UpdateInfo {
-  version: string;     // "1.0.2" (no leading v)
-  name: string;        // release title
-  url: string;         // release page URL
+  version: string; // "1.0.2" (no leading v)
+  name: string; // release title
+  url: string; // release page URL
   publishedAt: string; // RFC3339
   /** Byte size of the release binary; 0 when the release has no binary asset. */
   size: number;
@@ -53,8 +53,8 @@ export interface UpdateInfo {
 
 /** Matches the Go installLocation JSON shape. */
 export interface InstallLocation {
-  path: string;       // the running executable
-  dir: string;        // the folder holding it
+  path: string; // the running executable
+  dir: string; // the folder holding it
   /** True when dir is already a program folder, which hides the offer. */
   permanent: boolean;
   /** Where the one-click move puts it; "" when LOCALAPPDATA is unset. */
@@ -122,6 +122,4 @@ export type UpdateInstallStatus =
 /** Where the "move me somewhere permanent" action is. A move ends with
  * the process restarting, so "moving" has no success state to return to. */
 export type RelocateStatus =
-  | { kind: "idle" }
-  | { kind: "moving" }
-  | { kind: "failed"; error: string };
+  { kind: "idle" } | { kind: "moving" } | { kind: "failed"; error: string };

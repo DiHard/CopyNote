@@ -135,7 +135,7 @@ func CopyTo(exePath, targetDir string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("read %s: %w", exePath, err)
 	}
-	defer src.Close()
+	defer func() { _ = src.Close() }() // Read-only source; destination flush and close are checked below.
 	info, err := src.Stat()
 	if err != nil {
 		return "", fmt.Errorf("stat %s: %w", exePath, err)
@@ -161,7 +161,7 @@ func CopyTo(exePath, targetDir string) (string, error) {
 		copyErr = os.Chmod(staged, 0o755)
 	}
 	if copyErr != nil {
-		os.Remove(staged)
+		_ = os.Remove(staged)
 		return "", fmt.Errorf("copy to %s: %w", targetDir, copyErr)
 	}
 
@@ -169,7 +169,7 @@ func CopyTo(exePath, targetDir string) (string, error) {
 	// target cannot be the running one — the single-instance mutex would
 	// have stopped this process before it got here.
 	if err := os.Rename(staged, target); err != nil {
-		os.Remove(staged)
+		_ = os.Remove(staged)
 		return "", fmt.Errorf("install into %s: %w", targetDir, err)
 	}
 	return target, nil
@@ -203,7 +203,7 @@ func RunPendingCleanup(dataDir, currentExe string, wait time.Duration) error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(marker)
+	defer func() { _ = os.Remove(marker) }() // Cleanup is best-effort; failed deletions may be retried on the next launch.
 
 	leftover := strings.TrimSpace(string(raw))
 	if !safeToDelete(leftover, currentExe) {

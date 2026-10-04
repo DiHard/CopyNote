@@ -24,6 +24,7 @@ Thumbs.db
 # Build artifacts
 *.syso
 /build/
+/.quality/
 
 # Release signing (private key lives outside the repo; .sig is a release asset)
 *.sig

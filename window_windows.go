@@ -1,13 +1,14 @@
 package main
 
 import (
-	"copynote/internal/tray"
-	"copynote/internal/winutil"
 	"math"
 	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"copynote/internal/tray"
+	"copynote/internal/winutil"
 )
 
 // Subclassing state for the webview window. The callback must outlive

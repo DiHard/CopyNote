@@ -81,7 +81,7 @@
     <form
       onsubmit={(e) => {
         e.preventDefault();
-        save();
+        void save();
       }}
       class="flex flex-col gap-3"
     >
@@ -111,7 +111,9 @@
         ></textarea>
         <!-- The empty-value fallback is real behaviour in service.Copy, and
              nothing else in the UI hints at it. -->
-        <span id="value-hint" class="text-[11px] leading-snug text-on-surface-dim"
+        <span
+          id="value-hint"
+          class="text-[11px] leading-snug text-on-surface-dim"
           >{t("modal.value.hint")}</span
         >
       </label>

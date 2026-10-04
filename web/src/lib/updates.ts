@@ -46,7 +46,8 @@ export async function loadUpdateInfo(): Promise<void> {
 export async function forceCheckUpdateInfo(): Promise<void> {
   const request = ++updateRequest;
   state.updateCheckStatus = { kind: "checking" };
-  if (state.updateInstall.kind === "failed") state.updateInstall = { kind: "idle" };
+  if (state.updateInstall.kind === "failed")
+    state.updateInstall = { kind: "idle" };
   try {
     const info = await api.forceCheckForUpdates();
     if (request !== updateRequest) return;
@@ -64,7 +65,12 @@ export async function forceCheckUpdateInfo(): Promise<void> {
 
 export function isUpdateInstalling(): boolean {
   const kind = state.updateInstall.kind;
-  return kind === "downloading" || kind === "verifying" || kind === "applying" || kind === "restarting";
+  return (
+    kind === "downloading" ||
+    kind === "verifying" ||
+    kind === "applying" ||
+    kind === "restarting"
+  );
 }
 
 /** How often download progress is polled from Go while installUpdate runs. */
@@ -107,14 +113,21 @@ export async function installUpdate(): Promise<void> {
     await api.restartApp();
   } catch (error) {
     stop();
-    state.updateInstall = { kind: "failed", error: String(error).replace(/^Error:\s*/, "") };
+    state.updateInstall = {
+      kind: "failed",
+      error: String(error).replace(/^Error:\s*/, ""),
+    };
   }
 }
 
 function applyInstallProgress(progress: UpdateProgress): void {
   switch (progress.stage) {
     case "download":
-      state.updateInstall = { kind: "downloading", done: progress.done, total: progress.total };
+      state.updateInstall = {
+        kind: "downloading",
+        done: progress.done,
+        total: progress.total,
+      };
       break;
     case "verify":
       state.updateInstall = { kind: "verifying" };

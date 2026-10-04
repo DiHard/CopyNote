@@ -7,37 +7,85 @@ import { compileModule } from "svelte/compiler";
 // Exercise the actual Svelte state module with a fake Go bridge. No app data,
 // registry, network, or system clipboard is touched by these tests.
 const bundle = await build({
-  entryPoints: ["src/lib/state.svelte.ts"], bundle: true, write: false,
-  format: "esm", platform: "browser", conditions: ["browser"],
-  plugins: [{ name: "svelte-runes", setup(builder) {
-    builder.onLoad({filter: /\.svelte\.ts$/}, async ({path}) => {
-      const source = await readFile(path, "utf8");
-      const js = await transform(source, {loader: "ts", target: "esnext"});
-      return {contents: compileModule(js.code, {filename: path, generate: "client"}).js.code, loader: "js"};
-    });
-  } }],
+  entryPoints: ["src/lib/state.svelte.ts"],
+  bundle: true,
+  write: false,
+  format: "esm",
+  platform: "browser",
+  conditions: ["browser"],
+  plugins: [
+    {
+      name: "svelte-runes",
+      setup(builder) {
+        builder.onLoad({ filter: /\.svelte\.ts$/ }, async ({ path }) => {
+          const source = await readFile(path, "utf8");
+          const js = await transform(source, {
+            loader: "ts",
+            target: "esnext",
+          });
+          return {
+            contents: compileModule(js.code, {
+              filename: path,
+              generate: "client",
+            }).js.code,
+            loader: "js",
+          };
+        });
+      },
+    },
+  ],
 });
 let instance = 0;
 async function setup(overrides = {}) {
-  globalThis.document = { documentElement: { classList: {add(){}, remove(){}, toggle(){}} } };
+  globalThis.document = {
+    documentElement: { classList: { add() {}, remove() {}, toggle() {} } },
+  };
   globalThis.window = {
-    matchMedia: () => ({matches: false, addEventListener(){}, removeEventListener(){}}),
-    applyTopmost: async () => {}, saveSettings: async () => {},
+    matchMedia: () => ({
+      matches: false,
+      addEventListener() {},
+      removeEventListener() {},
+    }),
+    applyTopmost: async () => {},
+    saveSettings: async () => {},
     ...overrides,
   };
-  return import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString("base64")}#${instance++}`);
+  return import(
+    `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString("base64")}#${instance++}`
+  );
 }
 const deferred = () => {
   let resolve, reject;
-  const promise = new Promise((yes,no) => {resolve=yes;reject=no;});
-  return {promise, resolve, reject};
+  const promise = new Promise((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  return { promise, resolve, reject };
 };
+
+test("native hide failures are visible and a later retry succeeds", async () => {
+  let fail = true;
+  let calls = 0;
+  const app = await setup({
+    hide: async () => {
+      calls++;
+      if (fail) throw new Error("native window unavailable");
+    },
+  });
+  await app.hideWindow();
+  assert.match(app.state.operationError, /native window unavailable/);
+  fail = false;
+  await app.hideWindow();
+  assert.equal(calls, 2);
+});
 
 test("a failed hotkey save restores the previous registration and keeps the saved state", async () => {
   const registrations = [];
   const app = await setup({
-    applyHotkey: async spec => registrations.push(spec),
-    saveSettings: async () => { throw new Error("disk full"); },
+    applyHotkey: async (spec) => registrations.push(spec),
+    saveSettings: async () => {
+      throw new Error("disk full");
+    },
   });
   await app.applyHotkey("Ctrl+Shift+F5");
   assert.deepEqual(registrations, ["Ctrl+Shift+F5", ""]);
@@ -51,11 +99,13 @@ test("a failed hotkey rollback is visible and later changes still work", async (
   let fail = true;
   const registrations = [];
   const app = await setup({
-    applyHotkey: async spec => {
+    applyHotkey: async (spec) => {
       registrations.push(spec);
       if (fail && spec === "") throw new Error("already registered");
     },
-    saveSettings: async () => { if (fail) throw new Error("disk full"); },
+    saveSettings: async () => {
+      if (fail) throw new Error("disk full");
+    },
   });
   await app.applyHotkey("Ctrl+Shift+F5");
   assert.match(app.state.settingsError, /disk full/);
@@ -75,26 +125,39 @@ test("hotkey registration and rollback stay inside the import and settings queue
   const calls = [];
   let fail = true;
   const app = await setup({
-    importData: async () => ({added: 0, skipped: 0}),
+    importData: async () => ({ added: 0, skipped: 0 }),
     list: async () => [],
-    getSettings: async () => ({...app.state.settings, hotkey: "Ctrl+Shift+F4"}),
-    applyHotkey: async spec => {
+    getSettings: async () => ({
+      ...app.state.settings,
+      hotkey: "Ctrl+Shift+F4",
+    }),
+    applyHotkey: async (spec) => {
       calls.push(spec);
-      if (spec === "Ctrl+Shift+F4" && calls.length === 1) await registration.promise;
+      if (spec === "Ctrl+Shift+F4" && calls.length === 1)
+        await registration.promise;
     },
-    saveSettings: async settings => {
+    saveSettings: async (settings) => {
       calls.push(`save:${settings.hotkey}`);
-      if (fail) { fail = false; throw new Error("disk full"); }
+      if (fail) {
+        fail = false;
+        throw new Error("disk full");
+      }
     },
   });
   const imported = app.importData();
   const shortcut = app.applyHotkey("Ctrl+Shift+F5");
-  const locale = app.saveSettings({locale: "ru"});
-  await new Promise(resolve => setImmediate(resolve));
+  const locale = app.saveSettings({ locale: "ru" });
+  await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(calls, ["Ctrl+Shift+F4"]);
   registration.resolve();
   await Promise.all([imported, shortcut, locale]);
-  assert.deepEqual(calls, ["Ctrl+Shift+F4", "Ctrl+Shift+F5", "save:Ctrl+Shift+F5", "Ctrl+Shift+F4", "save:Ctrl+Shift+F4"]);
+  assert.deepEqual(calls, [
+    "Ctrl+Shift+F4",
+    "Ctrl+Shift+F5",
+    "save:Ctrl+Shift+F5",
+    "Ctrl+Shift+F4",
+    "save:Ctrl+Shift+F4",
+  ]);
   assert.equal(app.state.settings.hotkey, "Ctrl+Shift+F4");
   assert.equal(app.state.settings.locale, "ru");
 });
@@ -102,46 +165,52 @@ test("hotkey registration and rollback stay inside the import and settings queue
 test("rapid setting changes keep both patches", async () => {
   const first = deferred();
   const writes = [];
-  const app = await setup({saveSettings: async settings => {
-    writes.push({...settings});
-    if (writes.length === 1) await first.promise;
-  }});
-  const theme = app.saveSettings({theme:"dark"});
-  const locale = app.saveSettings({locale:"ru"});
+  const app = await setup({
+    saveSettings: async (settings) => {
+      writes.push({ ...settings });
+      if (writes.length === 1) await first.promise;
+    },
+  });
+  const theme = app.saveSettings({ theme: "dark" });
+  const locale = app.saveSettings({ locale: "ru" });
   await Promise.resolve();
-  assert.equal(writes.length,1);
+  assert.equal(writes.length, 1);
   first.resolve();
-  await Promise.all([theme,locale]);
-  assert.equal(writes[1].theme,"dark");
-  assert.equal(writes[1].locale,"ru");
-  assert.equal(app.state.settings.theme,"dark");
-  assert.equal(app.state.settingsPending,0);
+  await Promise.all([theme, locale]);
+  assert.equal(writes[1].theme, "dark");
+  assert.equal(writes[1].locale, "ru");
+  assert.equal(app.state.settings.theme, "dark");
+  assert.equal(app.state.settingsPending, 0);
 });
 
 test("a failed preference save is visible and does not poison later saves", async () => {
   let fail = true;
-  const app = await setup({saveSettings: async () => {if(fail) throw new Error("disk full");}});
-  await assert.rejects(app.saveSettings({theme:"dark"}),/disk full/);
-  assert.equal(app.state.settings.theme,"system");
-  assert.match(app.state.settingsError,/disk full/);
-  assert.equal(app.state.settingsPending,0);
-  fail=false;
-  await app.saveSettings({locale:"ru"});
-  assert.equal(app.state.settings.locale,"ru");
-  assert.equal(app.state.settings.theme,"system");
-  assert.equal(app.state.settingsError,null);
+  const app = await setup({
+    saveSettings: async () => {
+      if (fail) throw new Error("disk full");
+    },
+  });
+  await assert.rejects(app.saveSettings({ theme: "dark" }), /disk full/);
+  assert.equal(app.state.settings.theme, "system");
+  assert.match(app.state.settingsError, /disk full/);
+  assert.equal(app.state.settingsPending, 0);
+  fail = false;
+  await app.saveSettings({ locale: "ru" });
+  assert.equal(app.state.settings.locale, "ru");
+  assert.equal(app.state.settings.theme, "system");
+  assert.equal(app.state.settingsError, null);
 });
 
 test("the header pin toggles auto-hide and applies the inverse to the window", async () => {
   const saved = [];
   const applied = [];
   const app = await setup({
-    saveSettings: async settings => saved.push({...settings}),
-    applyAutoHide: async enabled => applied.push(enabled),
+    saveSettings: async (settings) => saved.push({ ...settings }),
+    applyAutoHide: async (enabled) => applied.push(enabled),
   });
 
   app.toggleAutoHide();
-  await new Promise(resolve => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
   assert.equal(app.state.settings.disableAutoHide, true);
   assert.equal(saved[0].disableAutoHide, true);
   assert.equal(applied[0], false);
@@ -151,12 +220,14 @@ test("a failed pin save reports an error on the main view and allows retry", asy
   let fail = true;
   const applied = [];
   const app = await setup({
-    saveSettings: async () => { if (fail) throw new Error("disk full"); },
-    applyAutoHide: async enabled => applied.push(enabled),
+    saveSettings: async () => {
+      if (fail) throw new Error("disk full");
+    },
+    applyAutoHide: async (enabled) => applied.push(enabled),
   });
 
   app.toggleAutoHide();
-  await new Promise(resolve => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
   assert.match(app.state.operationError, /disk full/);
   assert.equal(app.state.settings.disableAutoHide, false);
   assert.equal(app.state.settingsPending, 0);
@@ -164,67 +235,100 @@ test("a failed pin save reports an error on the main view and allows retry", asy
 
   fail = false;
   app.toggleAutoHide();
-  await new Promise(resolve => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
   assert.equal(app.state.operationError, null);
   assert.equal(app.state.settings.disableAutoHide, true);
   assert.deepEqual(applied, [false]);
 });
 
 test("cancelled file dialogs do not report success or reload settings", async () => {
-  const app = await setup({importData: async()=>null, exportData: async()=>false,
-    getSettings: async()=>{throw new Error("must not reload");}});
-  assert.equal(await app.importData(),null);
-  assert.equal(await app.exportData(),false);
-  assert.equal(app.state.settingsError,null);
+  const app = await setup({
+    importData: async () => null,
+    exportData: async () => false,
+    getSettings: async () => {
+      throw new Error("must not reload");
+    },
+  });
+  assert.equal(await app.importData(), null);
+  assert.equal(await app.exportData(), false);
+  assert.equal(app.state.settingsError, null);
 });
 
 test("import and a following preference write use the imported snapshot", async () => {
-  const writes=[];
-  const app=await setup({importData:async()=>({added:0,skipped:0}), list:async()=>[],
-    getSettings:async()=>({...app.state.settings,theme:"dark"}),
-    saveSettings:async value=>writes.push({...value})});
-  const imported=app.importData();
-  const save=app.saveSettings({locale:"ru"});
-  await Promise.all([imported,save]);
-  assert.equal(writes[0].theme,"dark");
-  assert.equal(writes[0].locale,"ru");
+  const writes = [];
+  const app = await setup({
+    importData: async () => ({ added: 0, skipped: 0 }),
+    list: async () => [],
+    getSettings: async () => ({ ...app.state.settings, theme: "dark" }),
+    saveSettings: async (value) => writes.push({ ...value }),
+  });
+  const imported = app.importData();
+  const save = app.saveSettings({ locale: "ru" });
+  await Promise.all([imported, save]);
+  assert.equal(writes[0].theme, "dark");
+  assert.equal(writes[0].locale, "ru");
 });
 
 test("late automatic update result cannot overwrite a manual check", async () => {
-  const automatic=deferred();
-  const info={version:"2.0.0",name:"Release",url:"https://example.com",publishedAt:""};
-  const app=await setup({checkForUpdates:()=>automatic.promise,forceCheckForUpdates:async()=>info});
-  const background=app.loadUpdateInfo();
+  const automatic = deferred();
+  const info = {
+    version: "2.0.0",
+    name: "Release",
+    url: "https://example.com",
+    publishedAt: "",
+  };
+  const app = await setup({
+    checkForUpdates: () => automatic.promise,
+    forceCheckForUpdates: async () => info,
+  });
+  const background = app.loadUpdateInfo();
   await app.forceCheckUpdateInfo();
   automatic.resolve(null);
   await background;
-  assert.equal(app.state.updateInfo.version,"2.0.0");
-  assert.equal(app.state.updateCheckStatus.kind,"available");
+  assert.equal(app.state.updateInfo.version, "2.0.0");
+  assert.equal(app.state.updateCheckStatus.kind, "available");
 });
 
-const signedRelease = {version:"2.1.0",name:"Release",url:"https://example.com",publishedAt:"",size:100,selfUpdate:true};
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+const signedRelease = {
+  version: "2.1.0",
+  name: "Release",
+  url: "https://example.com",
+  publishedAt: "",
+  size: 100,
+  selfUpdate: true,
+};
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 test("installing an update follows Go progress, then restarts", async () => {
   const install = deferred();
-  let progress = {stage:"download", done:50, total:100};
+  let progress = { stage: "download", done: 50, total: 100 };
   const restarts = [];
   const app = await setup({
     forceCheckForUpdates: async () => signedRelease,
     installUpdate: () => install.promise,
     updateProgress: async () => progress,
-    restartApp: async () => { restarts.push(true); },
+    restartApp: async () => {
+      restarts.push(true);
+    },
   });
   await app.forceCheckUpdateInfo();
   const run = app.installUpdate();
-  assert.deepEqual(app.state.updateInstall, {kind:"downloading", done:0, total:100});
+  assert.deepEqual(app.state.updateInstall, {
+    kind: "downloading",
+    done: 0,
+    total: 100,
+  });
   assert.equal(app.isUpdateInstalling(), true);
   await sleep(400);
-  assert.deepEqual(app.state.updateInstall, {kind:"downloading", done:50, total:100});
-  progress = {stage:"verify", done:0, total:0};
+  assert.deepEqual(app.state.updateInstall, {
+    kind: "downloading",
+    done: 50,
+    total: 100,
+  });
+  progress = { stage: "verify", done: 0, total: 0 };
   await sleep(400);
   assert.equal(app.state.updateInstall.kind, "verifying");
-  install.resolve({version:"2.1.0"});
+  install.resolve({ version: "2.1.0" });
   await run;
   assert.equal(app.state.updateInstall.kind, "restarting");
   assert.equal(restarts.length, 1);
@@ -237,14 +341,20 @@ test("a failed update is reported, keeps the button usable and can be retried", 
   let fail = true;
   const app = await setup({
     forceCheckForUpdates: async () => signedRelease,
-    installUpdate: async () => { if (fail) throw new Error("signature does not match the downloaded file"); return {version:"2.1.0"}; },
-    updateProgress: async () => ({stage:"", done:0, total:0}),
+    installUpdate: async () => {
+      if (fail) throw new Error("signature does not match the downloaded file");
+      return { version: "2.1.0" };
+    },
+    updateProgress: async () => ({ stage: "", done: 0, total: 0 }),
     restartApp: async () => {},
   });
   await app.forceCheckUpdateInfo();
   await app.installUpdate();
   assert.equal(app.state.updateInstall.kind, "failed");
-  assert.equal(app.state.updateInstall.error, "signature does not match the downloaded file");
+  assert.equal(
+    app.state.updateInstall.error,
+    "signature does not match the downloaded file",
+  );
   assert.equal(app.isUpdateInstalling(), false);
   await app.forceCheckUpdateInfo();
   assert.equal(app.state.updateInstall.kind, "idle");
@@ -255,8 +365,10 @@ test("a failed update is reported, keeps the button usable and can be retried", 
 
 test("a release without a signed binary is never installed in-app", async () => {
   const app = await setup({
-    forceCheckForUpdates: async () => ({...signedRelease, selfUpdate:false}),
-    installUpdate: async () => { throw new Error("must not be called"); },
+    forceCheckForUpdates: async () => ({ ...signedRelease, selfUpdate: false }),
+    installUpdate: async () => {
+      throw new Error("must not be called");
+    },
   });
   await app.forceCheckUpdateInfo();
   await app.installUpdate();
@@ -277,16 +389,21 @@ const location = (over = {}) => ({
   ...over,
 });
 
-const anEntry = {id: "1", label: "Email", value: "me@example.com", order: 0};
+const anEntry = { id: "1", label: "Email", value: "me@example.com", order: 0 };
 
 test("the move offer follows where the executable actually lives", async () => {
   const settled = await setup({
-    getInstallLocation: async () => location({permanent: true, dir: PROGRAMS}),
+    getInstallLocation: async () =>
+      location({ permanent: true, dir: PROGRAMS }),
     list: async () => [anEntry],
   });
   await settled.loadInstallLocation();
   await settled.refresh();
-  assert.equal(settled.canOfferRelocate(), false, "a program folder needs no move");
+  assert.equal(
+    settled.canOfferRelocate(),
+    false,
+    "a program folder needs no move",
+  );
   assert.equal(settled.shouldShowRelocateBanner(), false);
 
   const loose = await setup({
@@ -300,23 +417,45 @@ test("the move offer follows where the executable actually lives", async () => {
 });
 
 test("the banner waits for the first entry, the settings action does not", async () => {
-  const app = await setup({getInstallLocation: async () => location(), list: async () => []});
+  const app = await setup({
+    getInstallLocation: async () => location(),
+    list: async () => [],
+  });
   await app.loadInstallLocation();
   await app.refresh();
   assert.equal(app.state.entries.length, 0);
-  assert.equal(app.shouldShowRelocateBanner(), false, "an empty list must not open with a warning");
-  assert.equal(app.canOfferRelocate(), true, "settings keeps the action from the start");
+  assert.equal(
+    app.shouldShowRelocateBanner(),
+    false,
+    "an empty list must not open with a warning",
+  );
+  assert.equal(
+    app.canOfferRelocate(),
+    true,
+    "settings keeps the action from the start",
+  );
 
   app.state.entries = [anEntry];
-  assert.equal(app.shouldShowRelocateBanner(), true, "the banner appears once there is something to protect");
+  assert.equal(
+    app.shouldShowRelocateBanner(),
+    true,
+    "the banner appears once there is something to protect",
+  );
 });
 
 test("an unknown executable path offers nothing", async () => {
-  const app = await setup({getInstallLocation: async () => location({canRelocate: false, path: "", dir: ""})});
+  const app = await setup({
+    getInstallLocation: async () =>
+      location({ canRelocate: false, path: "", dir: "" }),
+  });
   await app.loadInstallLocation();
   assert.equal(app.canOfferRelocate(), false);
 
-  const broken = await setup({getInstallLocation: async () => {throw new Error("no bridge");}});
+  const broken = await setup({
+    getInstallLocation: async () => {
+      throw new Error("no bridge");
+    },
+  });
   await broken.loadInstallLocation();
   assert.equal(broken.state.installLocation, null);
   assert.equal(broken.canOfferRelocate(), false);
@@ -339,8 +478,16 @@ test("remind me later hides the banner until the stored instant passes", async (
 
   await app.snoozeRelocatePrompt();
   assert.equal(asked, 1);
-  assert.equal(app.shouldShowRelocateBanner(), false, "hidden while the snooze runs");
-  assert.equal(app.state.settings.relocatePromptDismissed, false, "a snooze is not a dismissal");
+  assert.equal(
+    app.shouldShowRelocateBanner(),
+    false,
+    "hidden while the snooze runs",
+  );
+  assert.equal(
+    app.state.settings.relocatePromptDismissed,
+    false,
+    "a snooze is not a dismissal",
+  );
 
   // Once the instant is in the past the offer comes back on its own.
   app.state.relocateSnoozeClicked = false;
@@ -348,29 +495,49 @@ test("remind me later hides the banner until the stored instant passes", async (
     ...app.state.settings,
     relocateRemindAfter: new Date(Date.now() - hour).toISOString(),
   };
-  assert.equal(app.shouldShowRelocateBanner(), true, "an expired snooze stops hiding it");
+  assert.equal(
+    app.shouldShowRelocateBanner(),
+    true,
+    "an expired snooze stops hiding it",
+  );
 });
 
 test("a snooze that fails to persist still hides the banner and reports the error", async () => {
   const app = await setup({
     getInstallLocation: async () => location(),
     list: async () => [anEntry],
-    snoozeRelocatePrompt: async () => {throw new Error("disk is full");},
+    snoozeRelocatePrompt: async () => {
+      throw new Error("disk is full");
+    },
   });
   await app.loadInstallLocation();
   await app.refresh();
 
   await app.snoozeRelocatePrompt();
-  assert.equal(app.shouldShowRelocateBanner(), false, "the click still feels like it worked");
+  assert.equal(
+    app.shouldShowRelocateBanner(),
+    false,
+    "the click still feels like it worked",
+  );
   assert.match(app.state.settingsError, /disk is full/);
-  assert.equal(app.state.settings.relocateRemindAfter, "", "nothing was stored");
+  assert.equal(
+    app.state.settings.relocateRemindAfter,
+    "",
+    "nothing was stored",
+  );
 });
 
 test("a corrupted reminder instant shows the banner rather than hiding it forever", async () => {
-  const app = await setup({getInstallLocation: async () => location(), list: async () => [anEntry]});
+  const app = await setup({
+    getInstallLocation: async () => location(),
+    list: async () => [anEntry],
+  });
   await app.loadInstallLocation();
   await app.refresh();
-  app.state.settings = {...app.state.settings, relocateRemindAfter: "not a date"};
+  app.state.settings = {
+    ...app.state.settings,
+    relocateRemindAfter: "not a date",
+  };
   assert.equal(app.shouldShowRelocateBanner(), true);
 });
 
@@ -379,28 +546,44 @@ test("dismissing hides the banner but keeps the action in settings", async () =>
   const app = await setup({
     getInstallLocation: async () => location(),
     list: async () => [anEntry],
-    dismissRelocatePrompt: async () => {dismissed++;},
+    dismissRelocatePrompt: async () => {
+      dismissed++;
+    },
   });
   await app.loadInstallLocation();
   await app.refresh();
-  assert.equal(app.shouldShowRelocateBanner(), true, "visible before the dismissal");
+  assert.equal(
+    app.shouldShowRelocateBanner(),
+    true,
+    "visible before the dismissal",
+  );
 
   await app.dismissRelocatePrompt();
   assert.equal(dismissed, 1);
   assert.equal(app.shouldShowRelocateBanner(), false, "banner is gone");
-  assert.equal(app.canOfferRelocate(), true, "settings must not lose the action");
+  assert.equal(
+    app.canOfferRelocate(),
+    true,
+    "settings must not lose the action",
+  );
 });
 
 test("a failed move is reported and leaves the button usable", async () => {
   const app = await setup({
     getInstallLocation: async () => location(),
-    relocateApp: async () => {throw new Error("access is denied");},
+    relocateApp: async () => {
+      throw new Error("access is denied");
+    },
   });
   await app.loadInstallLocation();
   await app.relocateApp();
   assert.equal(app.state.relocate.kind, "failed");
   assert.match(app.state.relocate.error, /access is denied/);
-  assert.doesNotMatch(app.state.relocate.error, /^Error:/, "the Error: prefix is stripped");
+  assert.doesNotMatch(
+    app.state.relocate.error,
+    /^Error:/,
+    "the Error: prefix is stripped",
+  );
   // Still offered, so the user can retry rather than being stuck.
   assert.equal(app.canOfferRelocate(), true);
 });
@@ -410,7 +593,10 @@ test("a cancelled folder picker moves nothing", async () => {
   const app = await setup({
     getInstallLocation: async () => location(),
     pickInstallFolder: async () => "",
-    relocateApp: async dir => {moves.push(dir); return dir;},
+    relocateApp: async (dir) => {
+      moves.push(dir);
+      return dir;
+    },
   });
   await app.loadInstallLocation();
   await app.relocateAppTo("pick a folder");
@@ -423,7 +609,10 @@ test("a chosen folder is the one the move targets", async () => {
   const app = await setup({
     getInstallLocation: async () => location(),
     pickInstallFolder: async () => PORTABLE,
-    relocateApp: async dir => {moves.push(dir); return dir + String.raw`\copynote.exe`;},
+    relocateApp: async (dir) => {
+      moves.push(dir);
+      return dir + String.raw`\copynote.exe`;
+    },
   });
   await app.loadInstallLocation();
   await app.relocateAppTo("pick a folder");
@@ -435,7 +624,11 @@ test("a second click cannot start a move while one is running", async () => {
   let calls = 0;
   const app = await setup({
     getInstallLocation: async () => location(),
-    relocateApp: async () => {calls++; await gate.promise; return "moved";},
+    relocateApp: async () => {
+      calls++;
+      await gate.promise;
+      return "moved";
+    },
   });
   await app.loadInstallLocation();
   const first = app.relocateApp();
@@ -447,41 +640,63 @@ test("a second click cannot start a move while one is running", async () => {
 });
 
 const twoEntries = [
-  {id: "1", label: "Рабочая почта", value: "me@example.com", order: 0},
-  {id: "2", label: "Личный телефон", value: "+7 999", order: 1},
+  { id: "1", label: "Рабочая почта", value: "me@example.com", order: 0 },
+  { id: "2", label: "Личный телефон", value: "+7 999", order: 1 },
 ];
 
 test("Enter in the search box copies the top match", async () => {
   const copied = [];
-  const app = await setup({list: async () => twoEntries, copy: async id => {copied.push(id); return null;}});
+  const app = await setup({
+    list: async () => twoEntries,
+    copy: async (id) => {
+      copied.push(id);
+      return null;
+    },
+  });
   await app.refresh();
 
   app.state.query = "телефон";
   assert.equal(await app.copyTopMatch(), true);
-  assert.deepEqual(copied, ["2"], "the filtered first entry, not the list's first");
+  assert.deepEqual(
+    copied,
+    ["2"],
+    "the filtered first entry, not the list's first",
+  );
 });
 
 test("Enter copies nothing when the filter matches nothing", async () => {
   const copied = [];
-  const app = await setup({list: async () => twoEntries, copy: async id => {copied.push(id); return null;}});
+  const app = await setup({
+    list: async () => twoEntries,
+    copy: async (id) => {
+      copied.push(id);
+      return null;
+    },
+  });
   await app.refresh();
 
   app.state.query = "не существует";
-  assert.equal(await app.copyTopMatch(), false, "so the caller leaves the window open");
+  assert.equal(
+    await app.copyTopMatch(),
+    false,
+    "so the caller leaves the window open",
+  );
   assert.deepEqual(copied, []);
 });
 
 test("a failed clipboard write is reported and does not hide the window", async () => {
   const app = await setup({
     list: async () => twoEntries,
-    copy: async () => {throw new Error("clipboard: EmptyClipboard: Access is denied.");},
+    copy: async () => {
+      throw new Error("clipboard: EmptyClipboard: Access is denied.");
+    },
   });
   await app.refresh();
 
   assert.equal(await app.copyTopMatch(), false);
   assert.deepEqual(
     app.state.copyError,
-    {busy: false, detail: "EmptyClipboard: Access is denied."},
+    { busy: false, detail: "EmptyClipboard: Access is denied." },
     "Go's wording, without the Error: and clipboard: prefixes",
   );
 });
@@ -492,13 +707,18 @@ test("a busy clipboard gets a sentence, and the next good copy clears it", async
     list: async () => twoEntries,
     // go-webview2 rejects with Go's error text as a plain string.
     copy: async () => {
-      if (busy) throw "clipboard: OpenClipboard busy after 5 attempts: Access is denied.";
+      if (busy)
+        throw "clipboard: OpenClipboard busy after 5 attempts: Access is denied.";
       return null;
     },
   });
   await app.refresh();
 
-  await assert.rejects(app.copyEntry("1"), undefined, "the card still learns that the copy failed");
+  await assert.rejects(
+    app.copyEntry("1"),
+    undefined,
+    "the card still learns that the copy failed",
+  );
   assert.equal(app.state.copyError.busy, true);
 
   busy = false;
@@ -508,29 +728,41 @@ test("a busy clipboard gets a sentence, and the next good copy clears it", async
 
 test("an import passes on what it added and skipped, then reloads the list", async () => {
   const app = await setup({
-    importData: async () => ({added: 2, skipped: 1}),
+    importData: async () => ({ added: 2, skipped: 1 }),
     list: async () => twoEntries,
-    getSettings: async () => ({...app.state.settings}),
+    getSettings: async () => ({ ...app.state.settings }),
   });
-  assert.deepEqual(await app.importData(), {added: 2, skipped: 1});
+  assert.deepEqual(await app.importData(), { added: 2, skipped: 1 });
   assert.equal(app.state.entries.length, 2);
 });
 
 test("hiding the window clears last session's search and view", async () => {
-  const app = await setup({list: async () => twoEntries});
+  const app = await setup({ list: async () => twoEntries });
   await app.refresh();
 
   app.state.query = "почта";
   app.state.operationError = "stale failure";
-  app.state.copyError = {busy: true, detail: "OpenClipboard busy"};
+  app.state.copyError = { busy: true, detail: "OpenClipboard busy" };
   app.openSettings();
   assert.equal(app.state.view, "settings");
 
   const resetBefore = app.state.listResetToken;
   app.resetAfterHide();
-  assert.equal(app.state.listResetToken, resetBefore + 1, "the list position is reset too");
-  assert.equal(app.state.query, "", "a two-second copy must not start pre-filtered");
-  assert.equal(app.state.view, "main", "closing from Settings must not reopen there");
+  assert.equal(
+    app.state.listResetToken,
+    resetBefore + 1,
+    "the list position is reset too",
+  );
+  assert.equal(
+    app.state.query,
+    "",
+    "a two-second copy must not start pre-filtered",
+  );
+  assert.equal(
+    app.state.view,
+    "main",
+    "closing from Settings must not reopen there",
+  );
   assert.equal(app.state.operationError, null);
   assert.equal(app.state.copyError, null, "last session's failure is not news");
 });
@@ -539,47 +771,73 @@ test("the first entry teaches copying before it warns about Downloads", async ()
   const app = await setup({
     getInstallLocation: async () => location(),
     list: async () => [],
-    create: async (label, value) => ({id: "1", label, value, order: 0}),
+    create: async (label, value) => ({ id: "1", label, value, order: 0 }),
     copy: async () => null,
   });
   await app.loadInstallLocation();
   await app.refresh();
 
   await app.createEntry("Email", "me@example.com");
-  assert.equal(app.state.showFirstCopyHint, true, "the hint appears when it can first be tried");
-  assert.equal(app.shouldShowRelocateBanner(), false, "the warning must not drown it");
+  assert.equal(
+    app.state.showFirstCopyHint,
+    true,
+    "the hint appears when it can first be tried",
+  );
+  assert.equal(
+    app.shouldShowRelocateBanner(),
+    false,
+    "the warning must not drown it",
+  );
 
   await app.copyEntry("1");
-  assert.equal(app.state.showFirstCopyHint, false, "a successful copy retires the hint");
-  assert.equal(app.shouldShowRelocateBanner(), true, "and the banner takes its turn");
+  assert.equal(
+    app.state.showFirstCopyHint,
+    false,
+    "a successful copy retires the hint",
+  );
+  assert.equal(
+    app.shouldShowRelocateBanner(),
+    true,
+    "and the banner takes its turn",
+  );
 });
 
 test("an entry added to a list that already had some shows no hint", async () => {
   const app = await setup({
     list: async () => [anEntry],
-    create: async (label, value) => ({id: "2", label, value, order: 0}),
+    create: async (label, value) => ({ id: "2", label, value, order: 0 }),
   });
   await app.refresh();
   await app.createEntry("Second", "value");
-  assert.equal(app.state.showFirstCopyHint, false, "existing users are not taught again");
+  assert.equal(
+    app.state.showFirstCopyHint,
+    false,
+    "existing users are not taught again",
+  );
 });
 
 test("the empty-search action prefills the form with what was typed", async () => {
-  const app = await setup({list: async () => [anEntry]});
+  const app = await setup({ list: async () => [anEntry] });
   await app.refresh();
 
   app.openCreate();
-  assert.deepEqual(app.state.modal, {kind: "create", label: ""});
+  assert.deepEqual(app.state.modal, { kind: "create", label: "" });
 
   app.openCreateFromSearch("  ИНН для ООО  ");
-  assert.deepEqual(app.state.modal, {kind: "create", label: "ИНН для ООО"}, "trimmed");
+  assert.deepEqual(
+    app.state.modal,
+    { kind: "create", label: "ИНН для ООО" },
+    "trimmed",
+  );
 });
 
 test("a shortcut Windows accepts is stored", async () => {
   const saved = [];
   const app = await setup({
     applyHotkey: async () => {},
-    saveSettings: async settings => { saved.push(settings.hotkey); },
+    saveSettings: async (settings) => {
+      saved.push(settings.hotkey);
+    },
   });
   await app.applyHotkey("Ctrl+Shift+F5");
   assert.equal(app.state.hotkeyError, null);
@@ -590,34 +848,56 @@ test("a shortcut Windows accepts is stored", async () => {
 test("a shortcut Windows refuses is reported and never stored", async () => {
   const saved = [];
   const app = await setup({
-    applyHotkey: async () => { throw new Error("Hot key is already registered."); },
-    saveSettings: async settings => { saved.push(settings.hotkey); },
+    applyHotkey: async () => {
+      throw new Error("Hot key is already registered.");
+    },
+    saveSettings: async (settings) => {
+      saved.push(settings.hotkey);
+    },
   });
   await app.applyHotkey("Ctrl+Alt+N");
   assert.deepEqual(
     app.state.hotkeyError,
-    {combo: "Ctrl+Alt+N", taken: true, detail: "Hot key is already registered"},
+    {
+      combo: "Ctrl+Alt+N",
+      taken: true,
+      detail: "Hot key is already registered",
+    },
     "the ordinary refusal is recognised; the Error: prefix and trailing period are gone",
   );
-  assert.deepEqual(saved, [], "a shortcut that does not work must not be persisted");
-  assert.equal(app.state.settings.hotkey, "", "the previous preference stays in place");
+  assert.deepEqual(
+    saved,
+    [],
+    "a shortcut that does not work must not be persisted",
+  );
+  assert.equal(
+    app.state.settings.hotkey,
+    "",
+    "the previous preference stays in place",
+  );
 });
 
 test("an unexpected hotkey failure keeps Windows' wording and names the default", async () => {
   const app = await setup({
-    applyHotkey: async () => { throw new Error("Error: Access is denied."); },
+    applyHotkey: async () => {
+      throw new Error("Error: Access is denied.");
+    },
   });
   await app.applyHotkey("");
   assert.deepEqual(
     app.state.hotkeyError,
-    {combo: "Ctrl+Alt+N", taken: false, detail: "Access is denied"},
+    { combo: "Ctrl+Alt+N", taken: false, detail: "Access is denied" },
     "an empty preference is reported as the default combination, never as a blank",
   );
 });
 
 test("the empty preference is shown as the default combination", async () => {
   const app = await setup();
-  assert.equal(app.hotkeyLabel(), app.DEFAULT_HOTKEY, "an older data.json has no hotkey key at all");
-  app.state.settings = {...app.state.settings, hotkey: "Ctrl+Shift+F5"};
+  assert.equal(
+    app.hotkeyLabel(),
+    app.DEFAULT_HOTKEY,
+    "an older data.json has no hotkey key at all",
+  );
+  app.state.settings = { ...app.state.settings, hotkey: "Ctrl+Shift+F5" };
   assert.equal(app.hotkeyLabel(), "Ctrl+Shift+F5");
 });

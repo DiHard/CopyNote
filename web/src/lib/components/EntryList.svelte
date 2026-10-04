@@ -17,7 +17,8 @@
   import EntryCard from "./EntryCard.svelte";
   // import RelocateBanner from "./RelocateBanner.svelte"; // temporarily disabled
 
-  let { interactionDisabled = false }: { interactionDisabled?: boolean } = $props();
+  let { interactionDisabled = false }: { interactionDisabled?: boolean } =
+    $props();
 
   const filtered = $derived(filterEntries(appState.entries, appState.query));
   const canDrag = $derived(appState.query.trim() === "");
@@ -54,7 +55,9 @@
   // that entry falls back to the top of the list.
   let activeId = $state<string | null>(null);
   const tabbableId = $derived(
-    renderList.some((e) => e.id === activeId) ? activeId : (renderList[0]?.id ?? null),
+    renderList.some((e) => e.id === activeId)
+      ? activeId
+      : (renderList[0]?.id ?? null),
   );
 
   // The native window stays mounted while it is parked off-screen. Reset the
@@ -174,11 +177,7 @@
     const dragged = dragOrder.find((e) => e.id === draggingId);
     if (!dragged) return;
     const rest = dragOrder.filter((e) => e.id !== draggingId);
-    const next = [
-      ...rest.slice(0, insertAt),
-      dragged,
-      ...rest.slice(insertAt),
-    ];
+    const next = [...rest.slice(0, insertAt), dragged, ...rest.slice(insertAt)];
     // Avoid a reactivity churn when the order is unchanged.
     let changed = false;
     for (let i = 0; i < next.length; i++) {
@@ -317,7 +316,9 @@
       <div class="flex flex-col items-center gap-3 px-2 py-6 text-center">
         <div class="flex flex-col gap-1">
           <p class="text-sm font-medium text-on-surface">{t("list.empty")}</p>
-          <p class="text-xs leading-snug text-on-surface-dim">{t("list.empty.what")}</p>
+          <p class="text-xs leading-snug text-on-surface-dim">
+            {t("list.empty.what")}
+          </p>
         </div>
         <button
           type="button"
@@ -358,8 +359,9 @@
           tabbable={entry.id === tabbableId}
           canMoveUp={canDrag && i > 0}
           canMoveDown={canDrag && i < renderList.length - 1}
-          onDragPointerDown={(e) => onCardPointerDown(e, entry.id)}
-          onMoveByKey={(dir) => onKeyboardMove(entry.id, dir)}
+          onDragPointerDown={(e: PointerEvent) =>
+            onCardPointerDown(e, entry.id)}
+          onMoveByKey={(dir: -1 | 1) => onKeyboardMove(entry.id, dir)}
           onFocused={() => (activeId = entry.id)}
         />
       {/snippet}
@@ -376,7 +378,10 @@
       <div role="list" class="flex flex-col gap-2">
         {#if canDrag}
           {#each renderList as entry, i (entry.id)}
-            <div role="listitem" animate:flip={{ duration: 180, easing: cubicOut }}>
+            <div
+              role="listitem"
+              animate:flip={{ duration: 180, easing: cubicOut }}
+            >
               {@render card(entry, i)}
             </div>
           {/each}
@@ -393,7 +398,9 @@
         <div
           class="mt-2 flex items-start gap-2 rounded-lg border border-outline bg-card px-2.5 py-2"
         >
-          <p class="min-w-0 flex-1 text-[11px] leading-snug text-on-surface-dim">
+          <p
+            class="min-w-0 flex-1 text-[11px] leading-snug text-on-surface-dim"
+          >
             {t("list.firstCopyHint")}
           </p>
           <button

@@ -542,7 +542,7 @@ func IsSystemLightTheme() bool {
 	if err != nil {
 		return true
 	}
-	defer k.Close()
+	defer func() { _ = k.Close() }() // Preserve the completed registry operation independently of handle cleanup.
 	v, _, err := k.GetIntegerValue("SystemUsesLightTheme")
 	if err != nil {
 		return true

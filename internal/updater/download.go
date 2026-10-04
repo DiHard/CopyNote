@@ -31,7 +31,7 @@ func download(ctx context.Context, client *http.Client, url, dst string, expecte
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() // The download result is determined by reading, flushing and closing the file.
 	if total <= 0 && resp.ContentLength > 0 {
 		total = resp.ContentLength
 	}
@@ -45,8 +45,8 @@ func download(ctx context.Context, client *http.Client, url, dst string, expecte
 	}
 	defer func() {
 		if err != nil {
-			f.Close()
-			os.Remove(dst)
+			_ = f.Close()
+			_ = os.Remove(dst)
 		}
 	}()
 
@@ -97,7 +97,7 @@ func fetchSignature(ctx context.Context, client *http.Client, url, ua string) ([
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() // Preserve read and signature errors after consuming the response.
 	content, err := io.ReadAll(io.LimitReader(resp.Body, maxSignatureSize))
 	if err != nil {
 		return nil, fmt.Errorf("read signature: %w", err)

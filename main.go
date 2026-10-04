@@ -151,7 +151,9 @@ func main() {
 	if extra := os.Getenv("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"); extra != "" {
 		args = append(append([]string(nil), browserArgs...), extra)
 	}
-	os.Setenv("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", strings.Join(args, " "))
+	if err := os.Setenv("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", strings.Join(args, " ")); err != nil {
+		fatalStartup("WebView2 arguments: %v", err)
+	}
 
 	// 5. Loopback HTTP server serving the embedded frontend.
 	staticFS, err := fs.Sub(distFS, "web/dist")

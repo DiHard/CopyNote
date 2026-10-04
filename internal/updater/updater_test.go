@@ -29,7 +29,9 @@ func TestCheckLatestResponses(t *testing.T) {
 					t.Error("missing user agent")
 				}
 				w.WriteHeader(tc.status)
-				fmt.Fprint(w, tc.body)
+				if _, err := fmt.Fprint(w, tc.body); err != nil {
+					t.Error(err)
+				}
 			}))
 			defer server.Close()
 			info, err := checkLatest(context.Background(), server.Client(), server.URL, "1.2.0")
@@ -71,7 +73,11 @@ func TestVersionComparison(t *testing.T) {
 
 func TestCheckLatestReleaseAssets(t *testing.T) {
 	serve := func(body string) (*httptest.Server, func()) {
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, body) }))
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if _, err := fmt.Fprint(w, body); err != nil {
+				t.Error(err)
+			}
+		}))
 		return srv, srv.Close
 	}
 

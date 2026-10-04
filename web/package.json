@@ -8,18 +8,36 @@
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "lint": "eslint . --max-warnings 0",
+    "lint:tools": "cd ../tools && eslint . --max-warnings 0",
+    "lint:deps": "depcruise --config .dependency-cruiser.cjs src/lib",
+    "lint:unused": "knip",
+    "quality": "npm run lint && npm run lint:tools && npm run lint:deps && npm run lint:unused && npm run check",
+    "format": "prettier --write . ../tools/**/*.mjs",
+    "format:check": "prettier --check . ../tools/**/*.mjs"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   },
   "devDependencies": {
-    "@sveltejs/vite-plugin-svelte": "^4.0.0",
+    "@eslint/js": "10.0.1",
+    "@sveltejs/vite-plugin-svelte": "7.3.1",
     "@tailwindcss/vite": "^4.0.0",
-    "svelte": "^5.0.0",
+    "dependency-cruiser": "18.5.0",
+    "esbuild": "0.28.2",
+    "eslint": "10.12.0",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-svelte": "3.23.0",
+    "globals": "17.13.0",
+    "knip": "6.39.0",
+    "prettier": "3.9.9",
+    "prettier-plugin-svelte": "4.1.1",
+    "svelte": "5.57.1",
     "svelte-check": "^4.0.0",
     "tailwindcss": "^4.0.0",
-    "tslib": "^2.6.2",
     "typescript": "^5.5.0",
-    "vite": "^5.4.0",
-    "vite-plugin-singlefile": "^2.3.2",
-    "esbuild": "0.21.5"
+    "typescript-eslint": "8.71.0",
+    "vite": "8.3.2"
   }
 }

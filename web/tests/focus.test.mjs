@@ -5,19 +5,32 @@ import { build } from "esbuild";
 // focus.ts only ever touches getElementById / querySelectorAll / activeElement,
 // so a hand-rolled document is enough to pin the navigation rules down.
 const bundle = await build({
-  entryPoints: ["src/lib/focus.ts"], bundle: true, write: false,
-  format: "esm", platform: "browser", conditions: ["browser"],
+  entryPoints: ["src/lib/focus.ts"],
+  bundle: true,
+  write: false,
+  format: "esm",
+  platform: "browser",
+  conditions: ["browser"],
 });
 let instance = 0;
 const load = () =>
-  import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString("base64")}#${instance++}`);
+  import(
+    `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString("base64")}#${instance++}`
+  );
 
 function fakeDom(cardCount) {
   const doc = { activeElement: null };
-  const search = { name: "search", focus() { doc.activeElement = search; } };
+  const search = {
+    name: "search",
+    focus() {
+      doc.activeElement = search;
+    },
+  };
   const cards = Array.from({ length: cardCount }, (_, i) => ({
     name: `card${i}`,
-    focus() { doc.activeElement = cards[i]; },
+    focus() {
+      doc.activeElement = cards[i];
+    },
   }));
   doc.getElementById = (id) => (id === "entry-search" ? search : null);
   doc.querySelectorAll = (sel) => (sel === "[data-card-focus]" ? cards : []);
@@ -46,7 +59,11 @@ test("the last card does not wrap around to the first", async () => {
   const focus = await load();
   doc.activeElement = cards[2];
   focus.moveCardFocus(1);
-  assert.equal(doc.activeElement, cards[2], "a held-down key must not jump to the start");
+  assert.equal(
+    doc.activeElement,
+    cards[2],
+    "a held-down key must not jump to the start",
+  );
 });
 
 test("navigation walks the list one card at a time", async () => {
@@ -79,7 +96,12 @@ test("focusCardAt clamps instead of throwing", async () => {
 
 // nextTabStop reads a little more: the tab stops under a root, the attributes
 // its selectors ask about, and closest() for buttons inside a card.
-function fakeTabDom({ cards = 3, tabbableCard = 0, listButton = false, banner = false } = {}) {
+function fakeTabDom({
+  cards = 3,
+  tabbableCard = 0,
+  listButton = false,
+  banner = false,
+} = {}) {
   const doc = { activeElement: null };
   const el = (name, attrs = {}) => {
     const node = {
@@ -88,8 +110,11 @@ function fakeTabDom({ cards = 3, tabbableCard = 0, listButton = false, banner = 
       tabIndex: 0,
       disabled: false,
       getClientRects: () => [{}],
-      closest: (sel) => (sel === "[data-entry-id]" && attrs.card !== undefined ? node : null),
-      focus() { doc.activeElement = node; },
+      closest: (sel) =>
+        sel === "[data-entry-id]" && attrs.card !== undefined ? node : null,
+      focus() {
+        doc.activeElement = node;
+      },
     };
     return node;
   };
@@ -106,17 +131,40 @@ function fakeTabDom({ cards = 3, tabbableCard = 0, listButton = false, banner = 
   const add = listButton ? [el("add", { listFocus: true })] : [];
   const offscreen = el("display-none");
   offscreen.getClientRects = () => [];
-  const all = [search, ...header, ...bannerButtons, ...cardButtons, edit, ...add, offscreen];
+  const all = [
+    search,
+    ...header,
+    ...bannerButtons,
+    ...cardButtons,
+    edit,
+    ...add,
+    offscreen,
+  ];
   const root = {
     querySelectorAll: () => all,
     querySelector: (sel) => {
       if (sel === "[data-card-focus]") return cardButtons[0] ?? null;
-      return all.find((n) => (n.attrs.card !== undefined && n.tabIndex === 0) || n.attrs.listFocus) ?? null;
+      return (
+        all.find(
+          (n) =>
+            (n.attrs.card !== undefined && n.tabIndex === 0) ||
+            n.attrs.listFocus,
+        ) ?? null
+      );
     },
   };
   doc.getElementById = (id) => (id === "entry-search" ? search : null);
   globalThis.document = doc;
-  return { root, search, header, bannerButtons, cardButtons, edit, add, offscreen };
+  return {
+    root,
+    search,
+    header,
+    bannerButtons,
+    cardButtons,
+    edit,
+    add,
+    offscreen,
+  };
 }
 
 test("Tab from the search box reaches the list before the header buttons", async () => {
@@ -124,7 +172,11 @@ test("Tab from the search box reaches the list before the header buttons", async
   const focus = await load();
   assert.equal(focus.nextTabStop(root, search, false), cardButtons[0]);
   assert.equal(focus.nextTabStop(root, cardButtons[0], false), header[0]);
-  assert.equal(focus.nextTabStop(root, header[0], true), cardButtons[0], "Shift+Tab walks the same order back");
+  assert.equal(
+    focus.nextTabStop(root, header[0], true),
+    cardButtons[0],
+    "Shift+Tab walks the same order back",
+  );
   assert.equal(focus.nextTabStop(root, cardButtons[0], true), search);
 });
 
@@ -135,13 +187,18 @@ test("Tab from search enters the first card even when another card was last focu
 });
 
 test("the rest follows in document order and the order wraps", async () => {
-  const { root, search, header, bannerButtons, cardButtons } = fakeTabDom({ banner: true });
+  const { root, search, header, bannerButtons, cardButtons } = fakeTabDom({
+    banner: true,
+  });
   const focus = await load();
   const walk = [search];
-  for (let i = 0; i < 8; i++) walk.push(focus.nextTabStop(root, walk[walk.length - 1], false));
+  for (let i = 0; i < 8; i++)
+    walk.push(focus.nextTabStop(root, walk[walk.length - 1], false));
   assert.deepEqual(
     walk.map((n) => n.name),
-    [search, cardButtons[0], ...header, ...bannerButtons, search].map((n) => n.name),
+    [search, cardButtons[0], ...header, ...bannerButtons, search].map(
+      (n) => n.name,
+    ),
   );
 });
 

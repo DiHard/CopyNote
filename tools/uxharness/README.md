@@ -24,7 +24,7 @@ otherwise need prepared data files.
 
 ## Why it works
 
-`vite-plugin-singlefile` emits one self-contained `web/dist/index.html`, and
+`web/singlefile.ts` emits one self-contained `web/dist/index.html`, and
 every Go binding is reached through `window.*`. Defining those globals in a
 plain `<script>` in `<head>` — which runs before the bundle's deferred module
 script — boots the genuine UI against fake data.
@@ -33,15 +33,15 @@ script — boots the genuine UI against fake data.
 
 Appended to the URL:
 
-| Flag | State |
-|---|---|
-| *(none)* | eight sample entries, exe in a program folder |
-| `?empty` | no entries — the onboarding empty screen |
-| `?many` | 30 entries — list scrolling and the window-height clamp |
-| `?downloads` | Reserved for the relocate banner; relocation is temporarily disabled in the current build |
-| `?update` | a signed release is available — the in-app update flow |
-| `?hotkeytaken` | Windows refuses every global shortcut — the Settings error path |
-| `?copybusy` | another program holds the clipboard — the copy error line |
+| Flag           | State                                                                                     |
+| -------------- | ----------------------------------------------------------------------------------------- |
+| _(none)_       | eight sample entries, exe in a program folder                                             |
+| `?empty`       | no entries — the onboarding empty screen                                                  |
+| `?many`        | 30 entries — list scrolling and the window-height clamp                                   |
+| `?downloads`   | Reserved for the relocate banner; relocation is temporarily disabled in the current build |
+| `?update`      | a signed release is available — the in-app update flow                                    |
+| `?hotkeytaken` | Windows refuses every global shortcut — the Settings error path                           |
+| `?copybusy`    | another program holds the clipboard — the copy error line                                 |
 
 The `?downloads` data is still present in the stub for future re-enablement,
 but the current frontend does not request the install location and therefore

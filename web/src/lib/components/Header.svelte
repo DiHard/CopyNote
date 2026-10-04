@@ -1,11 +1,15 @@
 <script lang="ts">
-  import { state, openCreate, openSettings, hasUnseenUpdate, copyTopMatch, toggleAutoHide } from "../state.svelte";
+  import {
+    state,
+    openCreate,
+    openSettings,
+    hasUnseenUpdate,
+    copyTopMatch,
+    toggleAutoHide,
+    hideWindow,
+  } from "../state.svelte";
   import { SEARCH_ID, focusCardAt } from "../focus";
   import { t } from "../i18n";
-
-  function hideWindow() {
-    window.hide();
-  }
 
   /**
    * Closes the keyboard loop the app is built around: open, type a few
@@ -28,7 +32,7 @@
     if (e.key === "Enter") {
       e.preventDefault();
       // A failed or empty copy leaves the window up, with the error shown.
-      if (await copyTopMatch()) window.hide();
+      if (await copyTopMatch()) await hideWindow();
     }
   }
 </script>
@@ -37,7 +41,9 @@
   class="flex shrink-0 items-center gap-1.5 border-b border-outline bg-surface-alt px-2.5 py-1.5"
   style="-webkit-app-region: drag"
 >
-  <span class="shrink-0 text-xs font-semibold text-on-surface">{t("app.title")}</span>
+  <span class="shrink-0 text-xs font-semibold text-on-surface"
+    >{t("app.title")}</span
+  >
 
   <div class="relative flex-1" style="-webkit-app-region: no-drag">
     <svg
@@ -66,19 +72,37 @@
     />
   </div>
 
-  <div class="flex shrink-0 items-center gap-0.5" style="-webkit-app-region: no-drag">
+  <div
+    class="flex shrink-0 items-center gap-0.5"
+    style="-webkit-app-region: no-drag"
+  >
     <button
       type="button"
       onclick={toggleAutoHide}
       disabled={state.settingsPending > 0}
-      data-tooltip={state.settings.disableAutoHide ? t("header.unpin") : t("header.pin")}
-      aria-label={state.settings.disableAutoHide ? t("header.unpin") : t("header.pin")}
+      data-tooltip={state.settings.disableAutoHide
+        ? t("header.unpin")
+        : t("header.pin")}
+      aria-label={state.settings.disableAutoHide
+        ? t("header.unpin")
+        : t("header.pin")}
       aria-pressed={state.settings.disableAutoHide}
-      class="rounded p-1.5 transition disabled:cursor-wait disabled:opacity-60 {state.settings.disableAutoHide
+      class="rounded p-1.5 transition disabled:cursor-wait disabled:opacity-60 {state
+        .settings.disableAutoHide
         ? 'bg-accent-soft text-accent hover:bg-accent-soft'
         : 'text-on-surface-dim hover:bg-surface-hover hover:text-on-surface'}"
     >
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
         <path d="M12 17v5"></path>
         <path d="M5 17h14"></path>
         <path d="M17 3H7l2 6-4 4v2h14v-2l-4-4 2-6Z"></path>
@@ -92,7 +116,17 @@
       aria-label={t("header.new")}
       class="rounded p-1.5 text-on-surface-dim transition hover:bg-surface-hover hover:text-on-surface"
     >
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
         <line x1="12" y1="5" x2="12" y2="19"></line>
         <line x1="5" y1="12" x2="19" y2="12"></line>
       </svg>
@@ -105,8 +139,20 @@
       aria-label={t("header.settings")}
       class="relative rounded p-1.5 text-on-surface-dim transition hover:bg-surface-hover hover:text-on-surface"
     >
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path
+          d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"
+        />
         <circle cx="12" cy="12" r="3" />
       </svg>
       {#if hasUnseenUpdate()}
@@ -124,7 +170,17 @@
       aria-label={t("header.hide")}
       class="rounded p-1.5 text-on-surface-dim transition hover:bg-surface-hover hover:text-on-surface"
     >
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
         <line x1="18" y1="6" x2="6" y2="18"></line>
         <line x1="6" y1="6" x2="18" y2="18"></line>
       </svg>

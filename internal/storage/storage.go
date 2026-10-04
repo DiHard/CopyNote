@@ -10,8 +10,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"copynote/internal/model"
 	"golang.org/x/sys/windows"
+
+	"copynote/internal/model"
 )
 
 func decode(raw []byte) (model.Store, error) {
@@ -54,7 +55,7 @@ func WriteAtomic(path string, data []byte) error {
 	if err != nil {
 		return fmt.Errorf("create temporary file: %w", err)
 	}
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }() // Preserve the write error; a successful rename leaves no temporary file.
 	_, writeErr := f.Write(data)
 	syncErr := f.Sync()
 	closeErr := f.Close()

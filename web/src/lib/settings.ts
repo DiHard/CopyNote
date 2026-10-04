@@ -24,7 +24,9 @@ export function describeHotkeyError(
   spec: string,
   error: unknown,
 ): { combo: string; taken: boolean; detail: string } {
-  const detail = String(error).replace(/^(Error:\s*)+/, "").replace(/\.\s*$/, "");
+  const detail = String(error)
+    .replace(/^(Error:\s*)+/, "")
+    .replace(/\.\s*$/, "");
   return {
     combo: spec.trim() === "" ? DEFAULT_HOTKEY : spec,
     // ERROR_HOTKEY_ALREADY_REGISTERED is the refusal people actually hit.
@@ -51,7 +53,7 @@ export function applyHotkey(spec: string): Promise<void> {
         await api.applyHotkey(previous);
       } catch (error) {
         state.hotkeyError = {
-          ...describeHotkeyError(previous, `restore hotkey: ${error}`),
+          ...describeHotkeyError(previous, `restore hotkey: ${String(error)}`),
           // Show the rollback context even when another program took the old key.
           taken: false,
         };
@@ -118,7 +120,9 @@ export function saveSettings(patch: Partial<UserSettings>): Promise<void> {
 
 function queueSettingsChange(operation: () => Promise<void>): Promise<void> {
   state.settingsPending++;
-  return enqueueSettings(operation).finally(() => { state.settingsPending--; });
+  return enqueueSettings(operation).finally(() => {
+    state.settingsPending--;
+  });
 }
 
 // Publishing and OS effects stay separate: an effect failing after the write
@@ -145,9 +149,11 @@ async function applySettingsEffects(settings: UserSettings): Promise<void> {
 /** Toggle the header pin, which is the quick way to turn auto-hide off/on. */
 export function toggleAutoHide(): void {
   state.operationError = null;
-  void saveSettings({ disableAutoHide: !state.settings.disableAutoHide }).catch((error) => {
-    state.operationError = String(error);
-  });
+  void saveSettings({ disableAutoHide: !state.settings.disableAutoHide }).catch(
+    (error) => {
+      state.operationError = String(error);
+    },
+  );
 }
 
 function applyLocale(locale: string): void {

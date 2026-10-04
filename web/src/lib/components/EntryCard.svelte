@@ -117,8 +117,18 @@
       { id: "edit", label: t("card.menu.edit"), shortcut: "F2" },
       { id: "delete", label: t("card.menu.delete"), shortcut: "Delete" },
       { id: "", label: "", separator: true },
-      { id: "up", label: t("card.menu.up"), shortcut: "Ctrl+↑", disabled: !canMoveUp },
-      { id: "down", label: t("card.menu.down"), shortcut: "Ctrl+↓", disabled: !canMoveDown },
+      {
+        id: "up",
+        label: t("card.menu.up"),
+        shortcut: "Ctrl+↑",
+        disabled: !canMoveUp,
+      },
+      {
+        id: "down",
+        label: t("card.menu.down"),
+        shortcut: "Ctrl+↓",
+        disabled: !canMoveDown,
+      },
     ];
     const choice = await showEntryMenu({
       x: keyboard ? card.left + 12 : e.clientX,
@@ -205,8 +215,7 @@
         stroke-linecap="round"
         stroke-linejoin="round"
       >
-        <path
-          d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
         ></path>
         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
         ></path>

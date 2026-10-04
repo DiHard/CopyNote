@@ -1,18 +1,20 @@
 package main
 
 import (
+	"errors"
+	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+
+	"github.com/jchv/go-webview2"
+
 	"copynote/internal/bridge"
 	"copynote/internal/service"
 	"copynote/internal/storage"
 	"copynote/internal/tray"
 	"copynote/internal/version"
 	"copynote/internal/winutil"
-	"errors"
-	"fmt"
-	"github.com/jchv/go-webview2"
-	"log"
-	"os"
-	"path/filepath"
 )
 
 func mustBind(w webview2.WebView, name string, fn any) {

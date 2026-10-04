@@ -9,8 +9,8 @@ $overrides = ($Names.GetEnumerator() | ForEach-Object { "-X $($_.Key)=$($_.Value
 New-Item -ItemType Directory -Force (Split-Path $Exe) | Out-Null
 Push-Location $RepoRoot
 try {
-  & go build "-ldflags=-H=windowsgui -s -w $overrides" -o $Exe .
-  if ($LASTEXITCODE -ne 0) { throw "go build failed with exit code $LASTEXITCODE" }
+    & go build "-ldflags=-H=windowsgui -s -w $overrides" -o $Exe .
+    if ($LASTEXITCODE -ne 0) { throw "go build failed with exit code $LASTEXITCODE" }
 }
 finally { Pop-Location }
 Say "built $Exe"
@@ -20,7 +20,7 @@ Say "built $Exe"
 # is the prefix of another is not credited with the other's bytes.
 $text = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($Exe))
 foreach ($entry in ($Names.GetEnumerator() | Sort-Object { $_.Value.Length } -Descending)) {
-  Check ($text.Contains($entry.Value)) "$($entry.Key) is overridden" $entry.Value
-  $text = $text.Replace($entry.Value, '')
+    Check ($text.Contains($entry.Value)) "$($entry.Key) is overridden" $entry.Value
+    $text = $text.Replace($entry.Value, '')
 }
 Complete-Checks

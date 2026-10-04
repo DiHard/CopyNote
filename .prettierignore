@@ -1,0 +1,9 @@
+.quality/
+third_party/
+web/dist/
+web/node_modules/
+build/
+bin/
+assets/
+docs/screenshots/
+web/package-lock.json

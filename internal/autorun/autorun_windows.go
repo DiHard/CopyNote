@@ -18,7 +18,7 @@ func SetEnabled(valueName string, enabled bool) error {
 	if err != nil {
 		return err
 	}
-	defer k.Close()
+	defer func() { _ = k.Close() }() // Closing the handle does not change the completed registry operation.
 	if enabled {
 		exe, err := os.Executable()
 		if err != nil {

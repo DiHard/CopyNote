@@ -16,13 +16,13 @@ Single portable `.exe` (~7 MB), no installer, no external runtime besides WebVie
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Backend | Go 1.25, pure Win32 syscalls (no cgo) |
-| Frontend | Svelte 5 (Runes) + TypeScript + Tailwind CSS 4 |
-| UI Host | WebView2 via `jchv/go-webview2` (vendored in `third_party/`) |
-| Bundler | Vite 5 + `vite-plugin-singlefile` → one `index.html` |
-| Embed | `//go:embed all:web/dist` bakes frontend into the Go binary |
+| Layer    | Technology                                                          |
+| -------- | ------------------------------------------------------------------- |
+| Backend  | Go 1.25 language, Go 1.26.8 toolchain, pure Win32 syscalls (no cgo) |
+| Frontend | Svelte 5 (Runes) + TypeScript + Tailwind CSS 4                      |
+| UI Host  | WebView2 via `jchv/go-webview2` (vendored in `third_party/`)        |
+| Bundler  | Vite 8 + `web/singlefile.ts` → one `index.html`                     |
+| Embed    | `//go:embed all:web/dist` bakes frontend into the Go binary         |
 
 ## Project Structure
 
@@ -105,6 +105,7 @@ go build -ldflags="-H=windowsgui -s -w" -o copynote.exe .
 ```
 
 **Quick rebuild (frontend + Go):**
+
 ```bash
 cd web && npm run build && cd .. && go build -ldflags="-H=windowsgui -s -w" -o copynote.exe .
 ```
@@ -115,37 +116,37 @@ cd web && npm run build && cd .. && go build -ldflags="-H=windowsgui -s -w" -o c
 
 Go functions are exposed to JavaScript via `webview.Bind()`:
 
-| JS call | Go handler | Purpose |
-|---------|-----------|---------|
-| `window.list()` | `svc.List` | Get all entries sorted by order |
-| `window.create(label, value)` | `svc.Create` | Add entry at top |
-| `window.update(id, label, value)` | `svc.Update` | Edit entry |
-| `window.remove(id)` | `svc.Delete` | Delete entry |
-| `window.copy(id)` | `svc.Copy` | Write to clipboard |
-| `window.hide()` | moveOffScreen | Hide window (off-screen, not SW_HIDE) |
-| `window.resizeWindow(h)` | resizeToContent | Adjust window height + re-anchor |
-| `window.getSettings()` | svc.GetSettings | Load settings |
-| `window.saveSettings(s)` | svc.SaveSettings + trayCtrl.RefreshTip | Persist settings + autorun registry, re-localize the tray tooltip |
-| `window.exportData()` | svc.ExportData → SaveFileDialog | Export entries+settings to JSON |
-| `window.importData()` | OpenFileDialog → svc.ImportData | Import from JSON, merge entries; resolves to `{added, skipped}`, or `null` when the dialog is cancelled |
-| `window.openExternal(url)` | ShellExecuteW | Open URL in default browser |
-| `window.openAppFolder()` | ShellExecuteW on `filepath.Dir(exePath)` | Open the folder holding the running exe in Explorer |
-| `window.notifyReady()` | trayCtrl.SetReady | Stop tray pulse, switch the tooltip to "click to open", drain the queued show/settings request |
-| `window.getVersion()` | version.Version | App version string (no leading `v`) |
-| `window.checkForUpdates()` | updater.CheckLatest | Background check, honors disableUpdateCheck |
-| `window.forceCheckForUpdates()` | updater.CheckLatest | Manual check, bypasses preference |
-| `window.installUpdate()` | updater.Install | Download `.exe` + `.sig` beside the running exe, verify ed25519, swap via rename (10 min promise timeout) |
-| `window.updateProgress()` | in-memory snapshot | `{stage, done, total}` polled by the UI while installUpdate runs |
-| `window.restartApp()` | Terminate → main relaunches | Only after a successful install: releases the mutex, starts the new exe, posts SHOW |
-| `window.applyTopmost(enabled)` | Win32 dispatch | Apply window stacking preference |
-| `window.applyAutoHide(enabled)` | `autoHideDisabled` atomic | Whether losing focus parks the window off-screen |
-| `window.applyHotkey(spec)` | trayCtrl.SetHotkey | Register the global shortcut on the tray thread; rejects with Windows' own text when refused |
-| `window.getInstallLocation()` | relocate.IsPermanent | Where the exe lives and whether that is a program folder |
-| `window.pickInstallFolder(title)` | SHBrowseForFolderW | Folder picker; `""` when cancelled |
-| `window.relocateApp(dir)` | relocate.CopyTo + restart | Copy the exe to `dir` (`""` = default) and restart from there |
-| `window.dismissRelocatePrompt()` | svc.UpdateSettings | Silence the relocate banner for good |
-| `window.snoozeRelocatePrompt()` | svc.SnoozeRelocatePrompt | Hide the relocate banner for a week; returns the RFC3339 instant it stored |
-| `window.showEntryMenu(request)` | `entryMenu.Show` on the UI thread | Native context menu for an entry; resolves once it is open, and the pick arrives through `window.__entryMenuClosed(token, id)` |
+| JS call                           | Go handler                               | Purpose                                                                                                                        |
+| --------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `window.list()`                   | `svc.List`                               | Get all entries sorted by order                                                                                                |
+| `window.create(label, value)`     | `svc.Create`                             | Add entry at top                                                                                                               |
+| `window.update(id, label, value)` | `svc.Update`                             | Edit entry                                                                                                                     |
+| `window.remove(id)`               | `svc.Delete`                             | Delete entry                                                                                                                   |
+| `window.copy(id)`                 | `svc.Copy`                               | Write to clipboard                                                                                                             |
+| `window.hide()`                   | moveOffScreen                            | Hide window (off-screen, not SW_HIDE)                                                                                          |
+| `window.resizeWindow(h)`          | resizeToContent                          | Adjust window height + re-anchor                                                                                               |
+| `window.getSettings()`            | svc.GetSettings                          | Load settings                                                                                                                  |
+| `window.saveSettings(s)`          | svc.SaveSettings + trayCtrl.RefreshTip   | Persist settings + autorun registry, re-localize the tray tooltip                                                              |
+| `window.exportData()`             | svc.ExportData → SaveFileDialog          | Export entries+settings to JSON                                                                                                |
+| `window.importData()`             | OpenFileDialog → svc.ImportData          | Import from JSON, merge entries; resolves to `{added, skipped}`, or `null` when the dialog is cancelled                        |
+| `window.openExternal(url)`        | ShellExecuteW                            | Open URL in default browser                                                                                                    |
+| `window.openAppFolder()`          | ShellExecuteW on `filepath.Dir(exePath)` | Open the folder holding the running exe in Explorer                                                                            |
+| `window.notifyReady()`            | trayCtrl.SetReady                        | Stop tray pulse, switch the tooltip to "click to open", drain the queued show/settings request                                 |
+| `window.getVersion()`             | version.Version                          | App version string (no leading `v`)                                                                                            |
+| `window.checkForUpdates()`        | updater.CheckLatest                      | Background check, honors disableUpdateCheck                                                                                    |
+| `window.forceCheckForUpdates()`   | updater.CheckLatest                      | Manual check, bypasses preference                                                                                              |
+| `window.installUpdate()`          | updater.Install                          | Download `.exe` + `.sig` beside the running exe, verify ed25519, swap via rename (10 min promise timeout)                      |
+| `window.updateProgress()`         | in-memory snapshot                       | `{stage, done, total}` polled by the UI while installUpdate runs                                                               |
+| `window.restartApp()`             | Terminate → main relaunches              | Only after a successful install: releases the mutex, starts the new exe, posts SHOW                                            |
+| `window.applyTopmost(enabled)`    | Win32 dispatch                           | Apply window stacking preference                                                                                               |
+| `window.applyAutoHide(enabled)`   | `autoHideDisabled` atomic                | Whether losing focus parks the window off-screen                                                                               |
+| `window.applyHotkey(spec)`        | trayCtrl.SetHotkey                       | Register the global shortcut on the tray thread; rejects with Windows' own text when refused                                   |
+| `window.getInstallLocation()`     | relocate.IsPermanent                     | Where the exe lives and whether that is a program folder                                                                       |
+| `window.pickInstallFolder(title)` | SHBrowseForFolderW                       | Folder picker; `""` when cancelled                                                                                             |
+| `window.relocateApp(dir)`         | relocate.CopyTo + restart                | Copy the exe to `dir` (`""` = default) and restart from there                                                                  |
+| `window.dismissRelocatePrompt()`  | svc.UpdateSettings                       | Silence the relocate banner for good                                                                                           |
+| `window.snoozeRelocatePrompt()`   | svc.SnoozeRelocatePrompt                 | Hide the relocate banner for a week; returns the RFC3339 instant it stored                                                     |
+| `window.showEntryMenu(request)`   | `entryMenu.Show` on the UI thread        | Native context menu for an entry; resolves once it is open, and the pick arrives through `window.__entryMenuClosed(token, id)` |
 
 All bridge calls return Promises. The Go side persists to disk on every mutation.
 
@@ -164,7 +165,7 @@ All bridge calls return Promises. The Go side persists to disk on every mutation
 - **Slide animation**: show = slide up from below screen (200ms ease-out), hide = slide down (150ms ease-in). Slides run on a goroutine, one at a time (`animMu`), and a slide whose direction no longer matches `windowHidden` gives way to the show or hide that flipped it. The frontend absorbs pointer input for the full native transition and cancels any pending drag, because the window can move a card beneath a held cursor. `resizeToContent` cancels a slide only when a visible window really changed size, so never a slide-out. Before that, a resize from the page could stop a slide-out, and a slide-out could park a window the hotkey had just brought back; both left it on screen with `windowHidden` set, where Escape, the ✕ and auto-hide did nothing until the tray icon was clicked. `tools/testinstance/slide.ps1` reproduces those paths in the real exe
 - **Anchor**: Bottom-right corner, 8 px margin (scaled for DPI), compensates for DWM invisible border
 - **Auto-resize**: the frontend reports the height that would show everything, measured via `tick()` + `rAF`, and eases to it in both directions (`smoothResize`), calling `resizeWindow` on every frame for about a quarter of a second after the content changed — which is why those calls land in the middle of slides. Go clamps it to the work area, and past that clamp the list scrolls inside a full-height window. A modal is `position: fixed` and outside that measurement: `MODAL_MIN_H` reserves room until it renders, then a `ResizeObserver` on `[data-modal-card]` grows the window with the card, since the value field can be dragged taller. The modal renders at once when the window is already `MODAL_MIN_H` tall and otherwise after `MODAL_GROW_MS`, so its overlay never sits on an undersized window. Past the clamp the overlay (`[data-modal]`) scrolls; its card is centred with `m-auto`, because `items-center` would push an overflowing card's top out of reach
-- **One scroller, and it is not the document**: the shell (`[data-shell]`, both the main view and Settings) is `h-screen`, the header is `shrink-0`, and only `[data-scroller]` scrolls — `html`/`body` are `overflow: hidden`. Before this the shell grew past the clamped window, the *document* scrolled instead, its scrollbar was hidden by `html::-webkit-scrollbar`, and the search box scrolled out of reach at roughly the eleventh entry on a scaled laptop. Drag auto-scroll works for the same reason: `updateAutoScroll` moves `listEl.scrollTop`, which previously could never scroll.
+- **One scroller, and it is not the document**: the shell (`[data-shell]`, both the main view and Settings) is `h-screen`, the header is `shrink-0`, and only `[data-scroller]` scrolls — `html`/`body` are `overflow: hidden`. Before this the shell grew past the clamped window, the _document_ scrolled instead, its scrollbar was hidden by `html::-webkit-scrollbar`, and the search box scrolled out of reach at roughly the eleventh entry on a scaled laptop. Drag auto-scroll works for the same reason: `updateAutoScroll` moves `listEl.scrollTop`, which previously could never scroll.
   `desiredHeight()` sums each fixed row plus the scroller's inner `[data-scroll-content]`. It must be the inner wrapper, not the scroller: a scroller's `scrollHeight` floors at the height it was given, so measuring it would pin the window at its current size and it could never shrink again. The relocate banner lives inside the scroller so it scrolls away; only the search box is worth pinning.
 - **DPI**: the process is per-monitor DPI aware v2 (`winutil.EnablePerMonitorDPIAwareness` first thing in `main`, before any window exists). Window metrics (`windowWidth` 420, `trayCornerMargin` 8, `minWindowHeight` 80) and the heights from `resizeWindow` are CSS px, scaled with `winutil.ScaleForDPI`; WebView2 picks its rasterization scale itself. `WM_DPICHANGED` re-derives the size from the last CSS height (suggested rect ignored) and re-anchors a visible window; `showAndFocus` sizes the window for the tray monitor before the slide-in, because a parked (off-screen) window keeps its last DPI
 
@@ -172,11 +173,12 @@ All bridge calls return Promises. The Go side persists to disk on every mutation
 
 Runs on dedicated `runtime.LockOSThread()` goroutine. Its right-click menu is `internal/popupmenu` (GDI-painted, not `TrackPopupMenu`), the same code as the entry context menu; metrics and font are scaled for the DPI of the monitor it opens on (`metricsFor`). Adaptive icon swaps between dark/light stroke on `WM_SETTINGCHANGE("ImmersiveColorSet")`. Pulse animation during loading (10 GDI-generated alpha frames). Menu items and the icon's hover text are localized (EN/RU) via `trayTexts`.
 
-**Nothing asked for during the cold start is dropped.** Left click, the popup's *Open* and *Settings*, a second exe launch and `ShowOnStart` all funnel into one `pending` slot (`pendingShow` / `pendingSettings`, tray thread only) that `msgSetReady` drains once `notifyReady` arrives. Sliding out a blank window mid-cold-start looks like a crash and silently ignoring the click looks like a dead icon, so the request waits instead. A second left click keeps the queued request as a show rather than toggling it off — there is no window on screen for the user to be toggling.
+**Nothing asked for during the cold start is dropped.** Left click, the popup's _Open_ and _Settings_, a second exe launch and `ShowOnStart` all funnel into one `pending` slot (`pendingShow` / `pendingSettings`, tray thread only) that `msgSetReady` drains once `notifyReady` arrives. Sliding out a blank window mid-cold-start looks like a crash and silently ignoring the click looks like a dead icon, so the request waits instead. A second left click keeps the queued request as a show rather than toggling it off — there is no window on screen for the user to be toggling.
 
-The hover text says `CopyNote — загрузка…` during the cold start and `CopyNote — нажмите, чтобы открыть` afterwards; it is the only place the app ever explains what the icon does. Because it is localized, `saveSettings` calls `tray.RefreshTip()` — the tray is therefore constructed *before* `bindApplication`, which takes it as an argument.
+The hover text says `CopyNote — загрузка…` during the cold start and `CopyNote — нажмите, чтобы открыть` afterwards; it is the only place the app ever explains what the icon does. Because it is localized, `saveSettings` calls `tray.RefreshTip()` — the tray is therefore constructed _before_ `bindApplication`, which takes it as an argument.
 
 **Global hotkey.** `RegisterHotKey` delivers `WM_HOTKEY` to the thread owning the window, so registration lives on the tray thread against its message-only window (id 1, `MOD_NOREPEAT` so holding the keys opens the window once). `OnHotkey` toggles like a left click, and during the cold start it queues into the same `pending` slot. `Tray.SetHotkey` reaches the tray thread with a **blocking `SendMessage`** and reads the Win32 error code out of the return value — safe because the tray loop never waits on the UI thread — so the caller learns whether Windows accepted the combination.
+
 - The preference (`settings.hotkey`) is stored the way the user sees it, `"Ctrl+Alt+N"`, and parsed by `internal/hotkey`. **`""` means the built-in default, not "disabled"** — the zero-value trap again, since an older `data.json` has no such key — and `"off"` disables it. A combination without a modifier is rejected: it would take a bare keystroke away from every program.
 - Default is Ctrl+Alt+N: free on a stock Windows 11 (checked with a `RegisterHotKey` probe; Win+V and Win+Shift+V are taken by the OS), and rarely an in-app shortcut, unlike Ctrl+Shift+V which is "paste as plain text" nearly everywhere. On AltGr layouts (German, Polish, Czech) AltGr is Ctrl+Alt, so any Ctrl+Alt+letter would fire while typing — irrelevant for Russian and US layouts.
 - The frontend registers first and persists only if Windows accepted, so a stored shortcut is never one that does not work. `loadSettings` re-applies the stored value: the tray already registered it at startup, but that is the only way a conflict detected back then reaches the Settings screen.
@@ -207,12 +209,13 @@ A downloaded `copynote.exe` normally stays in `%USERPROFILE%\Downloads`. That is
 
 - **When it is offered**: `relocate.IsPermanent` checks whether the exe folder sits under `%LOCALAPPDATA%\Programs`, `%ProgramFiles%` or `%ProgramFiles(x86)%`. The banner above the entry list additionally waits for the list to hold at least `RELOCATE_BANNER_MIN_ENTRIES` (1) entries — a brand-new install should explain what the app is for before it warns that Windows might delete it — and honours both ways of declining it. The card in Settings → General, under autorun, applies none of these conditions, so nothing hides the action for good.
 
-- **«Напомнить позже»** → `snoozeRelocatePrompt` stores `settings.relocateRemindAfter`, an RFC3339 instant `relocateSnoozeFor` (7 days) ahead. The duration and the clock live in `service`, and the binding returns the instant, so the frontend never re-derives it. An unparseable value counts as *no* snooze — a corrupted setting must not hide the warning forever.
+- **«Напомнить позже»** → `snoozeRelocatePrompt` stores `settings.relocateRemindAfter`, an RFC3339 instant `relocateSnoozeFor` (7 days) ahead. The duration and the clock live in `service`, and the binding returns the instant, so the frontend never re-derives it. An unparseable value counts as _no_ snooze — a corrupted setting must not hide the warning forever.
 - **«Больше не предлагать»** → the existing permanent `settings.relocatePromptDismissed`.
 - `state.relocateSnoozeClicked` is session-only: it hides the banner the moment the button is pressed, so a slow or failed write still feels immediate. A failed write simply means the banner is back next launch.
 - The banner also waits out `state.showFirstCopyHint`. Both would otherwise land on the very first entry, and a disk-cleanup warning stacked on top of the one lesson the app ever teaches drowns it. Any successful copy retires the hint and the banner takes its turn.
 
 `relocateRemindAfter` is an additive settings field with a zero value, so it needs no `SchemaVersion` bump; an older exe ignores the key and drops it on its next write, losing only the snooze. A folder the user picked themselves is not recognised as permanent — the Settings card stays, which is harmless.
+
 - **The move**: copy (not `MoveFile`) into the target under a temporary name, then rename into place — `Downloads` may sit on another volume, and a half-written exe must never be startable. The name is normalised to `copynote.exe`, so a browser’s `copynote (1).exe` stops multiplying.
 - **The original is never deleted by the process doing the move.** It writes `%APPDATA%\CopyNote\pending-cleanup` naming the old file, relaunches the copy, and the new process deletes it (with retries — the old one may still be exiting). If the copy fails to start, the user still has a working executable.
 - **The marker is untrusted input**: `safeToDelete` accepts only an absolute path to a `copynote*.exe`, never the running image. A stray marker cannot turn the next start into an arbitrary delete.
@@ -222,11 +225,11 @@ A downloaded `copynote.exe` normally stays in `%USERPROFILE%\Downloads`. That is
 
 What Go decides — which global shortcut Windows accepted, what the tray does with a request during the cold start, where the window lands and whether it gets focus — can only be checked in a running exe, and the daily CopyNote is usually running on the same machine. A second copy shares four machine-wide names with it; each is a `var` so a test build can replace it with `-X`:
 
-| Override | Without it, the test build… |
-|---|---|
-| `main.singletonName` | finds the real instance's mutex, asks the real window to show and exits |
+| Override                                                                         | Without it, the test build…                                                                                                         |
+| -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `main.singletonName`                                                             | finds the real instance's mutex, asks the real window to show and exits                                                             |
 | `copynote/internal/tray.trayClassName`, `copynote/internal/tray.showMessageName` | sends the show request of a second launch or a post-update relaunch to whichever tray window it finds first — possibly the real one |
-| `copynote/internal/service.autorunValueName` | repoints the real `Run` entry at the test exe on every start, or — with fresh settings, where autorun is off — **deletes it** |
+| `copynote/internal/service.autorunValueName`                                     | repoints the real `Run` entry at the test exe on every start, or — with fresh settings, where autorun is off — **deletes it**       |
 
 `-X` ignores a constant without a word. The tray names and the autorun name used to be constants while this guide already listed them as overrides; the tray and service tests now take their addresses, so turning one back into a `const` stops them compiling.
 
@@ -243,13 +246,13 @@ Start it with `APPDATA` and `LOCALAPPDATA` pointing at scratch folders (data, lo
 
 ## Data Persistence
 
-| File | Location | Format |
-|------|----------|--------|
-| Entries and settings | `%APPDATA%\CopyNote\data.json` | `{version: 2, entries[], settings}` |
-| Previous snapshot | `%APPDATA%\CopyNote\data.json.bak` | Previous valid data.json |
-| Legacy settings | `%APPDATA%\CopyNote\settings.json` | Read only until first successful migration |
-| WebView2 cache | `%LOCALAPPDATA%\CopyNote\WebView2\` | Browser cache |
-| Export backup | User-chosen path | `{formatVersion, appVersion, entries[], settings}` |
+| File                 | Location                            | Format                                             |
+| -------------------- | ----------------------------------- | -------------------------------------------------- |
+| Entries and settings | `%APPDATA%\CopyNote\data.json`      | `{version: 2, entries[], settings}`                |
+| Previous snapshot    | `%APPDATA%\CopyNote\data.json.bak`  | Previous valid data.json                           |
+| Legacy settings      | `%APPDATA%\CopyNote\settings.json`  | Read only until first successful migration         |
+| WebView2 cache       | `%LOCALAPPDATA%\CopyNote\WebView2\` | Browser cache                                      |
+| Export backup        | User-chosen path                    | `{formatVersion, appVersion, entries[], settings}` |
 
 ⚠ **A new setting whose default is "on" must be stored inverted.** `storage.decode` unmarshals `data.json` straight into `model.Store`, and `Settings` is a pointer — so every key absent from the file keeps Go's zero value and `DefaultSettings()` never runs on that path. Add `Foo bool` defaulting to true and every existing installation silently gets `false` on upgrade. Hence `DisableUpdateCheck` and `DisableAutoHide`: the field is negative, the UI label is positive, and `savePreference(..., inverted = true)` keeps the checkbox rollback honest. `TestSettingsAbsentFromAnOlderFileKeepDefaultBehaviour` pins this down.
 
@@ -258,6 +261,7 @@ Writes prepare a separate snapshot, flush `.tmp`, preserve the previous valid da
 ## Styling / Theming
 
 CSS variables in `app.css` define a Windows 11–inspired palette:
+
 - `:root` = light theme (matches Win11 Calendar widget)
 - `.dark` = dark theme
 - Mapped to Tailwind 4 utilities: `bg-surface`, `text-on-surface`, `border-outline`, etc.
@@ -274,7 +278,7 @@ CSS variables in `app.css` define a Windows 11–inspired palette:
 2. **Atomic persistence** — write to `.tmp`, rename to `.json`
 3. **Vendored deps** — `third_party/` with `replace` directives in go.mod (workaround for Go TLS cert issue on this machine)
 4. **`web/dist/` is committed** — allows `go build` without Node.js installed
-5. **Single HTML file** — `vite-plugin-singlefile` inlines all CSS/JS; served via loopback HTTP (not `NavigateToString`, which breaks ES modules)
+5. **Single HTML file** — `web/singlefile.ts` inlines all CSS/JS and rejects external assets; served via loopback HTTP (not `NavigateToString`, which breaks ES modules)
 6. **Icon resources** — two RT_GROUP_ICON entries (IDs 1 and 9) in `.syso`, selected at runtime by theme
 7. **i18n** — `web/src/lib/i18n/` with `t(key, params?)` function, dictionaries in `en.ts`/`ru.ts`, locale in settings
 8. **Import/export** — single JSON backup with `appVersion`, dedup by label+value on import
@@ -305,6 +309,7 @@ autorun at construction. A successful settings save, update or import triggers
 tray. This callback only enqueues work and must never call back into Service.
 
 Reactive state example:
+
 ```ts
 export const state = $state({
   entries: [] as Entry[],
@@ -324,7 +329,7 @@ Actions (refresh, create, update, delete, copy, openSettings…) are plain expor
 The app is a "copy one thing and get out of the way" utility, so the whole loop has to work without the mouse: the window opens with the caret in the search box, a few letters filter, **Enter** copies the top match and hides the window.
 
 - **Escape**: Clear a non-empty search → close modal → close settings → hide window (cascading). Header's handler `preventDefault`s the clear, and App's global handler bails on `e.defaultPrevented`, which is how the cascade stays in order.
-- **Enter** in the search box: `copyTopMatch()` copies the first *filtered* entry and hides the window. Nothing matching, or a failed clipboard write, leaves the window up with the error shown.
+- **Enter** in the search box: `copyTopMatch()` copies the first _filtered_ entry and hides the window. Nothing matching, or a failed clipboard write, leaves the window up with the error shown.
 - **↓ / ↑**: move focus between cards (`lib/focus.ts`). ↓ from the search box enters the list, ↑ from the first card returns to it, and the last card does not wrap. **Home / End** jump to the ends.
 - **The list is a single Tab stop.** Roving tabindex: only the card that last had focus is tabbable (`tabbableId` in EntryList), so Tab out and back returns to where the user was, and a filter that hides that entry falls back to the top. After a reorder, the stop resets to the new visual top; after the window hides, both it and the list scroll reset. Row actions are `tabindex="-1"` — twenty entries used to cost sixty Tab presses.
 - **F2 / Delete** on the focused card edit and delete it — Windows conventions, since those buttons left the Tab order. Both carry `aria-keyshortcuts` so a screen reader announces them, and both are listed in Settings → Клавиши, which is the only place a sighted user can discover them.
@@ -343,6 +348,7 @@ Focus crosses component boundaries through a DOM contract rather than props: `SE
 The application version lives in **one place only**: [internal/version/version.go](internal/version/version.go) — `var Version = "X.Y.Z"` (no leading `v`, no quotes on anything else).
 
 Everything else reads from this variable:
+
 - `service.ExportData` embeds it into backup JSON as `appVersion`
 - The `getVersion` bridge binding in `bindings_windows.go` exposes it to the frontend
 - `SettingsView.svelte` calls `api.getVersion()` on mount and renders it in the About section
@@ -352,6 +358,7 @@ Do **not** hardcode the version string in Go source, Svelte templates, or `web/p
 ### Semantic versioning
 
 Follows [SemVer](https://semver.org): `MAJOR.MINOR.PATCH`.
+
 - **PATCH** (e.g. 1.0.1): bug fixes, no behavior changes visible to the user
 - **MINOR** (e.g. 1.1.0): new features, backwards-compatible
 - **MAJOR** (e.g. 2.0.0): breaking changes (removed features, changed UX, incompatible settings schema)
@@ -378,6 +385,12 @@ go build -ldflags="-H=windowsgui -s -w -X copynote/internal/version.Version=$VER
 For local development / manual releases, just edit the `var` directly — the ldflags override is for automation.
 
 ## Reliability checks
+
+Полный набор проверок и форматирования описан в [docs/QUALITY.md](docs/QUALITY.md).
+Установка: `pwsh -NoProfile -File tools/quality/setup.ps1`.
+Форматирование: `pwsh -NoProfile -File tools/quality/check.ps1 -Fix`.
+Проверки, тесты, сборки, аудит зависимостей и fuzzing:
+`pwsh -NoProfile -File tools/quality/check.ps1 -Fuzz`. Windows CI использует тот же запуск.
 
 Go: `go test ./...`, `go vet ./...`. Frontend: `npm ci`, `npm run check`, `npm test`, `npm run build`. Windows CI also checks the committed bundle and builds the exe.
 

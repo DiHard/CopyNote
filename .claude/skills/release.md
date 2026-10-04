@@ -12,6 +12,7 @@ Communicate with the user in **Russian** (per `CLAUDE.md` Language Rule). Code a
 ## Step 0 — Confirm with the user before doing anything
 
 Ask:
+
 1. **What's the new version?** Or, if not stated: read the current `internal/version/version.go`, list user-visible changes since the last tag (`git log <last-tag>..HEAD --oneline`), and propose PATCH / MINOR / MAJOR per SemVer:
    - PATCH (`X.Y.Z+1`) — bug fixes only
    - MINOR (`X.Y+1.0`) — new features, backwards-compatible
@@ -37,11 +38,13 @@ Run these in parallel where possible. Stop and ask the user if any check fails �
 ## Step 2 — Bump version
 
 Edit **only** `internal/version/version.go`:
+
 ```go
 var Version = "X.Y.Z"  // no leading "v", no other quotes changed
 ```
 
 Do NOT edit:
+
 - `web/package.json` version (stays at `0.0.0` — never published to npm)
 - `model.SchemaVersion` in `internal/model/entry.go` — that's the on-disk JSON format version, unrelated to the app version. Bump it only when `data.json` shape actually changes.
 - Any other place — `version.Version` is the single source of truth (see CLAUDE.md §Versioning).
@@ -54,12 +57,15 @@ Create `release-notes-vX.Y.Z.md` at repo root. Format (omit empty sections):
 ## CopyNote vX.Y.Z
 
 ### New features
+
 - ...
 
 ### Bug fixes
+
 - ...
 
 ### Internal
+
 - ...
 ```
 
@@ -79,6 +85,7 @@ go run ./tools/signrelease -verify copynote.exe
 Sign **after** the final build — any rebuild changes the bytes and invalidates `copynote.exe.sig`. The signature covers the version from `version.go`, so Step 2 must already be done.
 
 Verify:
+
 - `web/dist/index.html` updated (it's committed because `//go:embed` bakes it in).
 - `copynote.exe` exists at repo root (~7 MB).
 - `ls -la copynote.exe` shows recent timestamp.
@@ -89,6 +96,7 @@ If icons changed since the last release, also rebuild them per `CLAUDE.md` §Bui
 ## Step 5 — Commit (Russian)
 
 Stage exactly these files:
+
 - `internal/version/version.go`
 - `release-notes-vX.Y.Z.md`
 - `web/dist/index.html`
@@ -96,6 +104,7 @@ Stage exactly these files:
 Do NOT stage `copynote.exe` or `copynote.exe.sig` (both are gitignored and are attached to the GitHub Release in Step 7, not tracked in git).
 
 Commit message (Russian, per project rules):
+
 ```
 chore: релиз vX.Y.Z
 
@@ -138,7 +147,7 @@ For an "initial-of-major-minor" with a tagline, use `--title "vX.Y.Z — <taglin
 ## Recovery — if something went wrong
 
 - **Wrong content shipped in `vX.Y.Z`**: do NOT delete the published GitHub Release (users may already have downloaded). Bump to `vX.Y.Z+1` and ship a corrected one. Add an `### Internal` line in the new notes pointing back at the issue.
-- **`.sig` missing or invalid on a published release**: run `go run ./tools/signrelease copynote.exe` on the *same* binary that was uploaded (do not rebuild), then `gh release upload vX.Y.Z copynote.exe.sig --clobber`. Until then the in-app updater offers only the manual download.
+- **`.sig` missing or invalid on a published release**: run `go run ./tools/signrelease copynote.exe` on the _same_ binary that was uploaded (do not rebuild), then `gh release upload vX.Y.Z copynote.exe.sig --clobber`. Until then the in-app updater offers only the manual download.
 - **Tag pushed but `gh release create` failed**: rerun `gh release create vX.Y.Z copynote.exe copynote.exe.sig --title ... --notes-file ...` against the existing tag.
 - **Tag wrong locally only (not pushed)**: `git tag -d vX.Y.Z` and redo from Step 6. Pushed tag — see next.
 - **Tag pushed but release not yet created and you want to redo**: ask the user before `git push --delete origin vX.Y.Z`. Force-deleting a tag is a shared-state action; explicit confirmation required.

@@ -11,7 +11,7 @@
     left: 12,
     top: 12,
     arrowLeft: 12,
-    placement: "bottom" as TooltipPlacement,
+    placement: "bottom",
   });
 
   let showTimer: number | null = null;
@@ -100,14 +100,24 @@
       placement === "bottom"
         ? anchorRect.bottom + gap
         : anchorRect.top - bubbleRect.height - gap;
-    const maxTop = Math.max(margin, viewport.height - bubbleRect.height - margin);
+    const maxTop = Math.max(
+      margin,
+      viewport.height - bubbleRect.height - margin,
+    );
     const top = Math.max(margin, Math.min(desiredTop, maxTop));
 
-    const desiredLeft = anchorRect.left + anchorRect.width / 2 - bubbleRect.width / 2;
-    const maxLeft = Math.max(margin, viewport.width - bubbleRect.width - margin);
+    const desiredLeft =
+      anchorRect.left + anchorRect.width / 2 - bubbleRect.width / 2;
+    const maxLeft = Math.max(
+      margin,
+      viewport.width - bubbleRect.width - margin,
+    );
     const left = Math.max(margin, Math.min(desiredLeft, maxLeft));
     const anchorCenter = anchorRect.left + anchorRect.width / 2;
-    const arrowLeft = Math.max(10, Math.min(bubbleRect.width - 10, anchorCenter - left));
+    const arrowLeft = Math.max(
+      10,
+      Math.min(bubbleRect.width - 10, anchorCenter - left),
+    );
 
     layout = { left, top, arrowLeft, placement };
     ready = true;
@@ -179,7 +189,8 @@
     window.removeEventListener("focusout", onFocusOut);
     window.removeEventListener("resize", refreshPosition);
     window.removeEventListener("scroll", refreshPosition, true);
-    host?.remove();
+    // The portal host was created by this component, outside Svelte's DOM tree.
+    (host as HTMLDivElement | null)?.remove();
   });
 </script>
 
@@ -192,7 +203,13 @@
       data-ready={ready}
       aria-hidden="true"
       role="tooltip"
-      style={"left: " + layout.left + "px; top: " + layout.top + "px; --tooltip-arrow-left: " + layout.arrowLeft + "px;"}
+      style={"left: " +
+        layout.left +
+        "px; top: " +
+        layout.top +
+        "px; --tooltip-arrow-left: " +
+        layout.arrowLeft +
+        "px;"}
     >
       {active.text}
     </div>

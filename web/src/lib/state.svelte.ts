@@ -9,7 +9,6 @@ export * from "./entries";
 export * from "./settings";
 export * from "./updates";
 export * from "./relocation";
-export type { UpdateCheckStatus, UpdateInstallStatus, RelocateStatus } from "./types";
 
 // Two functions rather than one with a default argument: both call sites
 // pass this straight to `onclick`, which would hand it a MouseEvent.
@@ -37,7 +36,9 @@ export function openSettings(): void {
   state.modal = null;
   state.view = "settings";
   if (hasUnseenUpdate() && state.updateInfo) {
-    void saveSettings({ lastSeenUpdateVersion: state.updateInfo.version }).catch(() => {});
+    void saveSettings({
+      lastSeenUpdateVersion: state.updateInfo.version,
+    }).catch(() => {});
   }
 }
 

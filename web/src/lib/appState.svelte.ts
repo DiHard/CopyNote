@@ -1,4 +1,14 @@
-import type { Entry, InstallLocation, ModalState, UpdateInfo, UserSettings, ViewMode, UpdateCheckStatus, UpdateInstallStatus, RelocateStatus } from "./types";
+import type {
+  Entry,
+  InstallLocation,
+  ModalState,
+  UpdateInfo,
+  UserSettings,
+  ViewMode,
+  UpdateCheckStatus,
+  UpdateInstallStatus,
+  RelocateStatus,
+} from "./types";
 
 // Shared reactive state; feature actions own persistence and OS effects.
 export const state = $state<{

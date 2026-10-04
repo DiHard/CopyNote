@@ -1,0 +1,7 @@
+{
+  "golangci-lint": "2.14.0",
+  "actionlint": "1.7.12",
+  "goimports": "v0.43.0",
+  "govulncheck": "v1.8.0",
+  "PSScriptAnalyzer": "1.24.0"
+}

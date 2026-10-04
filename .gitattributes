@@ -1,0 +1,6 @@
+* text=auto eol=lf
+third_party/** -text
+web/dist/index.html -whitespace
+*.ico binary
+*.png binary
+*.syso binary

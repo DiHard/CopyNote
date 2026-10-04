@@ -1,0 +1,5 @@
+{
+  "plugins": ["./web/node_modules/prettier-plugin-svelte/plugin.js"],
+  "svelteSortOrder": "none",
+  "overrides": [{ "files": "*.svelte", "options": { "parser": "svelte" } }]
+}

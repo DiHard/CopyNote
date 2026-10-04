@@ -27,14 +27,12 @@ var (
 	procCloseClipboard   = moduser32.NewProc("CloseClipboard")
 	procEmptyClipboard   = moduser32.NewProc("EmptyClipboard")
 	procSetClipboardData = moduser32.NewProc("SetClipboardData")
-	procGetClipboardData = moduser32.NewProc("GetClipboardData")
 
-	procGlobalAlloc    = modkernel32.NewProc("GlobalAlloc")
-	procGlobalLock     = modkernel32.NewProc("GlobalLock")
-	procGlobalUnlock   = modkernel32.NewProc("GlobalUnlock")
-	procGlobalFree     = modkernel32.NewProc("GlobalFree")
-	procGlobalSize     = modkernel32.NewProc("GlobalSize")
-	procRtlMoveMemory  = modkernel32.NewProc("RtlMoveMemory")
+	procGlobalAlloc   = modkernel32.NewProc("GlobalAlloc")
+	procGlobalLock    = modkernel32.NewProc("GlobalLock")
+	procGlobalUnlock  = modkernel32.NewProc("GlobalUnlock")
+	procGlobalFree    = modkernel32.NewProc("GlobalFree")
+	procRtlMoveMemory = modkernel32.NewProc("RtlMoveMemory")
 )
 
 // WriteText replaces the system clipboard with s, encoded as UTF-16 LE
@@ -120,4 +118,3 @@ func openClipboardWithRetry() error {
 func closeClipboard() {
 	_, _, _ = procCloseClipboard.Call()
 }
-

@@ -76,7 +76,7 @@ export async function relocateApp(targetDir = ""): Promise<void> {
 /** Asks for a folder first; a cancelled dialog changes nothing. */
 export async function relocateAppTo(pickerTitle: string): Promise<void> {
   if (state.relocate.kind === "moving") return;
-  let dir = "";
+  let dir: string;
   try {
     dir = await api.pickInstallFolder(pickerTitle);
   } catch (error) {

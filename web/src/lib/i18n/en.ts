@@ -13,10 +13,13 @@ export const en: Record<string, string> = {
   "list.loading": "Loading\u2026",
   "list.error": "Failed to load: {error}",
   "list.empty": "Nothing saved yet",
-  "list.empty.what": "Save what you type over and over: email addresses, account details, reply templates.",
+  "list.empty.what":
+    "Save what you type over and over: email addresses, account details, reply templates.",
   "list.empty.add": "Add your first entry",
-  "list.empty.tray": "The app lives in the tray. If you cannot see it, click the ⌃ arrow next to the clock.",
-  "list.firstCopyHint": "Click a card and its text goes to the clipboard. Or type a few letters in the search box and press Enter.",
+  "list.empty.tray":
+    "The app lives in the tray. If you cannot see it, click the ⌃ arrow next to the clock.",
+  "list.firstCopyHint":
+    "Click a card and its text goes to the clipboard. Or type a few letters in the search box and press Enter.",
   "list.firstCopyHint.dismiss": "Dismiss",
   "list.noMatch": "Nothing matches your search",
   "list.noMatch.create": "Create “{query}”",
@@ -57,19 +60,24 @@ export const en: Record<string, string> = {
   "settings.back": "Back",
   "settings.general": "General",
   "settings.autorun": "Run at startup",
-  "settings.autorun.hint": "CopyNote starts in the tray when you sign in to Windows, without opening its window.",
+  "settings.autorun.hint":
+    "CopyNote starts in the tray when you sign in to Windows, without opening its window.",
   "settings.hotkey": "Global shortcut",
   "settings.hotkey.press": "Press a combination…",
-  "settings.hotkey.hint": "Opens the window from any program. Click the button on the right to set your own.",
+  "settings.hotkey.hint":
+    "Opens the window from any program. Click the button on the right to set your own.",
   "settings.hotkey.off": "Off",
   "settings.hotkey.disable": "Turn off",
   "settings.hotkey.enable": "Turn on ({keys})",
-  "settings.hotkey.taken": "{combo} is already taken by another program — pick a different one.",
+  "settings.hotkey.taken":
+    "{combo} is already taken by another program — pick a different one.",
   "settings.hotkey.failed": "Could not assign {combo}: {error}",
   "settings.autohide": "Hide when clicking outside",
-  "settings.autohide.hint": "Turn this off to keep the window up while you work in another program. Close it with the ✕, Esc, or the tray icon.",
+  "settings.autohide.hint":
+    "Turn this off to keep the window up while you work in another program. Close it with the ✕, Esc, or the tray icon.",
   "settings.topmost": "Always on top",
-  "settings.topmost.hint": "With hiding turned off, the window stays in front of the form you are filling in, and the hidden icons panel cannot cover it. The shadow is heavier.",
+  "settings.topmost.hint":
+    "With hiding turned off, the window stays in front of the form you are filling in, and the hidden icons panel cannot cover it. The shadow is heavier.",
   "settings.appearance": "Appearance",
   "settings.theme": "Theme",
   "settings.theme.hint": "System follows the Windows light or dark mode.",
@@ -78,14 +86,17 @@ export const en: Record<string, string> = {
   "settings.theme.dark": "Dark",
   "settings.language": "Language",
   "settings.language.system": "System",
-  "settings.language.hint": "System uses the Windows language if the app has it, English otherwise.",
+  "settings.language.hint":
+    "System uses the Windows language if the app has it, English otherwise.",
   "settings.data": "Data",
-  "settings.data.hint": "Export saves your entries and settings to a file. Import adds the file's entries to yours, skipping any with the same label and value, and replaces your settings with the file's.",
+  "settings.data.hint":
+    "Export saves your entries and settings to a file. Import adds the file's entries to yours, skipping any with the same label and value, and replaces your settings with the file's.",
   "settings.import": "Import",
   "settings.export": "Export",
   "settings.exportOk": "Data exported successfully",
   "settings.importResult": "Import complete. Entries added: {added}",
-  "settings.importResult.skipped": "Import complete. Entries added: {added}, duplicates skipped: {skipped}",
+  "settings.importResult.skipped":
+    "Import complete. Entries added: {added}, duplicates skipped: {skipped}",
   "settings.importError": "Import failed: {error}",
   "settings.updates.title": "Updates",
   "settings.updates.available": "Version {version} is available",
@@ -95,7 +106,8 @@ export const en: Record<string, string> = {
   "settings.updates.checking": "Checking\u2026",
   "settings.updates.checkFailed": "Could not check for updates",
   "settings.updates.autoCheck": "Automatically check for updates",
-  "settings.updates.autoCheck.hint": "CopyNote checks each time it starts. Nothing is downloaded until you ask.",
+  "settings.updates.autoCheck.hint":
+    "CopyNote checks each time it starts. Nothing is downloaded until you ask.",
   "settings.updates.install": "Update now",
   "settings.updates.downloading": "Downloading…",
   "settings.updates.downloadingPercent": "Downloading… {percent}%",
@@ -105,7 +117,8 @@ export const en: Record<string, string> = {
   "settings.updates.installFailed": "Update failed: {error}",
   "settings.updates.manualDownload": "Download manually",
   "relocate.title": "CopyNote is running from “{folder}”",
-  "relocate.body": "Windows disk cleanup can delete files there, and startup would stop working. Move it somewhere permanent.",
+  "relocate.body":
+    "Windows disk cleanup can delete files there, and startup would stop working. Move it somewhere permanent.",
   "relocate.move": "Move",
   "relocate.willRestart": "The app will restart itself once the move is done",
   "relocate.moving": "Moving…",
@@ -126,6 +139,7 @@ export const en: Record<string, string> = {
   "settings.about": "About",
   "settings.saveError": "Could not load or save settings: {error}",
   "operation.error": "Operation failed: {error}",
-  "copyError.busy": "Could not copy: another program is using the clipboard. Try again.",
+  "copyError.busy":
+    "Could not copy: another program is using the clipboard. Try again.",
   "copyError.failed": "Could not copy: {error}",
 };

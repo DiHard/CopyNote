@@ -42,9 +42,9 @@ func CanSelfUpdate(exePath string) bool {
 		return false
 	}
 	name := f.Name()
-	f.Close()
-	os.Remove(name)
-	return true
+	closeErr := f.Close()
+	removeErr := os.Remove(name)
+	return closeErr == nil && removeErr == nil
 }
 
 // Apply swaps the verified binary at StagingPath(exePath) in for the
@@ -67,7 +67,7 @@ func Apply(exePath string) error {
 	}
 	if err := retry(func() error { return os.Rename(staging, exePath) }); err != nil {
 		if back := retry(func() error { return os.Rename(previous, exePath) }); back != nil {
-			return fmt.Errorf("install new version: %w (restoring the running version failed too: %v)", err, back)
+			return fmt.Errorf("install new version: %w (restoring the running version failed too: %w)", err, back)
 		}
 		return fmt.Errorf("install new version: %w", err)
 	}

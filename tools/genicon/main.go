@@ -63,11 +63,11 @@ func renderIcon(size int, stroke color.RGBA) *image.RGBA {
 	// That's 3 quarter-circle arcs and 2 straight segments, no fill,
 	// open-ended (round caps at (4,16) and (16,4)).
 	back := []segment{
-		arcSeg(4, 14, 2, math.Pi/2, math.Pi),       // BL: from (4,16) CCW to (2,14)
-		lineSeg(2, 14, 2, 4),                       // left edge
-		arcSeg(4, 4, 2, math.Pi, 3*math.Pi/2),      // TL: from (2,4) CCW to (4,2)
-		lineSeg(4, 2, 14, 2),                       // top edge
-		arcSeg(14, 4, 2, 3*math.Pi/2, 2*math.Pi),   // TR: from (14,2) CCW to (16,4)
+		arcSeg(4, 14, 2, math.Pi/2, math.Pi),     // BL: from (4,16) CCW to (2,14)
+		lineSeg(2, 14, 2, 4),                     // left edge
+		arcSeg(4, 4, 2, math.Pi, 3*math.Pi/2),    // TL: from (2,4) CCW to (4,2)
+		lineSeg(4, 2, 14, 2),                     // top edge
+		arcSeg(14, 4, 2, 3*math.Pi/2, 2*math.Pi), // TR: from (14,2) CCW to (16,4)
 	}
 
 	// Front rounded square: (8,8)-(22,22), corner radius 2.

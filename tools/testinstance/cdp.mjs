@@ -17,8 +17,12 @@ function fail(message, code = 1) {
 }
 
 try {
-  const targets = await fetch(`http://127.0.0.1:${port}/json/list`).then((r) => r.json());
-  const page = targets.find((t) => t.type === "page" && t.url.startsWith("http://127.0.0.1:"));
+  const targets = await fetch(`http://127.0.0.1:${port}/json/list`).then((r) =>
+    r.json(),
+  );
+  const page = targets.find(
+    (t) => t.type === "page" && t.url.startsWith("http://127.0.0.1:"),
+  );
   if (!page) fail("no page target yet", 2);
 
   const ws = new WebSocket(page.webSocketDebuggerUrl);
@@ -31,9 +35,27 @@ try {
       const message = JSON.parse(event.data);
       if (message.id === 1) resolve(message);
     };
-    ws.send(JSON.stringify(send
-      ? { id: 1, method, params: JSON.parse(Buffer.from(params, "base64").toString("utf8")) }
-      : { id: 1, method: "Runtime.evaluate", params: { expression: first, awaitPromise: true, returnByValue: true } }));
+    ws.send(
+      JSON.stringify(
+        send
+          ? {
+              id: 1,
+              method,
+              params: JSON.parse(
+                Buffer.from(params, "base64").toString("utf8"),
+              ),
+            }
+          : {
+              id: 1,
+              method: "Runtime.evaluate",
+              params: {
+                expression: first,
+                awaitPromise: true,
+                returnByValue: true,
+              },
+            },
+      ),
+    );
   });
   ws.close();
 
@@ -45,7 +67,11 @@ try {
   const result = reply.result ?? {};
   if (result.exceptionDetails) {
     const details = result.exceptionDetails;
-    fail(details.exception?.description ?? details.exception?.value ?? details.text);
+    fail(
+      details.exception?.description ??
+        details.exception?.value ??
+        details.text,
+    );
   }
   console.log(JSON.stringify(result.result?.value ?? null));
   process.exit(0);

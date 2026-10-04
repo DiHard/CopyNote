@@ -2,7 +2,15 @@
 // Each function returns a promise that rejects with an Error whose message
 // matches the Go error returned by the bound method.
 
-import type { Entry, EntryMenuRequest, ImportResult, InstallLocation, UpdateInfo, UpdateProgress, UserSettings } from "./types";
+import type {
+  Entry,
+  EntryMenuRequest,
+  ImportResult,
+  InstallLocation,
+  UpdateInfo,
+  UpdateProgress,
+  UserSettings,
+} from "./types";
 
 declare global {
   interface Window {
@@ -85,7 +93,8 @@ export const api = {
   installUpdate: (): Promise<{ version: string }> => window.installUpdate(),
   updateProgress: (): Promise<UpdateProgress> => window.updateProgress(),
   restartApp: (): Promise<void> => window.restartApp(),
-  getInstallLocation: (): Promise<InstallLocation> => window.getInstallLocation(),
+  getInstallLocation: (): Promise<InstallLocation> =>
+    window.getInstallLocation(),
   pickInstallFolder: (title: string): Promise<string> =>
     window.pickInstallFolder(title),
   relocateApp: (targetDir: string): Promise<string> =>

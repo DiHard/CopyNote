@@ -20,7 +20,9 @@ function settle(token: number, id: string): void {
 }
 
 /** Resolves to the picked item's id, or "" when the menu was dismissed. */
-export function showEntryMenu(request: Omit<EntryMenuRequest, "token">): Promise<string> {
+export function showEntryMenu(
+  request: Omit<EntryMenuRequest, "token">,
+): Promise<string> {
   if (pending) settle(pending.token, "");
   const token = ++lastToken;
   window.__entryMenuClosed = settle;

@@ -54,7 +54,9 @@
     class="m-auto w-full max-w-sm rounded-xl border border-outline bg-surface-alt p-4 shadow-2xl"
     transition:fade={{ duration: 150 }}
   >
-    <h2 id="modal-title" class="mb-1 text-base font-semibold text-on-surface">{t("confirm.delete.title")}</h2>
+    <h2 id="modal-title" class="mb-1 text-base font-semibold text-on-surface">
+      {t("confirm.delete.title")}
+    </h2>
     <p class="mb-4 text-sm text-on-surface-dim">
       "{entry.label}" {t("confirm.delete.body")}
     </p>

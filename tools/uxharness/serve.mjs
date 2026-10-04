@@ -23,9 +23,18 @@ const port = Number(process.argv[2] ?? process.env.PORT ?? 18099);
 // which is deferred — so the globals exist by the time the UI boots.
 function inject(html, stub) {
   const at = html.indexOf("<head>");
-  if (at < 0) throw new Error("no <head> in the bundle — did vite-plugin-singlefile change?");
+  if (at < 0)
+    throw new Error(
+      "no <head> in the bundle — did vite-plugin-singlefile change?",
+    );
   const cut = at + "<head>".length;
-  return html.slice(0, cut) + "\n<script>\n" + stub + "\n</script>\n" + html.slice(cut);
+  return (
+    html.slice(0, cut) +
+    "\n<script>\n" +
+    stub +
+    "\n</script>\n" +
+    html.slice(cut)
+  );
 }
 
 createServer(async (req, res) => {
@@ -49,5 +58,7 @@ createServer(async (req, res) => {
   }
 }).listen(port, "127.0.0.1", () => {
   console.log(`harness on http://127.0.0.1:${port}/`);
-  console.log("scenarios: ?empty  ?many  ?downloads  ?update  ?hotkeytaken  ?copybusy");
+  console.log(
+    "scenarios: ?empty  ?many  ?downloads  ?update  ?hotkeytaken  ?copybusy",
+  );
 });

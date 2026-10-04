@@ -4,7 +4,7 @@
 // the "clipboard_real" build tag so a normal `go test ./...` does not
 // stomp on the developer's clipboard. Run manually with:
 //
-//     go test -tags clipboard_real ./internal/clipboard/
+//	go test -tags clipboard_real ./internal/clipboard/
 package clipboard
 
 import (

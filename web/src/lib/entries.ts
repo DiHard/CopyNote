@@ -67,8 +67,13 @@ export async function deleteEntry(id: string): Promise<void> {
  * Go reports "OpenClipboard busy" once another program has held the
  * clipboard through all of its retries (clipboard.openClipboardWithRetry).
  */
-export function describeCopyError(error: unknown): { busy: boolean; detail: string } {
-  const detail = String(error).replace(/^(Error:\s*)+/, "").replace(/^clipboard:\s*/, "");
+export function describeCopyError(error: unknown): {
+  busy: boolean;
+  detail: string;
+} {
+  const detail = String(error)
+    .replace(/^(Error:\s*)+/, "")
+    .replace(/^clipboard:\s*/, "");
   return { busy: /OpenClipboard busy/.test(detail), detail };
 }
 
@@ -87,6 +92,15 @@ export async function copyEntry(id: string): Promise<void> {
 
 export function dismissFirstCopyHint(): void {
   state.showFirstCopyHint = false;
+}
+
+/** Report a rejected native hide without leaving an unhandled event promise. */
+export async function hideWindow(): Promise<void> {
+  try {
+    await window.hide();
+  } catch (error) {
+    state.operationError = String(error);
+  }
 }
 
 /**

@@ -1,6 +1,7 @@
 ## CopyNote v2.2.0
 
 ### New features
+
 - The window now opens on its own when you start CopyNote yourself. A Windows
   sign-in still starts it quietly into the tray.
 - Keyboard flow: the search box takes focus when the window opens, **Enter**
@@ -18,6 +19,7 @@
 - The new-entry form now says that leaving the value empty copies the label.
 
 ### Bug fixes
+
 - Long lists are no longer cut off. The entry list scrolls on its own and the
   search box stays put; previously, past roughly the eleventh entry on a scaled
   laptop, the header scrolled out of reach and no scrollbar was shown. The
@@ -30,6 +32,7 @@
 - Better contrast on the relocate banner's buttons.
 
 ### Internal
+
 - The autorun registry entry now carries an `--autostart` flag so the app can
   tell a Windows sign-in from a launch you performed yourself. Existing
   installations rewrite the entry themselves on the next start.

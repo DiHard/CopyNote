@@ -107,7 +107,7 @@ func checkLatest(ctx context.Context, client *http.Client, endpoint, currentVers
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() // The response has been consumed; closing must not replace its parse result.
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // cap at 1 MB
 	if err != nil {
@@ -166,7 +166,7 @@ func get(ctx context.Context, client *http.Client, url, accept, ua string) (*htt
 		return nil, fmt.Errorf("http: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		return nil, fmt.Errorf("http status %d", resp.StatusCode)
 	}
 	return resp, nil

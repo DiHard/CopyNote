@@ -20,19 +20,36 @@
     ["Personal phone", "+7 999 123-45-67"],
     ["Tax number", "770912345678"],
     ["Delivery address", "125009, Moscow, Tverskaya st. 1, apt. 42"],
-    ["SSH key (prod)", "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH8k2mQz9Xw deploy@prod"],
+    [
+      "SSH key (prod)",
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH8k2mQz9Xw deploy@prod",
+    ],
     // Multi-line on purpose: the card truncates it to one line.
-    ["Reply template", "Hello!\nThanks for reaching out — we will get back to you\nwithin one working day.\n\nSupport"],
-    ["Company details", "Gamma LLC, tax 7709123456, account 40702810900000012345"],
+    [
+      "Reply template",
+      "Hello!\nThanks for reaching out — we will get back to you\nwithin one working day.\n\nSupport",
+    ],
+    [
+      "Company details",
+      "Gamma LLC, tax 7709123456, account 40702810900000012345",
+    ],
     ["git config", "git config --global user.email me@example.com"],
   ];
 
   function seed() {
     if (flags.has("empty")) return [];
     const rows = flags.has("many")
-      ? Array.from({ length: 30 }, (_, i) => ["Entry number " + (i + 1), "value-" + (i + 1)])
+      ? Array.from({ length: 30 }, (_, i) => [
+          "Entry number " + (i + 1),
+          "value-" + (i + 1),
+        ])
       : SAMPLE;
-    return rows.map(([label, value], order) => ({ id: uid(), label, value, order }));
+    return rows.map(([label, value], order) => ({
+      id: uid(),
+      label,
+      value,
+      order,
+    }));
   }
 
   let entries = seed();
@@ -52,8 +69,21 @@
   };
 
   // Spies, for asserting that a binding was called at all.
-  const calls = { resizeWindow: [], hide: 0, copy: [], topmost: [], autoHide: [], hotkey: [], menu: [] };
-  window.__harness = { calls, get entries() { return copy(); } };
+  const calls = {
+    resizeWindow: [],
+    hide: 0,
+    copy: [],
+    topmost: [],
+    autoHide: [],
+    hotkey: [],
+    menu: [],
+  };
+  window.__harness = {
+    calls,
+    get entries() {
+      return copy();
+    },
+  };
 
   // ── Entries ──────────────────────────────────────────────────────
   window.list = () => reply(copy());
@@ -69,11 +99,16 @@
     return reply({ ...e });
   };
   window.remove = (id) => {
-    entries = entries.filter((e) => e.id !== id).map((e, i) => ({ ...e, order: i }));
+    entries = entries
+      .filter((e) => e.id !== id)
+      .map((e, i) => ({ ...e, order: i }));
     return reply(null);
   };
   window.reorder = (ids) => {
-    entries = ids.map((id, i) => ({ ...entries.find((e) => e.id === id), order: i }));
+    entries = ids.map((id, i) => ({
+      ...entries.find((e) => e.id === id),
+      order: i,
+    }));
     return reply(null);
   };
   // ?copybusy: another program holds the clipboard. go-webview2 rejects with
@@ -82,7 +117,13 @@
     calls.copy.push(id);
     if (flags.has("copybusy")) {
       return new Promise((_, fail) =>
-        setTimeout(() => fail("clipboard: OpenClipboard busy after 5 attempts: Access is denied."), 40),
+        setTimeout(
+          () =>
+            fail(
+              "clipboard: OpenClipboard busy after 5 attempts: Access is denied.",
+            ),
+          40,
+        ),
       );
     }
     return reply(entries.find((e) => e.id === id) ?? null);
@@ -101,24 +142,38 @@
     document.title = "CopyNote — h=" + h;
     return reply();
   };
-  window.applyTopmost = (v) => { calls.topmost.push(v); return reply(); };
-  window.applyAutoHide = (v) => { calls.autoHide.push(v); return reply(); };
+  window.applyTopmost = (v) => {
+    calls.topmost.push(v);
+    return reply();
+  };
+  window.applyAutoHide = (v) => {
+    calls.autoHide.push(v);
+    return reply();
+  };
   // ?hotkeytaken makes Windows refuse the combination, so the error path in
   // Settings can be seen without actually occupying a shortcut.
   window.applyHotkey = (spec) => {
     calls.hotkey.push(spec);
     return flags.has("hotkeytaken")
-      ? Promise.reject(new Error("register " + spec + ": Hot key is already registered."))
+      ? Promise.reject(
+          new Error("register " + spec + ": Hot key is already registered."),
+        )
       : reply();
   };
 
   // ── Settings and data ────────────────────────────────────────────
   window.getSettings = () => reply({ ...settings });
-  window.saveSettings = (next) => { settings = { ...next }; return reply(); };
+  window.saveSettings = (next) => {
+    settings = { ...next };
+    return reply();
+  };
   window.exportData = () => reply(true);
   // As if the file held three entries, one of them already in the list.
   window.importData = () => reply({ added: 2, skipped: 1 });
-  window.openExternal = (url) => { console.log("[harness] openExternal", url); return reply(); };
+  window.openExternal = (url) => {
+    console.log("[harness] openExternal", url);
+    return reply();
+  };
   window.openAppFolder = () => reply();
   window.notifyReady = () => reply();
   window.getVersion = () => reply("0.0.0-harness");
