@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"math"
 
 	"github.com/jchv/go-webview2"
@@ -51,7 +50,7 @@ type entryMenuRequest struct {
 }
 
 func bindEntryMenu(w webview2.WebView, hwnd uintptr) {
-	err := w.Bind("showEntryMenu", func(req entryMenuRequest) error {
+	mustBind(w, "showEntryMenu", func(req entryMenuRequest) error {
 		if len(req.Items) == 0 || len(req.Items) > maxEntryMenuItems {
 			return fmt.Errorf("a menu takes 1 to %d items, got %d", maxEntryMenuItems, len(req.Items))
 		}
@@ -60,9 +59,6 @@ func bindEntryMenu(w webview2.WebView, hwnd uintptr) {
 		w.Dispatch(func() { openEntryMenu(w, hwnd, req) })
 		return nil
 	})
-	if err != nil {
-		log.Fatalf("bind showEntryMenu: %v", err)
-	}
 }
 
 func openEntryMenu(w webview2.WebView, hwnd uintptr, req entryMenuRequest) {
@@ -71,7 +67,7 @@ func openEntryMenu(w webview2.WebView, hwnd uintptr, req entryMenuRequest) {
 		w.Eval(fmt.Sprintf("window.__entryMenuClosed && window.__entryMenuClosed(%d, %s)", req.Token, raw))
 	}
 	// Put away between the click and this dispatch: nothing to open it over.
-	if windowHidden.Load() {
+	if windowIsHidden() {
 		answer("")
 		return
 	}

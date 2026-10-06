@@ -10,10 +10,12 @@
     hideWindow,
     loadInstallLocation,
     resetAfterHide,
+    resetForShow,
     resetListPosition,
   } from "./lib/state.svelte";
   import { focusSearch, nextTabStop } from "./lib/focus";
   import { t } from "./lib/i18n";
+  import type { ViewMode } from "./lib/types";
   import Header from "./lib/components/Header.svelte";
   import EntryList from "./lib/components/EntryList.svelte";
   import EntryModal from "./lib/components/EntryModal.svelte";
@@ -21,10 +23,42 @@
   import SettingsView from "./lib/components/SettingsView.svelte";
   import TooltipHost from "./lib/components/TooltipHost.svelte";
 
-  /** Focus the search box after the native window has come back on screen. */
-  async function onWindowShown() {
+  // ── The native window's show/hide cycle ────────────────────────
+  // Go parks the window off-screen instead of hiding it, tells the page to
+  // get the next view ready while it is parked (__onHide), and slides it
+  // back in when asked (__onShow). See windowPhase in window_windows.go.
+
+  /** False from the moment the window is parked until it is shown again. */
+  let windowVisible = $state(true);
+  let windowTransitioning = $state(false);
+  let windowTransitionGeneration = 0;
+  let transitionWatchdog: number | undefined;
+  let preparation = 0;
+
+  /** Far longer than either slide; only a lost "finished" ever gets here. */
+  const TRANSITION_WATCHDOG_MS = 1000;
+  /** How long preparation waits for frames that are not coming. */
+  const FRAME_WAIT_MS = 150;
+
+  /**
+   * Go calls this as the window starts to come on screen. `view` is the view
+   * it was parked with, or null when it was on screen already and has only
+   * been brought forward — then nothing the user is looking at changes.
+   *
+   * A modal is left completely alone: it may hold an edit the user was
+   * pulled away from mid-sentence, and discarding that would be worse than a
+   * stale search box.
+   */
+  async function onWindowShown(view: ViewMode | null) {
     windowVisible = true;
     if (appState.modal) return;
+    if (view) {
+      // __onHide left the page clean, but the parked window kept the
+      // keyboard. Whatever reached it since must not greet the user now.
+      resetForShow();
+      if (view === "settings" && appState.view !== "settings") openSettings();
+      if (view === "main" && appState.view !== "main") closeSettings();
+    }
     // WebView2 may restore the previously focused card while the native
     // window comes back. Reset the list entry point before restoring search.
     resetListPosition();
@@ -33,58 +67,100 @@
   }
 
   /**
-   * Go calls this after the hide animation has parked the window off-screen.
-   * A modal is left completely alone: it may hold an edit the user was
-   * pulled away from mid-sentence, and discarding that would be worse than a
-   * stale search box.
+   * Go reports the start and the end of every slide. While one runs the
+   * window moves under a still cursor, so pointer input is kept away from
+   * the page (the shield at the bottom of this file).
    */
-  let windowVisible = true;
-  let windowTransitioning = $state(false);
-  let windowTransitionGeneration = 0;
-  let preparation = 0;
-
   function onWindowTransition(active: boolean, generation: number) {
-    // An old animation can finish after a newer show/hide has started. Only
-    // the current generation is allowed to release the interaction shield.
+    // An old slide can end after a newer show or hide has started; it must
+    // not release the shield of the newer one. A newer generation may:
+    // Go reports "ended" for a move that replaced a slide without sliding.
     if (generation < windowTransitionGeneration) return;
-    if (active) {
-      windowTransitionGeneration = generation;
-      windowTransitioning = true;
-    } else if (generation === windowTransitionGeneration) {
-      windowTransitioning = false;
-    }
+    windowTransitionGeneration = generation;
+    windowTransitioning = active;
+    window.clearTimeout(transitionWatchdog);
+    if (!active) return;
+    // The end of a slide arrives from another thread, after it. Should it
+    // ever not arrive, the window must not stay deaf to the mouse.
+    transitionWatchdog = window.setTimeout(() => {
+      if (windowTransitionGeneration === generation)
+        windowTransitioning = false;
+    }, TRANSITION_WATCHDOG_MS);
   }
 
+  /**
+   * Resolves after `count` animation frames — or after FRAME_WAIT_MS when
+   * frames are not being produced. A parked window is not always painted
+   * (a locked session, for one), and Go is holding the next show.
+   */
+  function framesPainted(count: number): Promise<void> {
+    return new Promise((resolve) => {
+      const timer = window.setTimeout(resolve, FRAME_WAIT_MS);
+      const step = (left: number) => {
+        if (left > 0) {
+          requestAnimationFrame(() => step(left - 1));
+          return;
+        }
+        window.clearTimeout(timer);
+        resolve();
+      };
+      step(count);
+    });
+  }
+
+  /**
+   * Go calls this after the hide animation has parked the window off-screen:
+   * reset the view (to Settings when asked), measure it, and answer with
+   * windowPrepared. Go holds the next show until the answer — or its own
+   * timeout — so the answer goes out even if something here throws.
+   */
   async function onWindowHidden(id: number, settings: boolean) {
     preparation = id;
     windowVisible = false;
-    if (rafId !== null) cancelAnimationFrame(rafId);
-    rafId = null;
-    resetAfterHide();
-    if (settings) openSettings();
-    await tick();
-    if (preparation !== id) return;
-    // Measure the new DOM while parked and apply its final height without
-    // easing. Let the renderer paint before Go starts the slide-in.
-    fitWindow();
-    await new Promise<void>((resolve) =>
-      requestAnimationFrame(() => resolve()),
-    );
-    await new Promise<void>((resolve) =>
-      requestAnimationFrame(() => resolve()),
-    );
-    if (preparation !== id) return;
-    fitWindow();
+    try {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      rafId = null;
+      resetAfterHide();
+      if (settings) openSettings();
+      await tick();
+      if (preparation !== id) return;
+      // Measure the new DOM while parked and apply its final height without
+      // easing. Let the renderer paint before Go starts the slide-in.
+      fitWindow();
+      await framesPainted(2);
+      if (preparation !== id) return;
+      fitWindow();
+    } catch (error) {
+      reportNativeError(error);
+      if (preparation !== id) return;
+    }
     await window.windowPrepared?.(id, Math.round(targetH));
+  }
+
+  /**
+   * A parked window still has the keyboard: hiding only moves it off-screen,
+   * and the foreground stays with it until the user clicks somewhere else.
+   * What they type meanwhile is meant for another program, so the page takes
+   * none of it. Otherwise it lands in the search box and filters the next
+   * session's list — or Enter copies an entry over what they meant to paste.
+   */
+  function ignoreKeysWhileParked(e: KeyboardEvent) {
+    if (windowVisible) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
   }
 
   onMount(() => {
     window.__openSettings = openSettings;
-    window.__onShow = () => {
-      void onWindowShown().catch(reportNativeError);
+    window.__onShow = (view) => {
+      void onWindowShown(view ?? null).catch(reportNativeError);
     };
     window.__onWindowTransition = onWindowTransition;
-    window.__onHide = onWindowHidden;
+    window.__onHide = (id, settings) => {
+      void onWindowHidden(id, settings).catch(reportNativeError);
+    };
+    // Capture phase, ahead of every other key handler in the app.
+    window.addEventListener("keydown", ignoreKeysWhileParked, true);
     async function initialize() {
       await Promise.all([refresh(), loadSettings()]);
       // Signal Go that the UI is ready — stops tray icon pulse
@@ -105,6 +181,8 @@
     delete window.__onShow;
     delete window.__onWindowTransition;
     delete window.__onHide;
+    window.removeEventListener("keydown", ignoreKeysWhileParked, true);
+    window.clearTimeout(transitionWatchdog);
   });
 
   // ── Auto-resize window to fit content ──────────────────────────
@@ -360,10 +438,13 @@
 
 {#if windowTransitioning}
   <!-- The native window moves beneath the cursor during a slide. This shield
-       absorbs pointer input until the final window position is stable. -->
+       absorbs pointer input until the final window position is stable. It
+       also keeps a press from taking the caret out of the search box, which
+       is where the window has just put it. -->
   <div
     data-window-transition-shield
     aria-hidden="true"
+    onmousedown={(e) => e.preventDefault()}
     class="fixed inset-0 z-50 cursor-default"
   ></div>
 {/if}

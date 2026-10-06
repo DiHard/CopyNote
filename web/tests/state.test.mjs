@@ -767,6 +767,36 @@ test("hiding the window clears last session's search and view", async () => {
   assert.equal(app.state.copyError, null, "last session's failure is not news");
 });
 
+// Hiding moves the window off-screen but leaves it the foreground window, so
+// until the user clicks elsewhere their typing still arrives here — after the
+// reset that followed the hide.
+test("what reached the parked window is gone when it opens again", async () => {
+  const app = await setup({ list: async () => twoEntries });
+  await app.refresh();
+  app.resetAfterHide();
+
+  app.state.query = "вставленный пароль";
+  app.state.operationError = "stale failure";
+  app.state.copyError = { busy: false, detail: "access denied" };
+  app.resetForShow();
+  assert.equal(app.state.query, "", "the list must not open filtered");
+  assert.equal(app.state.operationError, null);
+  assert.equal(app.state.copyError, null);
+  assert.equal(app.state.view, "main", "the view is Go's to choose");
+});
+
+test("an open dialog and the search behind it survive a hide and a show", async () => {
+  const app = await setup({ list: async () => twoEntries });
+  await app.refresh();
+  app.state.query = "почта";
+  app.openEdit(app.state.entries[0]);
+
+  app.resetAfterHide();
+  app.resetForShow();
+  assert.equal(app.state.modal?.kind, "edit", "an edit in progress is kept");
+  assert.equal(app.state.query, "почта");
+});
+
 test("the move is offered nowhere while Go has it switched off", async () => {
   // No getInstallLocation binding: that is all "switched off" means here.
   const app = await setup({ list: async () => twoEntries });

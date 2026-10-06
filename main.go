@@ -49,17 +49,6 @@ var browserArgs = []string{
 	"--no-first-run",
 }
 
-// notifyShown tells the frontend the window just came on screen, so it can
-// put keyboard focus back in the search box. State is reset by __onHide
-// after the hide animation, while the window is parked off-screen.
-const notifyShown = `window.__onShow && window.__onShow()`
-
-// notifyTransitionStarted/Finished keep pointer input away from the page
-// while the native window is moving under the cursor. The generation lets
-// the frontend ignore a late completion from an animation that was replaced
-// by a newer show/hide request.
-const notifyTransitionStarted = `window.__onWindowTransition && window.__onWindowTransition(true, %d)`
-const notifyTransitionFinished = `window.__onWindowTransition && window.__onWindowTransition(false, %d)`
 // webViewArguments returns the value for WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS:
 // browserArgs, then whatever the environment already asked for. That is the
 // documented WebView2 debugging hook (e.g. --remote-debugging-port=9222 to
@@ -211,42 +200,16 @@ func main() {
 	defer w.Destroy()
 
 	hwnd := uintptr(w.Window())
-	windowShownCallback = func() { w.Eval(notifyShown) }
-	windowTransitionStartedCallback = func(generation uint64) {
-		w.Eval(fmt.Sprintf(notifyTransitionStarted, generation))
-	}
-	windowTransitionFinishedCallback = func(generation uint64) {
-		if quitting.Load() {
-			return
-		}
-		w.Dispatch(func() {
-			if !quitting.Load() {
-				w.Eval(fmt.Sprintf(notifyTransitionFinished, generation))
-			}
-		})
-	}
-	windowPrepareCallback = func(id uint64, settings bool) {
-		w.Eval(fmt.Sprintf(`window.__onHide && window.__onHide(%d, %t)`, id, settings))
-	}
-	if err := w.Bind("windowPrepared", func(id uint64, height int) {
+	// window_windows.go owns the show/hide cycle; this is how it reaches the
+	// UI thread and the page. Attached before the tray starts accepting
+	// user actions.
+	host = w
+	// The page's answer to a preparation request. Dispatched so that a show
+	// it releases starts from the message loop rather than from inside
+	// WebView2's message callback.
+	mustBind(w, "windowPrepared", func(id uint64, height int) {
 		w.Dispatch(func() { completeWindowPreparation(hwnd, id, height) })
-	}); err != nil {
-		log.Fatal(err)
-	}
-	// The hide completion callback is dispatched back to WebView2's UI thread
-	// because the slide animation runs in the background. It is installed
-	// before the tray starts accepting user actions.
-	windowHiddenCallback = func(generation uint64) {
-		if quitting.Load() {
-			return
-		}
-		w.Dispatch(func() {
-			if !quitting.Load() && windowHidden.Load() && windowGeneration.Load() == generation {
-				windowParked = true
-				prepareParkedWindow()
-			}
-		})
-	}
+	})
 
 	// 6b. Immediately move the window off-screen so the unstyled
 	//     title-bar window isn't visible during the ~9 s WebView2
@@ -273,37 +236,19 @@ func main() {
 		},
 		OnToggle: func() {
 			w.Dispatch(func() {
-				toggleVisibilityFromTray(hwnd)
-			})
-		},
-		IsMainWindowForeground: func() bool {
-			return winutil.GetForegroundWindow() == hwnd
-		},
-		OnToggleWithFocus: func(wasFocused bool) {
-			w.Dispatch(func() {
-				toggleVisibilityWithFocus(hwnd, wasFocused)
+				toggleVisibility(hwnd, true)
 			})
 		},
 		OnSettings: func() {
 			w.Dispatch(func() {
-				if windowHidden.Load() {
-					showPending = true
-					settingsPending = true
-					windowPrepared = false
-					if windowParked {
-						prepareParkedWindow()
-					}
-				} else {
-					winutil.SetForegroundWindow(hwnd)
-					w.Eval(`window.__openSettings && window.__openSettings()`)
-				}
+				showSettings(hwnd)
 			})
 		},
 		// The hotkey means the same thing as a click on the icon: bring the
-		// window up, or put it away if it is already there.
+		// window up, or put it away if it is already there and in use.
 		OnHotkey: func() {
 			w.Dispatch(func() {
-				toggleVisibility(hwnd)
+				toggleVisibility(hwnd, false)
 			})
 		},
 		OnQuit: func() {
@@ -393,7 +338,7 @@ func main() {
 		winutil.SWP_FRAMECHANGED|winutil.SWP_NOMOVE|winutil.SWP_NOSIZE|winutil.SWP_NOZORDER|winutil.SWP_NOACTIVATE)
 	winutil.DwmSetWindowCornerPreference(hwnd, 2) // DWMWCP_ROUND
 
-	// 11. Navigate. The window is parked off-screen (windowHidden=true)
+	// 11. Navigate. The window is parked off-screen (phaseParked)
 	//     but WS_VISIBLE so WebView2's renderer is NOT throttled.
 	//     We never use SW_HIDE — instead, "hidden" means off-screen
 	//     and "shown" means anchored to the tray corner.

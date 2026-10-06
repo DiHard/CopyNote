@@ -72,6 +72,7 @@
   const calls = {
     resizeWindow: [],
     hide: 0,
+    prepared: [],
     copy: [],
     topmost: [],
     autoHide: [],
@@ -130,10 +131,54 @@
   };
 
   // ── Window ───────────────────────────────────────────────────────
+  // What Go does around a hide and a show (window_windows.go). A slide is
+  // announced and ended through __onWindowTransition; a parked window is
+  // asked to get its next view ready through __onHide and answers with
+  // windowPrepared; a show tells the page which view it was parked with.
+  // Nothing moves here, so a slide is only its two messages, a moment apart.
+  let generation = 0;
+  let preparation = 0;
+  let parked = false;
+  const slide = (afterwards) => {
+    const current = ++generation;
+    window.__onWindowTransition?.(true, current);
+    setTimeout(() => {
+      if (current !== generation) return;
+      window.__onWindowTransition?.(false, current);
+      afterwards?.();
+    }, 150);
+  };
   window.hide = () => {
     calls.hide++;
     console.log("[harness] hide()");
+    if (!parked) {
+      parked = true;
+      slide(() => window.__onHide?.(++preparation, false));
+    }
     return reply();
+  };
+  window.windowPrepared = (id, height) => {
+    calls.prepared.push({ id, height });
+    return reply();
+  };
+  // The tray icon, the hotkey or a second launch: __harness.show() brings
+  // the window back, __harness.show("settings") is the tray's Settings item.
+  // A window that was not put away is only brought forward (view null).
+  window.__harness.show = (view = "main") => {
+    if (!parked) {
+      slide();
+      window.__onShow?.(null);
+      return;
+    }
+    const open = () => {
+      parked = false;
+      slide();
+      window.__onShow?.(view);
+    };
+    if (view !== "settings") return open();
+    // Go has the page prepare Settings off-screen before the slide.
+    window.__onHide?.(++preparation, true);
+    setTimeout(open, 200);
   };
   // The title is the only visible channel for the height the UI asks for,
   // which makes the auto-resize logic observable from a screenshot.

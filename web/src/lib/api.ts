@@ -10,6 +10,7 @@ import type {
   UpdateInfo,
   UpdateProgress,
   UserSettings,
+  ViewMode,
 } from "./types";
 
 declare global {
@@ -66,12 +67,14 @@ declare global {
     __entryMenuClosed?: (token: number, id: string) => void;
     /** Injected at runtime by Go for tray→settings navigation. */
     __openSettings?: () => void;
-    /** Called by Go each time the window comes back on screen. */
-    __onShow?: () => void;
+    /** Called by Go as the window comes on screen. `view` is the view it was
+     *  parked with, or null when it was on screen already. */
+    __onShow?: (view: ViewMode | null) => void;
     /** Called by Go at the start/end of a native show or hide animation. */
     __onWindowTransition?: (active: boolean, generation: number) => void;
-    /** Called by Go after the window is parked off-screen. */
-    __onHide?: (id: number, settings: boolean) => Promise<void>;
+    /** Called by Go after the window is parked off-screen; the page answers
+     *  through windowPrepared with the same id. */
+    __onHide?: (id: number, settings: boolean) => void;
   }
 }
 

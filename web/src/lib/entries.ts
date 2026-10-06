@@ -136,6 +136,19 @@ export function resetAfterHide(): void {
   state.copyError = null;
 }
 
+/**
+ * The window is coming back on screen after having been parked.
+ * resetAfterHide left the page clean at the time; this drops what has reached
+ * it since — the parked window keeps the keyboard until the user clicks
+ * elsewhere. The view is the caller's: Go knows which one it asked for.
+ */
+export function resetForShow(): void {
+  if (state.modal) return;
+  state.query = "";
+  state.operationError = null;
+  state.copyError = null;
+}
+
 /** Reset only the transient list position, without changing the current view. */
 export function resetListPosition(): void {
   state.listResetToken++;

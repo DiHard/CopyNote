@@ -46,7 +46,6 @@ const (
 	WM_ACTIVATEAPP   = 0x001C
 	WM_COMMAND       = 0x0111
 	WM_USER          = 0x0400
-	WM_LBUTTONDOWN   = 0x0201
 	WM_LBUTTONUP     = 0x0202
 	WM_RBUTTONUP     = 0x0205
 	WM_APP           = 0x8000
@@ -70,6 +69,8 @@ var (
 	procShowWindow                   = moduser32.NewProc("ShowWindow")
 	procSetForegroundWindow          = moduser32.NewProc("SetForegroundWindow")
 	procGetForegroundWindow          = moduser32.NewProc("GetForegroundWindow")
+	procFindWindowW                  = moduser32.NewProc("FindWindowW")
+	procGetProcessIdOfThread         = modkernel32.NewProc("GetProcessIdOfThread")
 	procClientToScreen               = moduser32.NewProc("ClientToScreen")
 	procIsIconic                     = moduser32.NewProc("IsIconic")
 	procIsWindowVisible              = moduser32.NewProc("IsWindowVisible")
@@ -154,6 +155,45 @@ func SetForegroundWindow(hwnd uintptr) bool {
 func GetForegroundWindow() uintptr {
 	r, _, _ := procGetForegroundWindow.Call()
 	return r
+}
+
+// WindowThreadProcess returns the thread and the process that own hwnd, or
+// zeros when hwnd is not a window.
+func WindowThreadProcess(hwnd uintptr) (threadID, processID uint32) {
+	if hwnd == 0 {
+		return 0, 0
+	}
+	// A failed lookup leaves both results zero, which is the documented answer.
+	threadID, _ = windows.GetWindowThreadProcessId(windows.HWND(hwnd), &processID)
+	return threadID, processID
+}
+
+// ThreadProcessID returns the process a thread belongs to, or 0 when the
+// thread cannot be opened: it has exited, or belongs to a more privileged
+// process.
+func ThreadProcessID(threadID uint32) uint32 {
+	if threadID == 0 {
+		return 0
+	}
+	h, err := windows.OpenThread(windows.THREAD_QUERY_LIMITED_INFORMATION, false, threadID)
+	if err != nil {
+		return 0
+	}
+	defer func() { _ = windows.CloseHandle(h) }() // The lookup below has already produced its result.
+	pid, _, _ := procGetProcessIdOfThread.Call(uintptr(h))
+	return uint32(pid)
+}
+
+// ShellProcessID returns the process that owns the taskbar — and with it the
+// notification area and its overflow flyout — or 0 when no shell is running.
+func ShellProcessID() uint32 {
+	class, err := windows.UTF16PtrFromString("Shell_TrayWnd")
+	if err != nil {
+		return 0
+	}
+	hwnd, _, _ := procFindWindowW.Call(uintptr(unsafe.Pointer(class)), 0)
+	_, pid := WindowThreadProcess(hwnd)
+	return pid
 }
 
 // ClientToScreen converts a point in hwnd's client area to screen coordinates.

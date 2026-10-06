@@ -73,20 +73,11 @@ type Tray struct {
 
 	// OnToggle is invoked from the tray thread on left click of the
 	// tray icon. The handler should hide the window if it is currently
-	// visible, otherwise show and focus it. Falls back to OnShow if
-	// nil.
+	// visible and was the active one, otherwise show and focus it. Whether
+	// it was active is the handler's to work out: the shell has taken the
+	// foreground to deliver the click by the time this runs. Falls back to
+	// OnShow if nil.
 	OnToggle func()
-
-	// IsMainWindowForeground reports whether the main window had focus when
-	// the tray icon was pressed. It is sampled on WM_LBUTTONDOWN, before the
-	// shell can temporarily activate the notification area.
-	IsMainWindowForeground func() bool
-
-	// OnToggleWithFocus is used for physical tray clicks when the focus state
-	// was captured on mouse-down. The bool is the state before the click.
-	// OnToggle remains the fallback for programmatic callback messages that
-	// contain no mouse-down event.
-	OnToggleWithFocus func(wasFocused bool)
 
 	// OnSettings is invoked from the tray thread when the user picks
 	// Settings from the popup menu.
@@ -127,11 +118,6 @@ type Tray struct {
 
 	// menu is the right-click menu. Tray thread only.
 	menu popupmenu.Menu
-
-	// The physical tray click can change the foreground window before its
-	// button-up callback arrives, so retain the state captured on button-down.
-	toggleMouseDown        bool
-	toggleMouseDownFocused bool
 
 	// hotkeyMu guards the combination SetHotkey hands to the tray thread.
 	hotkeyMu      sync.Mutex
@@ -338,9 +324,12 @@ func (t *Tray) Run() error {
 	}
 }
 
-// Stop asks the tray thread to post WM_QUIT to its own message queue so
-// Run() returns. Posting WM_QUIT directly to the hidden window would only
-// dispatch it as an ordinary window message and leave GetMessage running.
+// Stop asks the tray thread to end its message loop so Run() returns.
+// PostQuitMessage has to be called by the thread that owns the loop, so the
+// request travels as msgStop and the tray's own WndProc makes the call. A
+// WM_QUIT posted straight to the tray window ends the loop too — GetMessage
+// returns 0 for it either way — and that is what tools/testinstance and the
+// package's own test do from outside the process.
 // Safe to call from any goroutine.
 func (t *Tray) Stop() {
 	if t.hwnd == 0 {
@@ -499,18 +488,10 @@ func trayWndProc(hwnd, msgID, wParam, lParam uintptr) uintptr {
 	case trayCallbackMsg:
 		// lParam is the actual mouse event from the tray icon.
 		switch uint32(lParam) {
-		case winutil.WM_LBUTTONDOWN:
-			if t != nil && t.IsMainWindowForeground != nil {
-				t.toggleMouseDown = true
-				t.toggleMouseDownFocused = t.IsMainWindowForeground()
-			}
 		case winutil.WM_LBUTTONUP:
 			if t == nil {
 				break
 			}
-			wasMouseDown := t.toggleMouseDown
-			wasFocused := t.toggleMouseDownFocused
-			t.toggleMouseDown = false
 			// Cold start: remember the click instead of dropping it. A
 			// second click must not toggle the queued request back off —
 			// there is no window on screen for the user to be toggling.
@@ -519,8 +500,6 @@ func trayWndProc(hwnd, msgID, wParam, lParam uintptr) uintptr {
 				break
 			}
 			switch {
-			case wasMouseDown && t.OnToggleWithFocus != nil:
-				t.OnToggleWithFocus(wasFocused)
 			case t.OnToggle != nil:
 				t.OnToggle()
 			case t.OnShow != nil:
@@ -589,7 +568,7 @@ func trayWndProc(hwnd, msgID, wParam, lParam uintptr) uintptr {
 
 	case msgStop:
 		// PostQuitMessage must run on the thread whose GetMessage loop is
-		// being stopped; posting WM_QUIT to the window itself is insufficient.
+		// being stopped, which is this one.
 		procPostQuitMessage.Call(0)
 		return 0
 
