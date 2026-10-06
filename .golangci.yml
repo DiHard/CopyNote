@@ -1,6 +1,11 @@
 version: "2"
 run:
   timeout: 5m
+  # internal/clipboard's test against the real clipboard is behind this tag and
+  # no ordinary build compiles it. Analysed here, it cannot stop compiling
+  # unnoticed, and what only it uses is not reported as unused.
+  build-tags:
+    - clipboard_real
 linters:
   default: none
   enable:

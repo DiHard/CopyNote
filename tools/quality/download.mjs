@@ -1,27 +1,25 @@
+// Downloads one file and writes it only if its SHA-256 is the one expected.
+//
+// The hash comes from tools/quality/versions.json, in the repository — not
+// from a checksum list published next to the download, which whoever could
+// replace the download could replace just as easily.
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname } from "node:path";
 
-const [url, output, checksumsUrl] = process.argv.slice(2);
-if (!url || !output)
-  throw new Error("Usage: download.mjs URL OUTPUT [CHECKSUMS_URL]");
+const [url, output, expected] = process.argv.slice(2);
+if (!url || !output || !/^[0-9a-f]{64}$/.test(expected ?? ""))
+  throw new Error("Usage: download.mjs URL OUTPUT SHA256");
 
-async function fetchChecked(address) {
-  const response = await fetch(address);
-  if (!response.ok) throw new Error(`${address}: HTTP ${response.status}`);
-  return response;
-}
+const response = await fetch(url);
+if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
+const bytes = Buffer.from(await response.arrayBuffer());
 
-const bytes = Buffer.from(await (await fetchChecked(url)).arrayBuffer());
-if (checksumsUrl) {
-  const checksums = await (await fetchChecked(checksumsUrl)).text();
-  const line = checksums
-    .split(/\r?\n/)
-    .find((value) => value.trim().split(/\s+/).at(-1) === basename(output));
-  const expected = line?.trim().split(/\s+/)[0];
-  const actual = createHash("sha256").update(bytes).digest("hex");
-  if (!expected || expected !== actual)
-    throw new Error(`Checksum mismatch: ${basename(output)}`);
+const actual = createHash("sha256").update(bytes).digest("hex");
+if (actual !== expected) {
+  throw new Error(
+    `${basename(output)}: SHA-256 is ${actual}, versions.json expects ${expected}`,
+  );
 }
 await mkdir(dirname(output), { recursive: true });
 await writeFile(output, bytes);

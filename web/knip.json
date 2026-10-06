@@ -5,5 +5,5 @@
   "svelte": true,
   "vite": true,
   "ignoreExportsUsedInFile": true,
-  "ignoreDependencies": ["prettier-plugin-svelte"]
+  "ignoreDependencies": ["prettier", "prettier-plugin-svelte"]
 }

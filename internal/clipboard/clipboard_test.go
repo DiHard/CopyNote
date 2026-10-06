@@ -15,6 +15,16 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// Needed only to read the clipboard back, so they are declared here rather
+// than in clipboard_windows.go: an ordinary build has no use for them, and
+// the unused-code check once removed them from there, which left this file
+// unable to compile without anyone noticing. tools/quality/check.ps1 now
+// compiles it under its tag.
+var (
+	procGetClipboardData = moduser32.NewProc("GetClipboardData")
+	procGlobalSize       = modkernel32.NewProc("GlobalSize")
+)
+
 func TestWriteText_RoundTrip_ASCII(t *testing.T) { roundTrip(t, "hello world") }
 
 func TestWriteText_RoundTrip_Unicode(t *testing.T) { roundTrip(t, "Привет 🌍") }

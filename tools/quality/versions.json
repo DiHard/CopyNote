@@ -1,7 +1,11 @@
 {
   "golangci-lint": "2.14.0",
   "actionlint": "1.7.12",
-  "goimports": "v0.43.0",
   "govulncheck": "v1.8.0",
-  "PSScriptAnalyzer": "1.24.0"
+  "PSScriptAnalyzer": "1.24.0",
+  "sha256": {
+    "golangci-lint-2.14.0-windows-amd64.zip": "b15f903d1649283a2ab6e8d2f0c317eaf1f9f6b3763950e7e8b7e72a43dd724f",
+    "actionlint_1.7.12_windows_amd64.zip": "6e7241b51e6817ea6a047693d8e6fed13b31819c9a0dd6c5a726e1592d22f6e9",
+    "PSScriptAnalyzer.1.24.0.zip": "e86c97d44bb1bc8a1de35e753b85ea1d938f6f9f881639a181507e079bca4556"
+  }
 }

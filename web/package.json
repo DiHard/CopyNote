@@ -10,12 +10,8 @@
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "test": "node --test tests/*.test.mjs",
     "lint": "eslint . --max-warnings 0",
-    "lint:tools": "cd ../tools && eslint . --max-warnings 0",
     "lint:deps": "depcruise --config .dependency-cruiser.cjs src/lib",
-    "lint:unused": "knip",
-    "quality": "npm run lint && npm run lint:tools && npm run lint:deps && npm run lint:unused && npm run check",
-    "format": "prettier --write . ../tools/**/*.mjs",
-    "format:check": "prettier --check . ../tools/**/*.mjs"
+    "lint:unused": "knip"
   },
   "engines": {
     "node": ">=22.13.0"

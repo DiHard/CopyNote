@@ -15,15 +15,33 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: false
+          # There is no go.sum: every dependency is vendored in third_party.
+          # What the cache holds is compiled packages, which Go looks up by
+          # content, so a key that rarely changes costs nothing.
+          cache-dependency-path: go.mod
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: web/package-lock.json
+      - name: Restore pinned quality tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            .quality/bin
+            .quality/psmodules
+            .quality/installed
+          key: quality-tools-${{ runner.os }}-${{ hashFiles('tools/quality/versions.json', 'tools/quality/setup.ps1') }}
       - name: Install pinned quality tools and frontend dependencies
         run: pwsh -NoProfile -File tools/quality/setup.ps1
       - name: Check formatting, linters, dependencies, tests and build
         run: pwsh -NoProfile -File tools/quality/check.ps1 -Fuzz
       - name: Verify committed frontend is current
         run: git diff --exit-code --ignore-space-at-eol -- web/dist
+      - name: Keep the inputs that failed a fuzz test
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-failures
+          path: internal/*/testdata/fuzz/
+          if-no-files-found: ignore
