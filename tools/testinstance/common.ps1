@@ -79,16 +79,25 @@ function Complete-Checks {
 }
 
 # Whether this session can give a window the foreground and take keystrokes.
-# With the lock screen up - LogonUI is running; someone is following from
-# another device - SetForegroundWindow and keybd_event both fail. The app then
-# rightly treats its window as not the active one, and every check about
-# activation would fail, or pass for the wrong reason.
-$script:Interactive = $null -eq (Get-Process -Name LogonUI -ErrorAction SilentlyContinue)
+# With the lock screen up - someone is following from another device -
+# SetForegroundWindow and keybd_event both fail. The app then rightly treats
+# its window as not the active one, and every check about activation would
+# fail, or pass for the wrong reason.
+$script:Interactive = [CopyNoteProbe]::Interactive()
 $script:NotInteractive = 'the session is locked, so no window can become the active one'
 
 # Check, for a result that depends on which window is active.
 function CheckActive([bool]$Ok, [string]$What, [string]$Detail = '') {
     if ($Interactive) { Check $Ok $What $Detail } else { Skip $What $NotInteractive }
+}
+
+# The foreground a click into the window would give it. Windows does not count
+# DevTools input as input, so without this the window never has the activation
+# its menu takes or a click on the tray icon takes away.
+function Set-WindowForeground([IntPtr]$Hwnd) {
+    [void][CopyNoteProbe]::ForceForeground($Hwnd)
+    Start-Sleep -Milliseconds 150
+    return ([CopyNoteProbe]::Foreground() -eq $Hwnd)
 }
 
 function Assert-NotRunning {

@@ -19,7 +19,7 @@ if (-not $Interactive) {
 
 $failed = 0
 $env:COPYNOTE_TEST_SKIPPED = '0' # counted by Skip in common.ps1
-foreach ($step in 'build', 'launch', 'hotkey', 'coldstart', 'autorun', 'menu', 'slide', 'preparation') {
+foreach ($step in 'build', 'launch', 'hotkey', 'coldstart', 'autorun', 'menu', 'toggle', 'slide', 'preparation') {
     Write-Host ''
     Write-Host "######## $step"
     try {

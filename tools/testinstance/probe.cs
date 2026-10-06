@@ -37,6 +37,11 @@ public static class CopyNoteProbe
     [DllImport("user32.dll")] static extern bool AttachThreadInput(uint attach, uint attachTo, bool on);
     [DllImport("user32.dll")] static extern bool BringWindowToTop(IntPtr hwnd);
     [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")] static extern IntPtr OpenInputDesktop(uint flags, bool inherit, uint access);
+    [DllImport("user32.dll")] static extern bool CloseDesktop(IntPtr desktop);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern bool GetUserObjectInformationW(IntPtr handle, int index, StringBuilder info, int bytes, out int needed);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr CreateWindowExW(uint exStyle, string className, string title, uint style, int x, int y, int width, int height, IntPtr parent, IntPtr menu, IntPtr instance, IntPtr param);
+    [DllImport("user32.dll")] static extern bool DestroyWindow(IntPtr hwnd);
 
     static readonly IntPtr HwndMessage = new IntPtr(-3);
 
@@ -44,6 +49,25 @@ public static class CopyNoteProbe
     const int ParkedLeftOf = -5000;
 
     public static long Now() { return DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(); }
+
+    // Whether this session's input goes to its ordinary desktop. False while
+    // the lock screen or an elevation prompt has it: no window of ours can
+    // become the active one then, and typed keys go nowhere. Asked of the
+    // desktop itself rather than of the process list: LogonUI.exe also runs
+    // for another user's session sitting at its lock screen, and that says
+    // nothing about this one.
+    public static bool Interactive()
+    {
+        const uint readObjects = 0x0001;
+        const int name = 2; // UOI_NAME
+        IntPtr desktop = OpenInputDesktop(0, false, readObjects);
+        if (desktop == IntPtr.Zero) return false; // the secure desktop is not ours to open
+        var text = new StringBuilder(64);
+        int needed;
+        bool read = GetUserObjectInformationW(desktop, name, text, text.Capacity * 2, out needed);
+        CloseDesktop(desktop);
+        return read && text.ToString() == "Default";
+    }
 
     // The message-only tray window of the given class, or zero.
     public static IntPtr Tray(string className)
@@ -125,6 +149,19 @@ public static class CopyNoteProbe
     }
 
     public static IntPtr Foreground() { return GetForegroundWindow(); }
+
+    // A window of this process for the app to lose the foreground to: as far
+    // as the app can tell, another program the user went to work in. One
+    // pixel in the corner, in neither the taskbar nor Alt+Tab, so a check does
+    // not depend on - or disturb - whatever the user really has open. Created
+    // and destroyed by the thread that runs the script.
+    public static IntPtr OtherProgramWindow()
+    {
+        const uint popup = 0x80000000, visible = 0x10000000, toolWindow = 0x80;
+        return CreateWindowExW(toolWindow, "STATIC", "CopyNote test: another program", popup | visible, 0, 0, 1, 1, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+    }
+
+    public static void Destroy(IntPtr hwnd) { if (hwnd != IntPtr.Zero) DestroyWindow(hwnd); }
 
     // The visible popup menu pid shows - internal/popupmenu's window - or zero.
     public static IntPtr Menu(int pid)

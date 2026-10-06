@@ -97,7 +97,7 @@ CopyNote/
 ├── tools/genicon/      # Generates icon-dark.ico + icon-light.ico
 ├── tools/signrelease/  # ed25519 release signing; private key lives outside the repo
 ├── tools/uxharness/    # Built frontend in a browser against a fake Go bridge
-├── tools/testinstance/ # Real exe beside the daily CopyNote: launch, hotkey, cold start, autorun, context menu, slides, preparation
+├── tools/testinstance/ # Real exe beside the daily CopyNote: launch, hotkey, cold start, autorun, context menu, toggle, slides, preparation
 ├── tools/quality/      # Pinned linters and the one check script that CI runs too
 ├── assets/             # Generated .ico files
 └── bin/rsrc.exe        # Resource linker binary
@@ -260,7 +260,7 @@ What Go decides — which global shortcut Windows accepted, what the tray does w
 go build -ldflags="-H=windowsgui -s -w -X main.singletonName=Local\dev.copynote.test.singleton -X copynote/internal/tray.trayClassName=CopyNoteTestTrayWnd -X copynote/internal/tray.showMessageName=dev.copynote.test.SHOW -X copynote/internal/service.autorunValueName=CopyNoteTest" -o <scratch>/copynote-test.exe .
 ```
 
-Start it with `APPDATA` and `LOCALAPPDATA` pointing at scratch folders (data, log, WebView2 profile) and `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9223` to drive the page and the bridge over CDP. `tools/testinstance/` does all of this and checks the launch, the global hotkey, the cold start, autorun, the entry context menu, the window's slides and its preparation after a hide in the real exe — `pwsh tools/testinstance/all.ps1`; its README lists what each script covers. In a locked session nothing can be the foreground window and typed keys go nowhere, so the checks that need either are reported as skipped rather than failed; run the suite unlocked for a full answer.
+Start it with `APPDATA` and `LOCALAPPDATA` pointing at scratch folders (data, log, WebView2 profile) and `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9223` to drive the page and the bridge over CDP. `tools/testinstance/` does all of this and checks the launch, the global hotkey, the cold start, autorun, the entry context menu, what the tray icon and the hotkey do with a window already on screen, the window's slides and its preparation after a hide in the real exe — `pwsh tools/testinstance/all.ps1`; its README lists what each script covers. In a locked session nothing can be the foreground window and typed keys go nowhere, so the checks that need either are reported as skipped rather than failed; run the suite unlocked for a full answer. One run at a time: a second one started meanwhile stops at once.
 
 - **Still shared**: the global hotkey is machine-wide, so the test build gets Ctrl+Alt+N only while no other program holds it — a daily CopyNote that has the hotkey does. Turning autorun on inside the test instance writes its own `Run` value pointing at the test exe; turn it off again before quitting.
 - **Quit it by ending the tray's message loop**: post `WM_QUIT` to its tray window, `FindWindowEx(HWND_MESSAGE, 0, "<trayClassName>", NULL)`. The app itself asks the tray thread to call `PostQuitMessage` (`msgStop`), since that call has to come from the thread that owns the loop; a `WM_QUIT` posted from outside ends the same loop, and the rest of the shutdown is the ordinary one. Killing the process leaves a dead icon in the tray until the pointer passes over it, and the next launch has to wait for the old `msedgewebview2.exe` processes to release the debugging port.

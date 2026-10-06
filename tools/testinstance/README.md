@@ -30,6 +30,7 @@ instances under the same names and watch each other's windows.
 | `coldstart.ps1`   | Tray clicks and the hotkey that arrive before the page has loaded bring the window up once the UI is ready, and only then; a second launch reaches the test build, not the daily CopyNote                                                                                                                                                                                                                                                                                                            |
 | `autorun.ps1`     | Autorun writes and deletes `Run\CopyNoteTest` and never touches `Run\CopyNote`                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `menu.ps1`        | The entry context menu opens at the pointer, or under the card for the menu key; the window stays up while it is open; its keys skip the separator and disabled items; activation and focus return to the page; switching windows closes it; the hotkey with the menu open puts the window away, and hiding the window by any means takes the menu along; the tray icon's menu still works                                                                                                           |
+| `toggle.ps1`      | What the tray icon and the hotkey do with a window already on screen. Pinned and in use, it is put away by a click even though the taskbar took the foreground first; pinned while another program is in use, a click or the hotkey brings it forward and the next one puts it away; not pinned, the click that made it hide does not bring it back. A dialog opened with the mouse hands focus back to the card. Needs an unlocked session                                                          |
 | `slide.ps1`       | The window shrinks and grows with its bottom edge in the corner; it is put away when hidden mid-resize — Escape twice quickly, or right after typing — and comes back when asked for while still sliding away, or after the hotkey twice in quick succession; reopened after a search it comes back at full height; a parked window takes no keystrokes, and what did reach it is gone when it opens; Settings from the tray menu ends in the corner. Prints the window's positions while it reopens |
 | `preparation.ps1` | With the page's answer held back, a window asked for right after hiding waits off-screen for it, opens on the list with an empty search — from a search and from Settings — and keeps one height through the slide-in. With the answer never sent it opens all the same once Go stops waiting (500 ms), and goes on opening afterwards                                                                                                                                                               |
 | `trace.ps1`       | Not a check: every change of the window's position and focus after a launch, for a window that appears and vanishes. `-FreshProfile` for a first run, `-WithForegroundRights` for a launch the way Explorer does it                                                                                                                                                                                                                                                                                  |
@@ -47,7 +48,10 @@ pass and a failure would be wrong:
   window can become the active one and typed keys go nowhere, so the checks
   about activation, focus and real keystrokes are skipped. The app is right to
   treat its window as not in use then — which is also why these checks used to
-  fail in a locked session. Run the suite unlocked for a full answer.
+  fail in a locked session. Run the suite unlocked for a full answer. Whether
+  the session is locked is asked of its input desktop (`Interactive` in
+  `probe.cs`), not of the process list: `LogonUI.exe` also runs for another
+  user's session waiting at its lock screen.
 - **Another program holds Ctrl+Alt+N or Ctrl+Alt+M** — a daily CopyNote that
   has the hotkey does. `hotkey.ps1` then checks nothing: it is not its place to
   take the combination away. Quit the daily CopyNote and run it again.
@@ -85,5 +89,8 @@ and fails if it changed.
   before the page's `DOMContentLoaded`. `performance.timeOrigin` puts that
   event on the same wall clock as the post.
 
-Not covered: the tray icon's hover text. Reading it means opening the hidden
-icons panel.
+Not covered: the tray icon's hover text — reading it means opening the hidden
+icons panel — and a click made with the mouse itself. The checks post the
+message the icon sends and make the foreground change that surrounds a real
+click: to the taskbar, or to a one-pixel window of the script's own standing in
+for another program (`OtherProgramWindow`).

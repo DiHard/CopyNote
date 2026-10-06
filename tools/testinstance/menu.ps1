@@ -38,15 +38,6 @@ function Invoke-RightClick([int]$Index) {
     return $pt
 }
 
-# The foreground a click into the window would give it. Windows does not count
-# DevTools input as input, so without this the window never had activation for
-# its menu to take.
-function Set-WindowForeground([IntPtr]$Hwnd) {
-    [void][CopyNoteProbe]::ForceForeground($Hwnd)
-    Start-Sleep -Milliseconds 150
-    return ([CopyNoteProbe]::Foreground() -eq $Hwnd)
-}
-
 function Get-Order { return (Invoke-Page "window.list().then((l) => l.map((e) => e.label).join(','))") | ConvertFrom-Json }
 
 # Whether a CSS y inside the window lands on the menu's top or bottom edge:
