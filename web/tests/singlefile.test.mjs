@@ -21,24 +21,32 @@ function bundle() {
       isEntry: true,
       imports: [],
       dynamicImports: [],
-      code: 'console.log("$& </script>");',
+      code: `globalThis.__probe = ${JSON.stringify(TRICKY)};`,
     },
     "assets/main.css": { type: "asset", source: "body { color: red; }" },
   };
 }
 
+// Everything the HTML parser or String.replace could trip over: a replacement
+// pattern, a closing tag in two spellings, and a comment opener ahead of an
+// opening tag — the pair that makes the parser ignore the real </script>.
+const TRICKY = "$& </script> </SCRIPT > <!-- <script> -->";
+
 test("frontend output is one HTML with intact inline JavaScript and CSS", () => {
   const output = bundle();
   singleFile().generateBundle({}, output);
   assert.deepEqual(Object.keys(output), ["index.html"]);
-  assert.match(
-    output["index.html"].source,
-    /<style>body \{ color: red; \}<\/style>/,
-  );
-  assert.ok(
-    output["index.html"].source.includes('console.log("$& <\\/script>");'),
-  );
-  assert.doesNotMatch(output["index.html"].source, /\b(?:src|href)=/);
+  const html = output["index.html"].source;
+  assert.match(html, /<style>body \{ color: red; \}<\/style>/);
+  assert.doesNotMatch(html, /\b(?:src|href)=/);
+
+  const [, script, ...rest] = html.split(/<script type="module">|<\/script>/);
+  assert.equal(rest.length, 1, "exactly one closing tag: the real one");
+  assert.doesNotMatch(script, /<!--|<\/script/i);
+  // The escaping must not change what the code does.
+  new Function(script)();
+  assert.equal(globalThis.__probe, TRICKY);
+  delete globalThis.__probe;
 });
 
 test("unreferenced or external assets fail the portable build", () => {
