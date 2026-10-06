@@ -186,6 +186,40 @@ test("Tab from search enters the first card even when another card was last focu
   assert.equal(focus.nextTabStop(root, search, false), cardButtons[0]);
 });
 
+test("coming back from the header returns to the card that last had focus", async () => {
+  const { root, search, header, cardButtons } = fakeTabDom({ tabbableCard: 2 });
+  const focus = await load();
+  assert.equal(
+    focus.nextTabStop(root, header[0], true),
+    cardButtons[2],
+    "only the search box restarts the list from the top",
+  );
+  assert.equal(focus.nextTabStop(root, cardButtons[2], true), search);
+});
+
+// A dialog opened from a card's edit or delete button hands focus back when it
+// closes. Those buttons are only drawn under the pointer, so the focus goes to
+// the card instead of to a control nobody can see.
+test("focus handed back to a card's own button goes to the card", async () => {
+  fakeDom(0);
+  const focus = await load();
+  const copy = { name: "copy" };
+  const card = {
+    querySelector: (sel) => (sel === "[data-card-focus]" ? copy : null),
+  };
+  const inCard = (name) => ({
+    name,
+    closest: (sel) => (sel === "[data-entry-id]" ? card : null),
+  });
+  copy.closest = inCard("copy").closest;
+  const edit = inCard("edit");
+  const plus = { name: "new", closest: () => null };
+
+  assert.equal(focus.focusReturnTarget(edit), copy);
+  assert.equal(focus.focusReturnTarget(copy), copy);
+  assert.equal(focus.focusReturnTarget(plus), plus, "anything else keeps it");
+});
+
 test("the rest follows in document order and the order wraps", async () => {
   const { root, search, header, bannerButtons, cardButtons } = fakeTabDom({
     banner: true,

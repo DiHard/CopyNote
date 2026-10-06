@@ -88,14 +88,26 @@
     stopAutoScroll();
   }
 
+  /**
+   * Gives up on a press or a drag that can no longer end where it began: the
+   * native window started to move, the page lost focus, or the button was
+   * released somewhere the page did not see. The click such a gesture may
+   * still produce must not copy the card it lands on.
+   *
+   * That click is not certain to come — the button may go up over another
+   * window, a finger may just be lifted. So the suppression is good for this
+   * gesture only: the next press clears it (onPointerDownCapture). Left
+   * armed, it swallowed the first click after the window was opened again.
+   */
+  function abortGesture(): void {
+    if (pendingDrag || draggingId) suppressNextClick = true;
+    cancelDrag();
+  }
+
   function onWindowPointerMove(e: PointerEvent): void {
-    if (interactionDisabled) {
-      // A pointerdown may have happened just before the native slide started.
-      // Do not let a later move turn that stale press into a drag.
-      if (pendingDrag || draggingId) suppressNextClick = true;
-      cancelDrag();
-      return;
-    }
+    // The effect below gave up on any gesture when the slide started, and
+    // the shield in App.svelte keeps a new one from starting.
+    if (interactionDisabled) return;
     if (pendingDrag && !draggingId) {
       if ((e.buttons & 1) === 0) {
         pendingDrag = null;
@@ -110,8 +122,7 @@
     }
     if (draggingId) {
       if ((e.buttons & 1) === 0) {
-        suppressNextClick = true;
-        cancelDrag();
+        abortGesture();
         return;
       }
       e.preventDefault();
@@ -121,11 +132,7 @@
   }
 
   function onWindowPointerUp(): void {
-    if (interactionDisabled) {
-      if (pendingDrag || draggingId) suppressNextClick = true;
-      cancelDrag();
-      return;
-    }
+    if (interactionDisabled) return;
     if (draggingId && dragOrder) {
       const same =
         dragOrder.length === filtered.length &&
@@ -148,8 +155,7 @@
   function onWindowBlur(): void {
     // The native window can slide away before WebView2 receives pointerup.
     // A blur means the in-progress gesture is no longer safe to complete.
-    if (pendingDrag || draggingId) suppressNextClick = true;
-    cancelDrag();
+    abortGesture();
   }
 
   function onWindowKeyDown(e: KeyboardEvent): void {
@@ -226,8 +232,15 @@
     }
   }
 
+  /** A new press is a new gesture: the click the last one owed never came. */
+  function onPointerDownCapture(): void {
+    suppressNextClick = false;
+  }
+
   function onKeyboardMove(id: string, dir: -1 | 1): void {
-    if (!canDrag) return;
+    // Not while the native window slides: the card would move under a list
+    // that is itself moving.
+    if (!canDrag || interactionDisabled) return;
     const arr = appState.entries;
     const idx = arr.findIndex((e) => e.id === id);
     if (idx < 0) return;
@@ -252,19 +265,18 @@
   // we beat the inner button's click handler.
   onMount(() => {
     window.addEventListener("click", onClickCapture, true);
+    window.addEventListener("pointerdown", onPointerDownCapture, true);
   });
   onDestroy(() => {
     window.removeEventListener("click", onClickCapture, true);
+    window.removeEventListener("pointerdown", onPointerDownCapture, true);
     stopAutoScroll();
   });
 
-  // Cancel a gesture immediately when the native window starts moving. The
+  // Give up on a gesture the moment the native window starts moving. The
   // transparent shield in App.svelte also prevents a new pointerdown.
   $effect(() => {
-    if (interactionDisabled) {
-      if (pendingDrag || draggingId) suppressNextClick = true;
-      cancelDrag();
-    }
+    if (interactionDisabled) abortGesture();
   });
 
   // While dragging, pin the cursor and disable text selection globally.
@@ -360,7 +372,7 @@
           {entry}
           isDragging={entry.id === draggingId}
           dragInProgress={draggingId !== null}
-          dragDisabled={!canDrag || interactionDisabled}
+          dragDisabled={!canDrag}
           tabbable={entry.id === tabbableId}
           canMoveUp={canDrag && i > 0}
           canMoveDown={canDrag && i < renderList.length - 1}

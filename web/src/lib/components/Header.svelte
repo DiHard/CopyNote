@@ -35,6 +35,17 @@
       if (await copyTopMatch()) await hideWindow();
     }
   }
+
+  /**
+   * The gear's name, for the tooltip and for a screen reader alike. The dot
+   * that marks a waiting update is a picture; an aria-label on the button
+   * replaces whatever its children say, so the news has to be in the name.
+   */
+  function settingsLabel(): string {
+    return hasUnseenUpdate()
+      ? `${t("header.settings")} — ${t("header.updateAvailable")}`
+      : t("header.settings");
+  }
 </script>
 
 <header
@@ -83,9 +94,7 @@
       data-tooltip={state.settings.disableAutoHide
         ? t("header.unpin")
         : t("header.pin")}
-      aria-label={state.settings.disableAutoHide
-        ? t("header.unpin")
-        : t("header.pin")}
+      aria-label={t("header.pin")}
       aria-pressed={state.settings.disableAutoHide}
       class="rounded p-1.5 transition disabled:cursor-wait disabled:opacity-60 {state
         .settings.disableAutoHide
@@ -135,8 +144,8 @@
     <button
       type="button"
       onclick={openSettings}
-      data-tooltip={t("header.settings")}
-      aria-label={t("header.settings")}
+      data-tooltip={settingsLabel()}
+      aria-label={settingsLabel()}
       class="relative rounded p-1.5 text-on-surface-dim transition hover:bg-surface-hover hover:text-on-surface"
     >
       <svg
@@ -158,7 +167,7 @@
       {#if hasUnseenUpdate()}
         <span
           class="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-update-dot"
-          aria-label={t("header.updateAvailable")}
+          aria-hidden="true"
         ></span>
       {/if}
     </button>

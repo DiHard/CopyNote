@@ -1,3 +1,5 @@
+import { focusReturnTarget } from "./focus";
+
 /** Keep keyboard focus inside a modal and restore the triggering control. */
 export function modalFocus(node: HTMLElement) {
   const previous = document.activeElement as HTMLElement | null;
@@ -51,7 +53,7 @@ export function modalFocus(node: HTMLElement) {
       node.removeEventListener("keydown", onKeydown);
       document.removeEventListener("focusin", onFocus);
       if (background) background.inert = wasInert;
-      if (previous?.isConnected) previous.focus();
+      if (previous?.isConnected) focusReturnTarget(previous).focus();
     },
   };
 }

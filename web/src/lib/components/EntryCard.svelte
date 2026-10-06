@@ -168,6 +168,7 @@
     onclick={onCopy}
     onkeydown={onKeyDown}
     data-tooltip={dragDisabled ? t("card.copy") : t("card.copyOrDrag")}
+    data-tooltip-mode="hover"
     aria-describedby={copyHintId()}
     class="flex min-w-0 flex-1 items-start px-3 py-2.5 text-left {dragInProgress
       ? 'cursor-grabbing'
@@ -187,9 +188,12 @@
     {dragDisabled ? t("card.copy") : t("card.copyOrDrag")}
   </span>
 
+  <!-- Shown under the pointer only: a card that merely has the keyboard focus
+       stays clean. focus-within is the safety net for focus that does end up
+       on one of these buttons — a control with the focus must be visible. -->
   <div
     data-no-drag
-    class="flex shrink-0 items-center gap-1 px-1.5 opacity-0 transition-opacity {isDragging
+    class="flex shrink-0 items-center gap-1 px-1.5 opacity-0 transition-opacity focus-within:opacity-100 {isDragging
       ? ''
       : 'group-hover:opacity-100'}"
   >
@@ -253,7 +257,7 @@
        they stay clickable during the badge. `right` is not transitioned: the
        badge should not slide away when the pointer leaves the card. -->
   <div
-    class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 transition-[opacity,translate] duration-200 group-focus-within:right-18 group-hover:right-18 {copyState ===
+    class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 transition-[opacity,translate] duration-200 group-hover:right-18 {copyState ===
     'idle'
       ? 'translate-x-1 opacity-0'
       : 'opacity-100'}"

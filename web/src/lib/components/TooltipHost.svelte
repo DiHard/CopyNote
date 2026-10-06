@@ -1,7 +1,28 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from "svelte";
 
+  /**
+   * One bubble for every element that carries `data-tooltip`.
+   *
+   * It appears when the pointer rests on such an element, and when the
+   * element takes keyboard focus — `:focus-visible`, not any focus: focus put
+   * back by script after a click (a closed dialog returning to its button)
+   * would otherwise pop a hint next to something the user is not looking at.
+   * `data-tooltip-mode="hover"` opts an element out of the focus part and
+   * gives it a longer delay; it is for large targets like an entry card, where
+   * the hint is about the mouse and would sit on top of the next card while
+   * the user walks the list with the arrow keys.
+   *
+   * It goes away as soon as the user acts — a press, a key — and when the
+   * window is put away (`suspended`).
+   */
+  let { suspended = false }: { suspended?: boolean } = $props();
+
   type TooltipPlacement = "top" | "bottom";
+
+  const SHOW_DELAY_MS = 260;
+  /** About what Windows waits before a native tooltip. */
+  const HOVER_ONLY_DELAY_MS = 700;
 
   let host: HTMLDivElement | null = null;
   let bubble = $state<HTMLDivElement | null>(null);
@@ -23,6 +44,10 @@
     return trigger?.dataset.tooltip ? trigger : null;
   }
 
+  function hoverOnly(trigger: HTMLElement): boolean {
+    return trigger.dataset.tooltipMode === "hover";
+  }
+
   function clearShowTimer(): void {
     if (showTimer !== null) {
       window.clearTimeout(showTimer);
@@ -40,15 +65,16 @@
 
   function scheduleShow(trigger: HTMLElement): void {
     clearShowTimer();
-    if (active?.anchor === trigger) return;
+    if (suspended || active?.anchor === trigger) return;
 
+    const delay = hoverOnly(trigger) ? HOVER_ONLY_DELAY_MS : SHOW_DELAY_MS;
     showTimer = window.setTimeout(() => {
       showTimer = null;
       const text = trigger.dataset.tooltip?.trim();
-      if (!text || !trigger.isConnected) return;
+      if (suspended || !text || !trigger.isConnected) return;
       ready = false;
       active = { anchor: trigger, text };
-    }, 260);
+    }, delay);
   }
 
   function viewportSize(): { width: number; height: number } {
@@ -147,7 +173,12 @@
 
   function onFocusIn(event: FocusEvent): void {
     const trigger = triggerFrom(event.target);
-    if (trigger) scheduleShow(trigger);
+    if (!trigger || hoverOnly(trigger)) return;
+    // :focus-visible is the browser's own answer to "did the keyboard put
+    // the focus here". It is on the element that took focus, which may be
+    // inside the trigger.
+    if (!(event.target as Element).matches(":focus-visible")) return;
+    scheduleShow(trigger);
   }
 
   function onFocusOut(event: FocusEvent): void {
@@ -155,6 +186,38 @@
     const next = triggerFrom(event.relatedTarget);
     if (trigger && trigger !== next) hide(trigger);
   }
+
+  /** The hint has done its job once the user acts on what it describes. */
+  function onUserAction(): void {
+    hide();
+  }
+
+  // The bubble shows what its element said when it appeared, and the pointer
+  // can stay put while the element changes: the pin swaps "Pin" for "Unpin"
+  // on a click, a filter removes a card, Escape leaves Settings. None of
+  // that fires pointerout, so the bubble watches for it while it is up.
+  $effect(() => {
+    const current = active;
+    if (!current) return;
+    const observer = new MutationObserver(() => {
+      if (active !== current) return;
+      const { anchor } = current;
+      const text = anchor.dataset.tooltip?.trim();
+      if (!anchor.isConnected || !text || anchor.matches(":disabled")) {
+        hide(anchor);
+      } else if (text !== current.text) {
+        ready = false;
+        active = { anchor, text };
+      }
+    });
+    observer.observe(document.body, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["data-tooltip", "disabled"],
+    });
+    return () => observer.disconnect();
+  });
 
   $effect(() => {
     const current = active;
@@ -168,6 +231,12 @@
     });
   });
 
+  // A window being put away takes its hints with it: the pointer does not
+  // leave anything when the window slides out from under it.
+  $effect(() => {
+    if (suspended) hide();
+  });
+
   onMount(() => {
     // The host lives outside the scroll container, so the bubble can never
     // be clipped by the list's overflow.
@@ -176,6 +245,8 @@
     window.addEventListener("pointerout", onPointerOut);
     window.addEventListener("focusin", onFocusIn);
     window.addEventListener("focusout", onFocusOut);
+    window.addEventListener("pointerdown", onUserAction, true);
+    window.addEventListener("keydown", onUserAction, true);
     window.addEventListener("resize", refreshPosition);
     window.addEventListener("scroll", refreshPosition, true);
   });
@@ -187,6 +258,8 @@
     window.removeEventListener("pointerout", onPointerOut);
     window.removeEventListener("focusin", onFocusIn);
     window.removeEventListener("focusout", onFocusOut);
+    window.removeEventListener("pointerdown", onUserAction, true);
+    window.removeEventListener("keydown", onUserAction, true);
     window.removeEventListener("resize", refreshPosition);
     window.removeEventListener("scroll", refreshPosition, true);
     // The portal host was created by this component, outside Svelte's DOM tree.

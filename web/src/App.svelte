@@ -450,4 +450,4 @@
   ></div>
 {/if}
 
-<TooltipHost />
+<TooltipHost suspended={!windowVisible || windowTransitioning} />

@@ -32,6 +32,21 @@ export function focusLastCard(): void {
 }
 
 /**
+ * Where focus belongs when it is handed back to `el`: `el` itself — or, for
+ * anything inside an entry card, the card's copy button. A card's edit and
+ * delete buttons are out of the Tab order and only drawn under the pointer,
+ * so focus left on one is focus nobody can see, on a control the arrow keys,
+ * F2 and Delete do not work from.
+ */
+export function focusReturnTarget(el: HTMLElement): HTMLElement {
+  return (
+    el
+      .closest("[data-entry-id]")
+      ?.querySelector<HTMLElement>("[data-card-focus]") ?? el
+  );
+}
+
+/**
  * Moves focus `delta` cards from the one that has it. Stepping off the top
  * returns to the search box, which is where the user came from; stepping off
  * the bottom stays put rather than wrapping, so a held-down key cannot
