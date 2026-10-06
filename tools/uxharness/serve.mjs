@@ -24,9 +24,7 @@ const port = Number(process.argv[2] ?? process.env.PORT ?? 18099);
 function inject(html, stub) {
   const at = html.indexOf("<head>");
   if (at < 0)
-    throw new Error(
-      "no <head> in the bundle — did vite-plugin-singlefile change?",
-    );
+    throw new Error("no <head> in the bundle — did web/singlefile.ts change?");
   const cut = at + "<head>".length;
   return (
     html.slice(0, cut) +

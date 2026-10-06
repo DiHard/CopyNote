@@ -33,19 +33,26 @@ script — boots the genuine UI against fake data.
 
 Appended to the URL:
 
-| Flag           | State                                                                                     |
-| -------------- | ----------------------------------------------------------------------------------------- |
-| _(none)_       | eight sample entries, exe in a program folder                                             |
-| `?empty`       | no entries — the onboarding empty screen                                                  |
-| `?many`        | 30 entries — list scrolling and the window-height clamp                                   |
-| `?downloads`   | Reserved for the relocate banner; relocation is temporarily disabled in the current build |
-| `?update`      | a signed release is available — the in-app update flow                                    |
-| `?hotkeytaken` | Windows refuses every global shortcut — the Settings error path                           |
-| `?copybusy`    | another program holds the clipboard — the copy error line                                 |
+| Flag           | State                                                                                                   |
+| -------------- | ------------------------------------------------------------------------------------------------------- |
+| _(none)_       | eight sample entries; no relocation bindings, as in the current build                                   |
+| `?empty`       | no entries — the onboarding empty screen                                                                |
+| `?many`        | 30 entries — list scrolling and the window-height clamp                                                 |
+| `?downloads`   | exe in `Downloads`: the relocate banner and the card in Settings, although Go has the move switched off |
+| `?update`      | a signed release is available — the in-app update flow                                                  |
+| `?hotkeytaken` | Windows refuses every global shortcut — the Settings error path                                         |
+| `?copybusy`    | another program holds the clipboard — the copy error line                                               |
 
-The `?downloads` data is still present in the stub for future re-enablement,
-but the current frontend does not request the install location and therefore
-does not render the relocation banner.
+Moving the executable is switched off in Go (`relocationEnabled`), and the page
+follows from the bridge alone: without a `getInstallLocation` binding it offers
+nothing. The stub therefore defines the relocation bindings only with
+`?downloads`, which is how that UI is looked at while the feature is off.
+
+The stub also plays Go's part in the window's show/hide cycle: `hide()` is
+followed by `__onWindowTransition` and `__onHide`, the page's `windowPrepared`
+answers are recorded in `__harness.calls.prepared`, and `__harness.show(view)`
+brings the window back the way Go does (`"main"`, `"settings"`, or nothing for
+a window that was on screen already).
 
 `window.__harness.calls` records what the UI asked the bridge to do
 (`resizeWindow` heights, `hide` count, copied ids, topmost/auto-hide values,

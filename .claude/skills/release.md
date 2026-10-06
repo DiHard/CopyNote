@@ -30,8 +30,7 @@ Run these in parallel where possible. Stop and ask the user if any check fails �
 - `git fetch && git status` — must be in sync with `origin/main` (no commits ahead or behind that the user didn't intend).
 - `git tag -l vX.Y.Z` — must be empty (no local tag yet).
 - `gh release view vX.Y.Z` — must error with "release not found" (no published release yet). If a tag/release already exists for this version, halt and ask whether to bump again.
-- `go test ./...` — must pass.
-  - Known: `TestCopy_EmptyValueIsAllowed` is broken on `main` independent of this skill. If it's the only failure, surface it and ask whether to proceed.
+- `go test ./...` — must pass. No failure is expected or known: any one halts the release.
 - `gh auth status` — must be authenticated.
 - Signing key present: `Test-Path "$env:USERPROFILE\.copynote-release\signing.key"` is `True` (or `COPYNOTE_SIGNING_KEY` is set). Without it the binary cannot be signed and the in-app updater will only offer a manual download for this version.
 

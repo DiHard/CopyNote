@@ -25,7 +25,7 @@ import (
 	"copynote/internal/winutil"
 )
 
-// Single-file frontend produced by Vite + vite-plugin-singlefile.
+// Single-file frontend produced by Vite and web/singlefile.ts.
 // Served over loopback HTTP — NavigateToString gives an about:blank
 // origin that breaks ES modules, so we use http://127.0.0.1:PORT/
 // instead. Only one request is made (HTML+CSS+JS are all inlined).
