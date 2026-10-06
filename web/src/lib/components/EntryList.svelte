@@ -9,13 +9,13 @@
     openCreateFromSearch,
     reorderEntries,
     dismissFirstCopyHint,
-    // shouldShowRelocateBanner, // temporarily disabled with the relocate UI
+    shouldShowRelocateBanner,
   } from "../state.svelte";
   import { t } from "../i18n";
   import { SEARCH_ID } from "../focus";
   import type { Entry } from "../types";
   import EntryCard from "./EntryCard.svelte";
-  // import RelocateBanner from "./RelocateBanner.svelte"; // temporarily disabled
+  import RelocateBanner from "./RelocateBanner.svelte";
 
   let { interactionDisabled = false }: { interactionDisabled?: boolean } =
     $props();
@@ -293,9 +293,14 @@
      wrapper so App can measure the content's true height. -->
 <div bind:this={listEl} data-scroller class="min-h-0 flex-1 overflow-y-auto">
   <div data-scroll-content class="px-3 py-3">
-    <!-- The relocate banner is temporarily disabled while investigating
-         antivirus detections related to copying the executable. The component
-         remains in the source for a later, one-line restoration. -->
+    <!-- Inside the scroller on purpose: only the search box is worth pinning.
+         The banner is 130 px, which is a third of a laptop-sized window, and
+         nailing it to the top would nag harder than the snooze buttons
+         suggest it should. Never shown while moving the executable is
+         switched off in Go: there is then no install location to warn about. -->
+    {#if shouldShowRelocateBanner()}
+      <RelocateBanner />
+    {/if}
     {#if appState.loading}
       <div
         class="flex min-h-[7rem] items-center justify-center text-sm text-on-surface-dim"

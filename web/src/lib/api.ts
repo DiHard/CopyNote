@@ -46,16 +46,19 @@ declare global {
     applyAutoHide: (enabled: boolean) => Promise<void>;
     /** Registers the global shortcut; rejects when Windows refuses it. */
     applyHotkey: (spec: string) => Promise<void>;
+    // Moving the executable into a program folder. Go registers these five
+    // only while the feature is switched on (relocationEnabled in
+    // relocate_windows.go), hence optional.
     /** Where the running executable lives and whether that is permanent. */
-    getInstallLocation: () => Promise<InstallLocation>;
+    getInstallLocation?: () => Promise<InstallLocation>;
     /** Shell folder browser; resolves to "" when the user cancels. */
-    pickInstallFolder: (title: string) => Promise<string>;
+    pickInstallFolder?: (title: string) => Promise<string>;
     /** Copies the exe into targetDir ("" = default) and restarts from there. */
-    relocateApp: (targetDir: string) => Promise<string>;
-    dismissRelocatePrompt: () => Promise<void>;
+    relocateApp?: (targetDir: string) => Promise<string>;
+    dismissRelocatePrompt?: () => Promise<void>;
     /** Hides the move banner for a while; resolves to the RFC3339 instant
      *  Go stored, so the duration lives in one place only. */
-    snoozeRelocatePrompt: () => Promise<string>;
+    snoozeRelocatePrompt?: () => Promise<string>;
     /** Opens the native context menu for an entry and resolves once it is
      *  open; the choice arrives through __entryMenuClosed. */
     showEntryMenu: (request: EntryMenuRequest) => Promise<void>;
@@ -93,13 +96,26 @@ export const api = {
   installUpdate: (): Promise<{ version: string }> => window.installUpdate(),
   updateProgress: (): Promise<UpdateProgress> => window.updateProgress(),
   restartApp: (): Promise<void> => window.restartApp(),
-  getInstallLocation: (): Promise<InstallLocation> =>
-    window.getInstallLocation(),
+  /** Resolves to null while moving the executable is switched off in Go. */
+  getInstallLocation: async (): Promise<InstallLocation | null> =>
+    (await window.getInstallLocation?.()) ?? null,
   pickInstallFolder: (title: string): Promise<string> =>
-    window.pickInstallFolder(title),
+    window.pickInstallFolder?.(title) ?? relocationOff(),
   relocateApp: (targetDir: string): Promise<string> =>
-    window.relocateApp(targetDir),
-  dismissRelocatePrompt: (): Promise<void> => window.dismissRelocatePrompt(),
-  snoozeRelocatePrompt: (): Promise<string> => window.snoozeRelocatePrompt(),
+    window.relocateApp?.(targetDir) ?? relocationOff(),
+  dismissRelocatePrompt: (): Promise<void> =>
+    window.dismissRelocatePrompt?.() ?? relocationOff(),
+  snoozeRelocatePrompt: (): Promise<string> =>
+    window.snoozeRelocatePrompt?.() ?? relocationOff(),
   applyHotkey: (spec: string): Promise<void> => window.applyHotkey(spec),
 };
+
+/**
+ * These four are only reachable from the banner and the Settings card, and
+ * those are only drawn for an install location — so with the feature off none
+ * of this runs. If it ever does, the caller gets a rejection it already
+ * handles rather than "undefined is not a function".
+ */
+function relocationOff(): Promise<never> {
+  return Promise.reject(new Error("moving the program is switched off"));
+}

@@ -14,6 +14,18 @@ import (
 	"copynote/internal/winutil"
 )
 
+// relocationEnabled is the one switch for moving the executable into a
+// program folder. Off while antivirus detections of the copied executable
+// are being looked into.
+//
+// With it off the bindings below are not registered and the leftover of an
+// earlier move is not cleaned up. The page needs no switch of its own: with
+// no getInstallLocation binding it learns no install location, and the
+// banner and the Settings card are only drawn for one. The compiler drops
+// everything behind the constant, so none of the copying code ends up in
+// the executable.
+const relocationEnabled = false
+
 // relaunchTarget is the executable main should start on the way out. A
 // self-update replaces the file in place and leaves this empty; a move
 // puts the new copy's path here, because the running file is about to
@@ -22,7 +34,7 @@ var relaunchTarget atomic.Pointer[string]
 
 // installLocation is the JSON shape the page reads to decide whether to
 // offer the move.
-type installLocation struct { //nolint:unused // Retained for the temporarily disabled relocation bindings.
+type installLocation struct {
 	// Path is the running executable, Dir the folder holding it.
 	Path string `json:"path"`
 	Dir  string `json:"dir"`
@@ -36,7 +48,7 @@ type installLocation struct { //nolint:unused // Retained for the temporarily di
 	CanRelocate bool `json:"canRelocate"`
 }
 
-func bindRelocate(w webview2.WebView, svc *service.Service, hwnd uintptr, exePath, dataDir string) { //nolint:unused // Relocation stays disabled until a separate feature change.
+func bindRelocate(w webview2.WebView, svc *service.Service, hwnd uintptr, exePath, dataDir string) {
 	mustBind(w, "getInstallLocation", func() installLocation {
 		loc := installLocation{
 			Path:        exePath,

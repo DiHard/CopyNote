@@ -1,5 +1,5 @@
 <script lang="ts">
-  // import Spinner from "./Spinner.svelte"; // Restore with the temporarily disabled relocation UI.
+  import Spinner from "./Spinner.svelte";
   import { onMount } from "svelte";
   import {
     state as appState,
@@ -10,14 +10,14 @@
     forceCheckUpdateInfo,
     installUpdate,
     isUpdateInstalling,
-    // canOfferRelocate, // temporarily disabled with the relocate UI
+    canOfferRelocate,
     applyHotkey,
     hotkeyLabel,
     DEFAULT_HOTKEY,
     HOTKEY_OFF,
-    // relocateApp, // temporarily disabled with the relocate UI
-    // relocateAppTo, // temporarily disabled with the relocate UI
-    // installFolderName, // temporarily disabled with the relocate UI
+    relocateApp,
+    relocateAppTo,
+    installFolderName,
   } from "../state.svelte";
   import { t, availableLocales } from "../i18n";
   import type { UserSettings } from "../types";
@@ -242,12 +242,10 @@
 
   let folderError = $state<string | null>(null);
 
-  // Temporarily disabled with the relocate UI while investigating antivirus
-  // detections related to copying the executable.
-  // const relocating = $derived(appState.relocate.kind === "moving");
-  // const relocateError = $derived(
-  //   appState.relocate.kind === "failed" ? appState.relocate.error : null,
-  // );
+  const relocating = $derived(appState.relocate.kind === "moving");
+  const relocateError = $derived(
+    appState.relocate.kind === "failed" ? appState.relocate.error : null,
+  );
 
   async function onOpenAppFolder() {
     folderError = null;
@@ -324,48 +322,54 @@
             class="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-input-border bg-input text-accent"
           />
         </label>
-        <!-- Temporarily disabled while investigating antivirus detections
-           related to copying the executable. Keep this UI in the source so
-           the feature can be restored without redesigning the settings page.
-      {#if canOfferRelocate()}
-        <div class="mt-1.5 rounded-lg border border-outline bg-card px-2.5 py-2">
-          <div class="flex items-start justify-between gap-3">
-            <span class="min-w-0">
-              <span class="block text-sm" data-tooltip={appState.installLocation?.dir ?? ""}
-                >{t("relocate.title", { folder: installFolderName() })}</span
+        <!-- Drawn only for an install location outside a program folder, and
+             there is none at all while moving the executable is switched off
+             in Go (relocationEnabled in relocate_windows.go). -->
+        {#if canOfferRelocate()}
+          <div
+            class="mt-1.5 rounded-lg border border-outline bg-card px-2.5 py-2"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <span class="min-w-0">
+                <span
+                  class="block text-sm"
+                  data-tooltip={appState.installLocation?.dir ?? ""}
+                  >{t("relocate.title", { folder: installFolderName() })}</span
+                >
+                <span
+                  class="mt-0.5 block text-[11px] leading-snug text-on-surface-dim"
+                  >{relocating
+                    ? t("relocate.willRestart")
+                    : t("relocate.body")}</span
+                >
+              </span>
+              <button
+                type="button"
+                onclick={() => void relocateApp()}
+                disabled={relocating || dataBusy || isUpdateInstalling()}
+                class="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-accent-text transition hover:bg-accent-hover disabled:opacity-60"
               >
-              <span class="mt-0.5 block text-[11px] leading-snug text-on-surface-dim"
-                >{relocating ? t("relocate.willRestart") : t("relocate.body")}</span
+                {#if relocating}<Spinner />{/if}
+                {relocating ? t("relocate.moving") : t("relocate.move")}
+              </button>
+            </div>
+            <div class="mt-1 flex items-baseline gap-3">
+              <button
+                type="button"
+                onclick={() => void relocateAppTo(t("relocate.pickTitle"))}
+                disabled={relocating}
+                class="text-[11px] text-accent transition hover:underline disabled:opacity-60"
               >
-            </span>
-            <button
-              type="button"
-              onclick={() => void relocateApp()}
-              disabled={relocating || dataBusy || isUpdateInstalling()}
-              class="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-accent-text transition hover:bg-accent-hover disabled:opacity-60"
-            >
-              {#if relocating}<Spinner />{/if}
-              {relocating ? t("relocate.moving") : t("relocate.move")}
-            </button>
+                {t("relocate.choose")}
+              </button>
+            </div>
+            {#if relocateError}
+              <p role="alert" class="mt-1 text-[11px] leading-snug text-danger">
+                {t("relocate.failed", { error: relocateError })}
+              </p>
+            {/if}
           </div>
-          <div class="mt-1 flex items-baseline gap-3">
-            <button
-              type="button"
-              onclick={() => void relocateAppTo(t("relocate.pickTitle"))}
-              disabled={relocating}
-              class="text-[11px] text-accent transition hover:underline disabled:opacity-60"
-            >
-              {t("relocate.choose")}
-            </button>
-          </div>
-          {#if relocateError}
-            <p role="alert" class="mt-1 text-[11px] leading-snug text-danger">
-              {t("relocate.failed", { error: relocateError })}
-            </p>
-          {/if}
-        </div>
-      {/if}
-      -->
+        {/if}
         <label
           class="mt-1.5 flex cursor-pointer items-start justify-between gap-3 rounded-lg border border-outline bg-card px-2.5 py-2"
         >

@@ -767,6 +767,19 @@ test("hiding the window clears last session's search and view", async () => {
   assert.equal(app.state.copyError, null, "last session's failure is not news");
 });
 
+test("the move is offered nowhere while Go has it switched off", async () => {
+  // No getInstallLocation binding: that is all "switched off" means here.
+  const app = await setup({ list: async () => twoEntries });
+  await app.refresh();
+  await app.loadInstallLocation();
+  assert.equal(app.state.installLocation, null);
+  assert.equal(app.canOfferRelocate(), false);
+  assert.equal(app.shouldShowRelocateBanner(), false);
+  await app.relocateApp();
+  assert.equal(app.state.relocate.kind, "failed");
+  assert.match(app.state.relocate.error, /switched off/);
+});
+
 test("the first entry teaches copying before it warns about Downloads", async () => {
   const app = await setup({
     getInstallLocation: async () => location(),

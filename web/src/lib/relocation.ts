@@ -3,6 +3,12 @@ import { state } from "./appState.svelte";
 
 // ── Install location ───────────────────────────────────
 
+/**
+ * Everything that offers the move — the banner, the Settings card — is drawn
+ * for an install location and for nothing else. While the feature is switched
+ * off in Go (relocationEnabled) there is none to load, and this is the only
+ * thing the page needs to know about that.
+ */
 export async function loadInstallLocation(): Promise<void> {
   try {
     state.installLocation = await api.getInstallLocation();

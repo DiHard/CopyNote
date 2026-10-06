@@ -197,32 +197,32 @@
   window.restartApp = () => reply();
 
   // ── Install location ─────────────────────────────────────────────
-  // Default is a program folder, so the relocate banner stays out of the
-  // way; ?downloads puts the exe somewhere temporary to bring it back.
-  const inDownloads = flags.has("downloads");
-  window.getInstallLocation = () =>
-    reply({
-      path: inDownloads
-        ? String.raw`C:\Users\Test\Downloads\copynote.exe`
-        : String.raw`C:\Users\Test\AppData\Local\Programs\CopyNote\copynote.exe`,
-      dir: inDownloads
-        ? String.raw`C:\Users\Test\Downloads`
-        : String.raw`C:\Users\Test\AppData\Local\Programs\CopyNote`,
-      permanent: !inDownloads,
-      defaultDir: String.raw`C:\Users\Test\AppData\Local\Programs\CopyNote`,
-      canRelocate: true,
-    });
-  window.pickInstallFolder = () => reply("");
-  window.relocateApp = (dir) => reply(dir);
-  window.dismissRelocatePrompt = () => {
-    settings = { ...settings, relocatePromptDismissed: true };
-    return reply();
-  };
-  window.snoozeRelocatePrompt = () => {
-    const until = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
-    settings = { ...settings, relocateRemindAfter: until };
-    return reply(until);
-  };
+  // Moving the executable is switched off in Go (relocationEnabled in
+  // relocate_windows.go), and then these five bindings do not exist — which
+  // is how the page knows to offer nothing. ?downloads registers them, with
+  // the exe in a temporary folder, to look at the banner and the Settings
+  // card the way they will be once the feature is back.
+  if (flags.has("downloads")) {
+    window.getInstallLocation = () =>
+      reply({
+        path: String.raw`C:\Users\Test\Downloads\copynote.exe`,
+        dir: String.raw`C:\Users\Test\Downloads`,
+        permanent: false,
+        defaultDir: String.raw`C:\Users\Test\AppData\Local\Programs\CopyNote`,
+        canRelocate: true,
+      });
+    window.pickInstallFolder = () => reply("");
+    window.relocateApp = (dir) => reply(dir);
+    window.dismissRelocatePrompt = () => {
+      settings = { ...settings, relocatePromptDismissed: true };
+      return reply();
+    };
+    window.snoozeRelocatePrompt = () => {
+      const until = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString();
+      settings = { ...settings, relocateRemindAfter: until };
+      return reply(until);
+    };
+  }
 
   // ── Entry context menu ───────────────────────────────────────────
   // Go draws this menu as a window of its own, so nothing opens here: the

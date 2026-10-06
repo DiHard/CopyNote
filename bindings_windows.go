@@ -66,10 +66,11 @@ func bindApplication(w webview2.WebView, hwnd uintptr, svc *service.Service, exe
 	updates := bridge.NewAsync(w)
 	bindUpdates(w, updates, svc, exePath)
 
-	// Temporarily disabled while investigating antivirus detections of copied
-	// executables. The implementation remains in relocate_windows.go and can
-	// be restored by uncommenting this binding when the investigation is done.
-	// bindRelocate(w, svc, hwnd, exePath, dataDir)
+	// Moving the executable out of a download folder; see relocate_windows.go,
+	// which also holds the switch.
+	if relocationEnabled {
+		bindRelocate(w, svc, hwnd, exePath, dataDir)
+	}
 
 	// The entry list's context menu; see entrymenu_windows.go.
 	bindEntryMenu(w, hwnd)

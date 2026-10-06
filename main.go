@@ -17,7 +17,7 @@ import (
 
 	"github.com/jchv/go-webview2"
 
-	// "copynote/internal/relocate" // temporarily disabled; see cleanup below
+	"copynote/internal/relocate"
 	"copynote/internal/service"
 	"copynote/internal/singleton"
 	"copynote/internal/tray"
@@ -325,28 +325,32 @@ func main() {
 	updates := bindApplication(w, hwnd, svc, exePath, filepath.Dir(dataFile), trayCtrl)
 	defer updates.Close()
 
-	if err := w.Bind("notifyReady", func() {
-		trayCtrl.SetReady()
-		if exePath != "" {
-			// The version replaced by a self-update may still be exiting and
-			// holding its file, so removal is retried for a while.
+	// Once per run: the page calls notifyReady again if it is ever reloaded.
+	cleanUpLeftovers := sync.OnceFunc(func() {
+		if exePath == "" {
+			return
+		}
+		// The version replaced by a self-update may still be exiting and
+		// holding its file, so removal is retried for a while.
+		go func() {
+			if err := updater.RemovePrevious(exePath, time.Minute); err != nil {
+				log.Printf("remove previous version: %v", err)
+			}
+		}()
+		// A move left the executable behind in its old folder; the
+		// process that started this one may still be holding it.
+		if relocationEnabled {
 			go func() {
-				if err := updater.RemovePrevious(exePath, time.Minute); err != nil {
-					log.Printf("remove previous version: %v", err)
+				if err := relocate.RunPendingCleanup(filepath.Dir(dataFile), exePath, time.Minute); err != nil {
+					log.Printf("clean up moved executable: %v", err)
 				}
 			}()
-			// Temporarily disabled together with the relocate UI/binding while
-			// investigating antivirus detections of copied executables. Keep this
-			// cleanup code intact so the move feature can be restored as a unit.
-			// go func() {
-			// 	if err := relocate.RunPendingCleanup(filepath.Dir(dataFile), exePath, time.Minute); err != nil {
-			// 		log.Printf("clean up moved executable: %v", err)
-			// 	}
-			// }()
 		}
-	}); err != nil {
-		log.Fatal(err)
-	}
+	})
+	mustBind(w, "notifyReady", func() {
+		trayCtrl.SetReady()
+		cleanUpLeftovers()
+	})
 
 	trayDone := make(chan struct{})
 	go func() {

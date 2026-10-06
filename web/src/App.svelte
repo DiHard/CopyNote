@@ -8,7 +8,7 @@
     closeSettings,
     loadUpdateInfo,
     hideWindow,
-    // loadInstallLocation, // temporarily disabled with the relocate feature
+    loadInstallLocation,
     resetAfterHide,
     resetListPosition,
   } from "./lib/state.svelte";
@@ -93,10 +93,9 @@
       // Background update check — fire-and-forget, runs after the UI is
       // already interactive so it never blocks startup.
       void loadUpdateInfo();
-      // Temporarily disabled while investigating antivirus detections related
-      // to copying the executable. Keep the loader so the feature can be
-      // restored without reworking the startup flow.
-      // void loadInstallLocation();
+      // Resolves to "no location" while moving the executable is switched
+      // off in Go, and then nothing offers the move.
+      void loadInstallLocation();
     }
     void initialize().catch(reportNativeError);
   });
