@@ -398,9 +398,10 @@
 
 <svelte:window onkeydown={onGlobalKeydown} />
 
-<!-- Re-key the entire UI when locale changes so every t() call
-     re-evaluates. Slightly heavy but simple and correct. -->
-{#key appState.settings.locale}
+<!-- Re-key the entire UI when the language changes so every t() call
+     re-evaluates. Slightly heavy but simple and correct. Keyed on the language
+     in effect, not on the stored preference: see appliedLocale. -->
+{#key appState.appliedLocale}
   {#if appState.view === "settings"}
     <SettingsView />
   {:else}

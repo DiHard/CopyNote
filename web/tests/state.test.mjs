@@ -201,6 +201,54 @@ test("a failed preference save is visible and does not poison later saves", asyn
   assert.equal(app.state.settingsError, null);
 });
 
+// App re-creates the UI when the language in effect changes, and t() reads a
+// plain variable. If the store ran ahead of it, the new UI was drawn with the
+// previous language and stayed one choice behind.
+test("the language in effect changes in the same turn as the saved preference", async () => {
+  const app = await setup();
+  const system = app.state.appliedLocale;
+  const other = system === "ru" ? "en" : "ru";
+
+  const save = app.saveSettings({ locale: other });
+  for (let i = 0; i < 100 && app.state.settings.locale !== other; i++)
+    await Promise.resolve();
+  assert.equal(app.state.settings.locale, other);
+  assert.equal(app.state.appliedLocale, other);
+  await save;
+
+  await app.saveSettings({ locale: "system" });
+  assert.equal(app.state.settings.locale, "system");
+  assert.equal(app.state.appliedLocale, system);
+});
+
+test("a language that failed to save is not applied", async () => {
+  const app = await setup({
+    saveSettings: async () => {
+      throw new Error("disk full");
+    },
+  });
+  const before = app.state.appliedLocale;
+  const other = before === "ru" ? "en" : "ru";
+  await assert.rejects(app.saveSettings({ locale: other }), /disk full/);
+  assert.equal(app.state.appliedLocale, before);
+  assert.equal(app.state.settings.locale, "system");
+});
+
+test("settings that cannot be read leave the registered shortcut alone", async () => {
+  const registrations = [];
+  const app = await setup({
+    getSettings: async () => {
+      throw new Error("data file is locked");
+    },
+    applyHotkey: async (spec) => registrations.push(spec),
+  });
+  await app.loadSettings();
+  assert.match(app.state.settingsError, /data file is locked/);
+  // Re-applying the empty default would replace the shortcut the tray
+  // registered from the real settings at startup.
+  assert.deepEqual(registrations, []);
+});
+
 test("the header pin toggles auto-hide and applies the inverse to the window", async () => {
   const saved = [];
   const applied = [];

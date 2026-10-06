@@ -20,6 +20,11 @@ export function setLocale(locale: string): void {
   currentLocale = short in dictionaries ? short : "en";
 }
 
+/** The locale t() is translating into right now. */
+export function activeLocale(): string {
+  return currentLocale;
+}
+
 /**
  * Resolve the system locale from `navigator.language`.
  * Returns "en" if the browser language isn't in our dictionaries.

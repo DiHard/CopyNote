@@ -9,6 +9,7 @@ import type {
   UpdateInstallStatus,
   RelocateStatus,
 } from "./types";
+import { activeLocale } from "./i18n";
 
 // Shared reactive state; feature actions own persistence and OS effects.
 export const state = $state<{
@@ -19,6 +20,12 @@ export const state = $state<{
   loadError: string | null;
   view: ViewMode;
   settings: UserSettings;
+  /** The language t() translates into: settings.locale with "system"
+   *  resolved. Set in settings.ts, in the same breath as the language
+   *  itself. App re-creates the UI when this changes rather than when the
+   *  stored preference does: keyed on the preference, the UI was re-created
+   *  a moment before the language changed and stayed one choice behind. */
+  appliedLocale: string;
   settingsError: string | null;
   settingsPending: number;
   operationError: string | null;
@@ -69,6 +76,7 @@ export const state = $state<{
     hotkey: "",
     lastSeenUpdateVersion: "",
   },
+  appliedLocale: activeLocale(),
   settingsError: null,
   settingsPending: 0,
   operationError: null,

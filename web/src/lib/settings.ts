@@ -3,7 +3,7 @@ import { api } from "./api";
 import { state } from "./appState.svelte";
 import { refresh } from "./entries";
 import { createTaskQueue } from "./taskQueue";
-import { setLocale, systemLocale } from "./i18n";
+import { activeLocale, setLocale, systemLocale } from "./i18n";
 
 /** The combination Go falls back to when the preference is empty. */
 export const DEFAULT_HOTKEY = "Ctrl+Alt+N";
@@ -84,17 +84,25 @@ export function importData(): Promise<ImportResult | null> {
 // ── Settings ─────────────────────────────────────────────────────
 
 export async function loadSettings(): Promise<void> {
+  let loaded = false;
   try {
-    state.settings = await api.getSettings();
+    publishSettings(await api.getSettings());
     state.settingsError = null;
+    loaded = true;
   } catch (error) {
     state.settingsError = String(error);
+    // Nothing was read: the built-in defaults are what is on screen.
+    publishSettings(state.settings);
   }
   try {
-    await applySettingsEffects(state.settings);
+    await applyWindowEffects(state.settings);
   } catch (error) {
     state.settingsError = String(error);
   }
+  // Without the stored value there is nothing to re-apply: registering the
+  // empty default here would replace whatever shortcut the tray registered
+  // from the real settings at startup.
+  if (!loaded) return;
   // The tray already registered this at startup; re-applying is cheap and is
   // the only way a conflict detected back then reaches the Settings screen,
   // where the user can actually do something about it.
@@ -110,7 +118,7 @@ export function saveSettings(patch: Partial<UserSettings>): Promise<void> {
   return queueSettingsChange(async () => {
     await persistSettings(patch);
     try {
-      await applySettingsEffects(state.settings);
+      await applyWindowEffects(state.settings);
     } catch (error) {
       state.settingsError = String(error);
       throw error;
@@ -136,12 +144,23 @@ async function persistSettings(patch: Partial<UserSettings>): Promise<void> {
     state.settingsError = String(error);
     throw error;
   }
-  state.settings = merged;
+  publishSettings(merged);
 }
 
-async function applySettingsEffects(settings: UserSettings): Promise<void> {
-  applyTheme(settings.theme);
-  applyLocale(settings.locale);
+/**
+ * Makes `next` the current settings. Theme and language are part of the
+ * same step: they are what the settings look like, they cannot fail, and
+ * with an `await` between the store and them the UI got re-created for a new
+ * language while the old one was still in effect.
+ */
+function publishSettings(next: UserSettings): void {
+  state.settings = next;
+  applyTheme(next.theme);
+  applyLocale(next.locale);
+}
+
+/** What the native window does with the settings; each call can fail. */
+async function applyWindowEffects(settings: UserSettings): Promise<void> {
   await window.applyTopmost?.(settings.topmost);
   await window.applyAutoHide?.(!settings.disableAutoHide);
 }
@@ -162,6 +181,8 @@ function applyLocale(locale: string): void {
   } else {
     setLocale(locale);
   }
+  // t() reads a plain variable, so this is what tells the UI to redraw.
+  state.appliedLocale = activeLocale();
 }
 
 /**
