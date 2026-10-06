@@ -27,6 +27,12 @@ function Set-Query([string]$Text) {
 
 function Get-Query { return (Invoke-Page "$Search.value") | ConvertFrom-Json }
 
+# Presses and releases X as trusted input: the page cannot tell it from the keyboard.
+function Send-Letter {
+    [void](Send-PageCommand 'Input.dispatchKeyEvent' @{ type = 'keyDown'; key = 'x'; code = 'KeyX'; text = 'x'; windowsVirtualKeyCode = 88; nativeVirtualKeyCode = 88 })
+    [void](Send-PageCommand 'Input.dispatchKeyEvent' @{ type = 'keyUp'; key = 'x'; code = 'KeyX'; windowsVirtualKeyCode = 88; nativeVirtualKeyCode = 88 })
+}
+
 function Get-Height($Rect) { return $Rect.Bottom - $Rect.Top }
 
 function Show-FromTray([int]$ProcessId) {
@@ -102,15 +108,59 @@ try {
     Check (($query -eq '') -and ([math]::Abs((Get-Height $reopened) - (Get-Height $full)) -le 2)) 'the search is cleared and the window is back at full height' ('query "{0}", {1} px' -f $query, (Get-Height $reopened))
     Check ([math]::Abs($reopened.Bottom - $corner) -le 2) 'in the corner' ('bottom {0}, corner {1}' -f $reopened.Bottom, $corner)
 
-    Say '== The hotkey twice in quick succession: shown again while sliding away'
+    Say '== Asked back while it is still sliding away'
     $tray = [CopyNoteProbe]::Tray($TrayClass)
-    [void][CopyNoteProbe]::Post($tray, $WM_HOTKEY, 1, 0)
+    # The hide comes from the page and the show from the hotkey, so neither
+    # depends on which window is active. The window finishes going away, the
+    # page gets its next view ready, and only then does it come back.
+    [void](Invoke-Page 'window.hide()')
     Start-Sleep -Milliseconds 50
     [void][CopyNoteProbe]::Post($tray, $WM_HOTKEY, 1, 0)
+    $back = [CopyNoteProbe]::WaitOnScreen($p.Id, 3000) -ge 0
     Start-Sleep -Milliseconds $SettleMs
-    Check (-not [CopyNoteProbe]::Parked($main)) 'the window ends up on screen' ([CopyNoteProbe]::Where($main))
+    Check ($back -and -not [CopyNoteProbe]::Parked($main)) 'the window ends up on screen' ([CopyNoteProbe]::Where($main))
+
+    Say '== The hotkey twice in quick succession'
+    # The first press only puts the window away if it is the active one;
+    # brought forward instead, it would end up on screen without having moved.
+    if ($Interactive -and [CopyNoteProbe]::ForceForeground($main) -and ([CopyNoteProbe]::Foreground() -eq $main)) {
+        [void][CopyNoteProbe]::Post($tray, $WM_HOTKEY, 1, 0)
+        $leaving = [CopyNoteProbe]::Rect($main).Top
+        Start-Sleep -Milliseconds 50
+        $moved = [CopyNoteProbe]::Rect($main).Top -ne $leaving
+        [void][CopyNoteProbe]::Post($tray, $WM_HOTKEY, 1, 0)
+        Start-Sleep -Milliseconds $SettleMs
+        Check ($moved -and -not [CopyNoteProbe]::Parked($main)) 'it goes away and comes back' ("was sliding $moved, now " + [CopyNoteProbe]::Where($main))
+    }
+    else {
+        $why = if ($Interactive) { 'the window could not be made the active one' } else { $NotInteractive }
+        Skip 'the hotkey puts the active window away and a second press brings it back' $why
+    }
+
+    Say '== A parked window still has the keyboard until the user clicks elsewhere'
+    # A trusted keystroke, as one typed for another program would arrive. With
+    # the window on screen it has to land in the search box: only then does
+    # its absence from a parked window say anything.
+    [void](Invoke-Page "$Search.focus()")
+    Send-Letter
+    $reaches = (Get-Query) -eq 'x'
+    Set-Query ''
+    Start-Sleep -Milliseconds $SettleMs
     [void](Invoke-Page 'window.hide()')
-    Check ([CopyNoteProbe]::WaitParked($p.Id, 2000) -ge 0) 'and can still be put away' ([CopyNoteProbe]::Where($main))
+    Check ([CopyNoteProbe]::WaitParked($p.Id, 2000) -ge 0) 'the window can still be put away' ([CopyNoteProbe]::Where($main))
+    Start-Sleep -Milliseconds $SettleMs
+    Send-Letter
+    $typed = Get-Query
+    if ($reaches) { Check ($typed -eq '') 'what is typed meanwhile does not land in the search box' ('query "{0}"' -f $typed) }
+    else { Skip 'what is typed meanwhile does not land in the search box' 'a key sent through DevTools did not reach the search box even with the window on screen' }
+    # And if something does get in, it is not there when the window opens.
+    Set-Query 'left behind'
+    Show-FromTray $p.Id
+    $query = Get-Query
+    Check ($query -eq '') 'text that reached the parked window is gone when it opens' ('query "{0}"' -f $query)
+    [void](Invoke-Page 'window.hide()')
+    Check ([CopyNoteProbe]::WaitParked($p.Id, 2000) -ge 0) 'the window is away again' ([CopyNoteProbe]::Where($main))
+    Start-Sleep -Milliseconds $SettleMs
 
     Say '== Settings from the tray menu while the window is away'
     [void][CopyNoteProbe]::GainForegroundRights()

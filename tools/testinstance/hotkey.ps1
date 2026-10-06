@@ -8,7 +8,10 @@ Reset-TestData
 $ctrlAlt = $MOD_CONTROL -bor $MOD_ALT
 foreach ($vk in $VK_N, $VK_M) {
     if (Test-HotkeyHeld $ctrlAlt $vk) {
-        throw ('Ctrl+Alt+{0} is held by another program - a daily CopyNote that has the hotkey? Quit it and run again.' -f [char]$vk)
+        # Nothing here can be checked without the combination, and it is not
+        # this script's to take away from whoever has it.
+        Skip 'the global shortcut, from registering it to typing it' ('Ctrl+Alt+{0} is held by another program - a daily CopyNote that has the hotkey does; quit it and run again' -f [char]$vk)
+        Complete-Checks
     }
 }
 
@@ -37,14 +40,21 @@ try {
     Start-Sleep -Milliseconds 500 # the UI re-applies the stored hotkey on load
     Check (Test-HotkeyHeld $ctrlAlt $VK_N) 'the test instance registers the default Ctrl+Alt+N'
 
-    [void](Invoke-Page "(() => { const i = document.getElementById('entry-search'); i.value = 'abc'; i.dispatchEvent(new Event('input', { bubbles: true })); return i.value })()")
-    $result = Send-Combination $VK_N
-    Check ($result -eq 'shown') 'Ctrl+Alt+N brings the window up' $result
-    Check ([CopyNoteProbe]::Foreground() -eq [CopyNoteProbe]::MainWindow($p.Id)) 'the window takes the foreground'
-    $page = Invoke-Page "({ query: document.getElementById('entry-search').value, focused: document.activeElement && document.activeElement.id })" | ConvertFrom-Json
-    Check (($page.query -eq '') -and ($page.focused -eq 'entry-search')) 'the search typed before is cleared and has focus' ("query '{0}', focus on '{1}'" -f $page.query, $page.focused)
-    $result = Send-Combination $VK_N
-    Check ($result -eq 'hidden') 'Ctrl+Alt+N again puts it away' $result
+    # Typing needs a session that takes keystrokes; the registrations further
+    # down are checked either way.
+    if ($Interactive) {
+        # Text that reached the parked window - it keeps the keyboard until the
+        # user clicks elsewhere - must not be there when the window opens.
+        [void](Invoke-Page "(() => { const i = document.getElementById('entry-search'); i.value = 'abc'; i.dispatchEvent(new Event('input', { bubbles: true })); return i.value })()")
+        $result = Send-Combination $VK_N
+        Check ($result -eq 'shown') 'Ctrl+Alt+N brings the window up' $result
+        Check ([CopyNoteProbe]::Foreground() -eq [CopyNoteProbe]::MainWindow($p.Id)) 'the window takes the foreground'
+        $page = Invoke-Page "({ query: document.getElementById('entry-search').value, focused: document.activeElement && document.activeElement.id })" | ConvertFrom-Json
+        Check (($page.query -eq '') -and ($page.focused -eq 'entry-search')) 'the search typed before is cleared and has focus' ("query '{0}', focus on '{1}'" -f $page.query, $page.focused)
+        $result = Send-Combination $VK_N
+        Check ($result -eq 'hidden') 'Ctrl+Alt+N again puts it away' $result
+    }
+    else { Skip 'Ctrl+Alt+N, typed, brings the window up with a clear search and puts it away again' $NotInteractive }
 
     $answer = Set-Hotkey 'Win+V'
     Check ($answer -like '*refused*') 'Windows refuses Win+V, which it keeps for itself' $answer
@@ -53,10 +63,13 @@ try {
     $answer = Set-Hotkey 'Ctrl+Alt+M'
     Check ($answer -eq '"accepted"') 'switching to Ctrl+Alt+M is accepted' $answer
     Check ((Test-HotkeyHeld $ctrlAlt $VK_M) -and -not (Test-HotkeyHeld $ctrlAlt $VK_N)) 'Ctrl+Alt+M is registered and Ctrl+Alt+N released'
-    $result = Send-Combination $VK_M
-    Check ($result -eq 'shown') 'Ctrl+Alt+M brings the window up' $result
-    $result = Send-Combination $VK_M
-    Check ($result -eq 'hidden') 'and puts it away' $result
+    if ($Interactive) {
+        $result = Send-Combination $VK_M
+        Check ($result -eq 'shown') 'Ctrl+Alt+M brings the window up' $result
+        $result = Send-Combination $VK_M
+        Check ($result -eq 'hidden') 'and puts it away' $result
+    }
+    else { Skip 'Ctrl+Alt+M, typed, toggles the window' $NotInteractive }
 
     $answer = Set-Hotkey 'off'
     Check (($answer -eq '"accepted"') -and -not (Test-HotkeyHeld $ctrlAlt $VK_M)) "'off' releases the combination" $answer

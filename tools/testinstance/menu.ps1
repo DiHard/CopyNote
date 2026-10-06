@@ -77,7 +77,7 @@ try {
     $main = [CopyNoteProbe]::MainWindow($p.Id)
     Check ([CopyNoteProbe]::WaitOnScreen($p.Id, 10000) -ge 0) 'the window is on screen' ([CopyNoteProbe]::Where($main))
     Start-Sleep -Milliseconds 500
-    Check (Set-WindowForeground $main) 'the window has the foreground, as after a click into it'
+    CheckActive (Set-WindowForeground $main) 'the window has the foreground, as after a click into it'
 
     # A right click, then the keyboard inside the menu.
     $click = Invoke-RightClick 0
@@ -89,7 +89,7 @@ try {
         Check $edge.Ok 'it opens at the pointer' $edge.Detail
         $stays = [CopyNoteProbe]::StaysOnScreen($p.Id, 800)
         Check ($stays -and [CopyNoteProbe]::Menu($p.Id) -ne [IntPtr]::Zero) 'the window stays up while the menu is open'
-        Check ([CopyNoteProbe]::Foreground() -eq $menu) 'the menu takes activation from its window'
+        CheckActive ([CopyNoteProbe]::Foreground() -eq $menu) 'the menu takes activation from its window'
 
         Send-MenuKeys $menu @($VK_DOWN, $VK_DOWN, $VK_DOWN, $VK_DOWN, $VK_RETURN)
         Check ([CopyNoteProbe]::WaitMenuGone($p.Id, 2000)) 'Down four times and Enter close it'
@@ -97,8 +97,8 @@ try {
         $order = Get-Order
         Check ($order -eq 'Beta,Alpha,Gamma') 'and pick "Move down", skipping the separator and the disabled "Move up"' $order
         Check (-not [CopyNoteProbe]::Parked($main)) 'the window is still up after the pick'
-        Check ([CopyNoteProbe]::Foreground() -eq $main) 'activation returns to the window'
-        Check ((Invoke-Page 'document.hasFocus()') -eq 'true') 'and keyboard focus to the page'
+        CheckActive ([CopyNoteProbe]::Foreground() -eq $main) 'activation returns to the window'
+        CheckActive ((Invoke-Page 'document.hasFocus()') -eq 'true') 'and keyboard focus to the page'
     }
 
     # Escape.
@@ -144,31 +144,55 @@ try {
         Start-Sleep -Milliseconds 400
     }
 
-    # Another window takes the foreground while the menu is open.
-    [void](Set-WindowForeground $main)
-    [void](Invoke-RightClick 0)
-    $menu = [CopyNoteProbe]::WaitMenu($p.Id, 3000)
-    $taskbar = [CopyNoteProbe]::ForceForeground([CopyNoteProbe]::Taskbar())
-    $gone = [CopyNoteProbe]::WaitMenuGone($p.Id, 2000)
-    $parked = [CopyNoteProbe]::WaitParked($p.Id, 3000) -ge 0
-    Check (($menu -ne [IntPtr]::Zero) -and $gone -and $parked) 'switching to another window closes the menu, and auto-hide puts the window away' "taskbar active $taskbar, closed $gone, parked $parked"
-
-    # The window is put away while its menu is open.
     $tray = [CopyNoteProbe]::Tray($TrayClass)
+    # Both of these turn on which window is the active one, so they need a
+    # session that can make one active. Skipped as a whole: half-run, they
+    # would leave a menu open for the checks after them.
+    if ($Interactive) {
+        # Another window takes the foreground while the menu is open.
+        [void](Set-WindowForeground $main)
+        [void](Invoke-RightClick 0)
+        $menu = [CopyNoteProbe]::WaitMenu($p.Id, 3000)
+        $taskbar = [CopyNoteProbe]::ForceForeground([CopyNoteProbe]::Taskbar())
+        $gone = [CopyNoteProbe]::WaitMenuGone($p.Id, 2000)
+        $parked = [CopyNoteProbe]::WaitParked($p.Id, 3000) -ge 0
+        Check (($menu -ne [IntPtr]::Zero) -and $gone -and $parked) 'switching to another window closes the menu, and auto-hide puts the window away' "taskbar active $taskbar, closed $gone, parked $parked"
+
+        # The hotkey while the menu is open. The menu is the active window
+        # then, not the main one - and it is still the application in use, so
+        # the hotkey puts the window away rather than merely closing the menu.
+        if ([CopyNoteProbe]::Parked($main)) {
+            [void][CopyNoteProbe]::GainForegroundRights()
+            [void][CopyNoteProbe]::Post($tray, $TRAY_CALLBACK, 0, $WM_LBUTTONUP)
+            [void][CopyNoteProbe]::WaitOnScreen($p.Id, 3000)
+            Start-Sleep -Milliseconds 500
+        }
+        Check (-not [CopyNoteProbe]::Parked($main)) 'the window is on screen again'
+        [void](Set-WindowForeground $main)
+        [void](Invoke-RightClick 0)
+        $menu = [CopyNoteProbe]::WaitMenu($p.Id, 3000)
+        [void][CopyNoteProbe]::Post($tray, $WM_HOTKEY, 1, 0)
+        $gone = [CopyNoteProbe]::WaitMenuGone($p.Id, 2000)
+        $parked = [CopyNoteProbe]::WaitParked($p.Id, 3000) -ge 0
+        Check (($menu -ne [IntPtr]::Zero) -and $gone -and $parked) 'the hotkey puts the window away and closes its menu' "opened $($menu -ne [IntPtr]::Zero), closed $gone, parked $parked"
+    }
+    else {
+        Skip 'switching to another window closes the menu, and auto-hide puts the window away' $NotInteractive
+        Skip 'the hotkey puts the window away and closes its menu' $NotInteractive
+    }
+
+    # Putting the window away takes its menu along, whoever asks.
     if ([CopyNoteProbe]::Parked($main)) {
-        [void][CopyNoteProbe]::GainForegroundRights()
         [void][CopyNoteProbe]::Post($tray, $TRAY_CALLBACK, 0, $WM_LBUTTONUP)
         [void][CopyNoteProbe]::WaitOnScreen($p.Id, 3000)
         Start-Sleep -Milliseconds 500
     }
-    Check (-not [CopyNoteProbe]::Parked($main)) 'the window is on screen again'
-    [void](Set-WindowForeground $main)
     [void](Invoke-RightClick 0)
     $menu = [CopyNoteProbe]::WaitMenu($p.Id, 3000)
-    [void][CopyNoteProbe]::Post($tray, $WM_HOTKEY, 1, 0)
+    [void](Invoke-Page 'window.hide()')
     $gone = [CopyNoteProbe]::WaitMenuGone($p.Id, 2000)
     $parked = [CopyNoteProbe]::WaitParked($p.Id, 3000) -ge 0
-    Check (($menu -ne [IntPtr]::Zero) -and $gone -and $parked) 'the hotkey puts the window away and closes its menu' "opened $($menu -ne [IntPtr]::Zero), closed $gone, parked $parked"
+    Check (($menu -ne [IntPtr]::Zero) -and $gone -and $parked) 'hiding the window closes its menu' "opened $($menu -ne [IntPtr]::Zero), closed $gone, parked $parked"
 
     # The tray icon's menu, drawn by the same code.
     [void][CopyNoteProbe]::GainForegroundRights()

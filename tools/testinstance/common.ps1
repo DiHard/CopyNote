@@ -36,6 +36,7 @@ if (-not ('CopyNoteProbe' -as [type])) {
 }
 
 $script:Failures = 0
+$script:Skipped = 0
 
 function Say([string]$Text) { Write-Host ('{0:HH:mm:ss.fff}  {1}' -f (Get-Date), $Text) }
 
@@ -47,9 +48,36 @@ function Check([bool]$Ok, [string]$What, [string]$Detail = '') {
     Say "[$mark] $What$suffix"
 }
 
+# A check that cannot mean anything in this session. Said out loud instead of
+# being passed or failed: both would be wrong. The count also goes into the
+# environment, which is how all.ps1 learns of it: a script's exit code is its
+# number of failures.
+function Skip([string]$What, [string]$Why) {
+    $script:Skipped++
+    $env:COPYNOTE_TEST_SKIPPED = [string]([int]$env:COPYNOTE_TEST_SKIPPED + 1)
+    Say "[skip] $What ($Why)"
+}
+
 function Complete-Checks {
-    if ($script:Failures -eq 0) { Say 'all checks passed' } else { Say "$($script:Failures) check(s) failed" }
+    $verdict = if ($script:Failures -gt 0) { "$($script:Failures) check(s) failed" }
+    elseif ($script:Skipped -gt 0) { 'nothing failed' }
+    else { 'all checks passed' }
+    if ($script:Skipped -gt 0) { $verdict += "; $($script:Skipped) skipped" }
+    Say $verdict
     exit $script:Failures
+}
+
+# Whether this session can give a window the foreground and take keystrokes.
+# With the lock screen up - LogonUI is running; someone is following from
+# another device - SetForegroundWindow and keybd_event both fail. The app then
+# rightly treats its window as not the active one, and every check about
+# activation would fail, or pass for the wrong reason.
+$script:Interactive = $null -eq (Get-Process -Name LogonUI -ErrorAction SilentlyContinue)
+$script:NotInteractive = 'the session is locked, so no window can become the active one'
+
+# Check, for a result that depends on which window is active.
+function CheckActive([bool]$Ok, [string]$What, [string]$Detail = '') {
+    if ($Interactive) { Check $Ok $What $Detail } else { Skip $What $NotInteractive }
 }
 
 function Assert-NotRunning {
@@ -104,9 +132,10 @@ function Start-TestInstance([string[]]$Arguments = @(), [string]$LocalAppData = 
     }
 }
 
-# Quits the test instance the way its tray does - WM_QUIT on the tray window -
-# then waits for it and for its WebView2 processes, which would otherwise keep
-# the DevTools port from the next launch.
+# Quits the test instance by ending its tray's message loop - WM_QUIT on the
+# tray window, which is all the tray's own Quit comes down to - then waits for
+# it and for its WebView2 processes, which would otherwise keep the DevTools
+# port from the next launch.
 function Stop-TestInstance($Process) {
     if ($null -eq $Process) { return }
     if (-not $Process.HasExited) {
