@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -30,6 +31,9 @@ var retryDelay = 200 * time.Millisecond
 
 const retryAttempts = 10
 
+// probePrefix names the empty file CanSelfUpdate creates to test the folder.
+const probePrefix = ".copynote-update-"
+
 // CanSelfUpdate reports whether the directory holding exePath accepts new
 // files, i.e. whether a swap can succeed without elevation. False for an
 // installation under Program Files or on read-only media.
@@ -37,14 +41,19 @@ func CanSelfUpdate(exePath string) bool {
 	if exePath == "" {
 		return false
 	}
-	f, err := os.CreateTemp(filepath.Dir(exePath), ".copynote-update-*")
+	f, err := os.CreateTemp(filepath.Dir(exePath), probePrefix+"*")
 	if err != nil {
 		return false
 	}
+	// The folder took a new file, and that was the whole question. Clearing
+	// the probe away is housekeeping: a virus scanner holding the fresh file
+	// for a moment must not turn the answer into "no" and take the in-place
+	// update away. It gets the same patience as the swap itself, and
+	// RemoveStaging sweeps up whatever is still there on the next start.
 	name := f.Name()
-	closeErr := f.Close()
-	removeErr := os.Remove(name)
-	return closeErr == nil && removeErr == nil
+	_ = f.Close()
+	_ = retry(func() error { return removeIfExists(name) })
+	return true
 }
 
 // Apply swaps the verified binary at StagingPath(exePath) in for the
@@ -74,9 +83,20 @@ func Apply(exePath string) error {
 	return nil
 }
 
-// RemoveStaging deletes an unfinished or unverified download, if any.
+// RemoveStaging deletes an unfinished or unverified download, if any, and
+// any probe file CanSelfUpdate could not clear away at the time.
 func RemoveStaging(exePath string) {
 	_ = removeIfExists(StagingPath(exePath))
+	dir := filepath.Dir(exePath)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasPrefix(entry.Name(), probePrefix) {
+			_ = removeIfExists(filepath.Join(dir, entry.Name()))
+		}
+	}
 }
 
 // RemovePrevious deletes the version left behind by Apply. The process
@@ -93,8 +113,11 @@ func RemovePrevious(exePath string, wait time.Duration) error {
 	}
 }
 
+// removeFile is os.Remove, replaced by tests that need a deletion to fail.
+var removeFile = os.Remove
+
 func removeIfExists(path string) error {
-	err := os.Remove(path)
+	err := removeFile(path)
 	if err == nil || errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}

@@ -60,6 +60,33 @@ const notifyShown = `window.__onShow && window.__onShow()`
 // by a newer show/hide request.
 const notifyTransitionStarted = `window.__onWindowTransition && window.__onWindowTransition(true, %d)`
 const notifyTransitionFinished = `window.__onWindowTransition && window.__onWindowTransition(false, %d)`
+// webViewArguments returns the value for WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS:
+// browserArgs, then whatever the environment already asked for. That is the
+// documented WebView2 debugging hook (e.g. --remote-debugging-port=9222 to
+// attach DevTools or drive the UI over CDP in end-to-end tests).
+//
+// A copy relaunched after an update inherits the value this process set, so
+// browserArgs are taken off the front of it before being put there again.
+// Left in, every relaunch grew the list, and the new copy asked for other
+// options than the copy it replaces while that one's browser process may
+// still be shutting down on the same user-data folder. WebView2 documents
+// mismatched options on a shared folder as a reason to refuse the
+// environment.
+func webViewArguments(inherited string) string {
+	own := strings.Join(browserArgs, " ")
+	extra := strings.TrimSpace(inherited)
+	for {
+		rest, found := strings.CutPrefix(extra, own)
+		if !found || (rest != "" && rest[0] != ' ') {
+			break
+		}
+		extra = strings.TrimSpace(rest)
+	}
+	if extra == "" {
+		return own
+	}
+	return own + " " + extra
+}
 
 // startedByAutorun reports whether Windows started this process from the
 // autorun registry entry rather than the user starting it. autorun.SetEnabled
@@ -71,9 +98,11 @@ func startedByAutorun() bool {
 }
 
 func main() {
-	waitForRelaunchParent()
 	closeLog := initializeLogging()
 	defer closeLog()
+	// Before anything that another copy of the program could be holding:
+	// the single-instance lock and the WebView2 user-data folder.
+	waitForRelaunchParent()
 	// 0. Per-monitor DPI awareness has to be set before the first window
 	//    exists. Without it Windows bitmap-stretches the window on scaled
 	//    displays and the WebView2 text looks blurry.
@@ -144,14 +173,8 @@ func main() {
 	}
 
 	// 4. WebView2 picks up this env var before spawning msedgewebview2.exe.
-	//    A value already in the environment is kept: it is the documented
-	//    WebView2 debugging hook (e.g. --remote-debugging-port=9222 to attach
-	//    DevTools or drive the UI over CDP in end-to-end tests).
-	args := browserArgs
-	if extra := os.Getenv("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"); extra != "" {
-		args = append(append([]string(nil), browserArgs...), extra)
-	}
-	if err := os.Setenv("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", strings.Join(args, " ")); err != nil {
+	const webViewArgsEnv = "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"
+	if err := os.Setenv(webViewArgsEnv, webViewArguments(os.Getenv(webViewArgsEnv))); err != nil {
 		fatalStartup("WebView2 arguments: %v", err)
 	}
 

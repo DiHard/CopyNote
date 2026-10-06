@@ -163,3 +163,38 @@ func TestCanSelfUpdate(t *testing.T) {
 		t.Fatal("missing directory reported as updatable")
 	}
 }
+
+// A virus scanner or sync client may hold the probe file for a moment. That
+// says nothing about whether the folder is writable, so it must not take the
+// in-place update away — and the probe it left behind has to go eventually.
+func TestCanSelfUpdateSurvivesAProbeThatCannotBeRemoved(t *testing.T) {
+	fastRetries(t)
+	dir := testutil.TempDir(t)
+	exe := filepath.Join(dir, "copynote.exe")
+	writeFile(t, StagingPath(exe), "interrupted download")
+	writeFile(t, filepath.Join(dir, "notes.txt"), "not ours")
+
+	removeFile = func(string) error { return errors.New("file is in use") }
+	t.Cleanup(func() { removeFile = os.Remove })
+	if !CanSelfUpdate(exe) {
+		t.Fatal("a probe that could not be removed reported the folder as read-only")
+	}
+	probes, err := filepath.Glob(filepath.Join(dir, probePrefix+"*"))
+	if err != nil || len(probes) != 1 {
+		t.Fatalf("expected the probe to be left behind, got %v (%v)", probes, err)
+	}
+
+	removeFile = os.Remove
+	RemoveStaging(exe)
+	left, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(left) != 1 || left[0].Name() != "notes.txt" {
+		names := make([]string, len(left))
+		for i, entry := range left {
+			names[i] = entry.Name()
+		}
+		t.Fatalf("RemoveStaging should leave only notes.txt, left %v", names)
+	}
+}

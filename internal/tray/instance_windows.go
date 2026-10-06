@@ -18,8 +18,8 @@ import (
 // Variables, not constants, so a test build can run beside the real
 // application under names of its own (-X copynote/internal/tray.trayClassName=...
 // and showMessageName). -X skips a constant without any warning, and a test
-// build's second launch or post-update relaunch may then reach the real
-// instance's tray window and bring up the real window instead.
+// build's second launch may then reach the real instance's tray window and
+// bring up the real window instead.
 var (
 	trayClassName   = "CopyNoteTrayWnd"
 	showMessageName = "dev.copynote.app.SHOW"

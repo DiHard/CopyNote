@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"golang.org/x/sys/windows"
 
@@ -16,28 +17,67 @@ import (
 
 const waitForPIDFlag = "--wait-for-pid"
 
-// waitForRelaunchParent is used by a relaunched copy before it creates
-// WebView2. The old process must exit first: WebView2 serializes access to
-// its user-data directory, and starting both processes at once makes the new
-// copy fail during controller creation.
-func waitForRelaunchParent() {
-	for i := 1; i+1 < len(os.Args); i++ {
-		if os.Args[i] != waitForPIDFlag {
+// relaunchParentWait bounds how long a relaunched copy waits for the copy
+// that started it. That copy has only its deferred cleanup left to do, so
+// one still there after this long is stuck — and waiting for it without a
+// limit left the user with no CopyNote at all and nothing on screen to say
+// why.
+const relaunchParentWait = 30 * time.Second
+
+// relaunchParentPID finds the process a relaunched copy was told to wait for.
+func relaunchParentPID(args []string) (uint32, bool) {
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] != waitForPIDFlag {
 			continue
 		}
-		pid, err := strconv.ParseUint(os.Args[i+1], 10, 32)
-		if err != nil || pid == 0 {
-			return
-		}
-		h, err := windows.OpenProcess(windows.SYNCHRONIZE, false, uint32(pid))
-		if err != nil {
-			// The parent may have exited before this process opened its handle.
-			return
-		}
-		defer func() { _ = windows.CloseHandle(h) }() // The parent wait result is independent of handle cleanup.
-		_, _ = windows.WaitForSingleObject(h, windows.INFINITE)
+		pid, err := strconv.ParseUint(args[i+1], 10, 32)
+		return uint32(pid), err == nil && pid != 0
+	}
+	return 0, false
+}
+
+// waitForRelaunchParent is used by a relaunched copy before it creates
+// WebView2. The old process should be gone first: until it is, its WebView2
+// still has the user-data directory open, and starting both at once has made
+// the new copy fail during controller creation.
+func waitForRelaunchParent() {
+	pid, ok := relaunchParentPID(os.Args[1:])
+	if !ok {
 		return
 	}
+	h, err := windows.OpenProcess(windows.SYNCHRONIZE|windows.PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
+	if err != nil {
+		// The parent may have exited before this process opened its handle.
+		return
+	}
+	defer func() { _ = windows.CloseHandle(h) }() // The wait below has already produced its result.
+	if startedAfter(h, windows.CurrentProcess()) {
+		// The parent is gone and Windows has given its PID to something new.
+		log.Printf("relaunch: process %d is not the copy that started this one; not waiting", pid)
+		return
+	}
+	event, err := windows.WaitForSingleObject(h, uint32(relaunchParentWait/time.Millisecond))
+	switch {
+	case err != nil:
+		log.Printf("relaunch: waiting for process %d: %v", pid, err)
+	case event == uint32(windows.WAIT_TIMEOUT):
+		log.Printf("relaunch: process %d is still running after %v; starting anyway", pid, relaunchParentWait)
+	}
+}
+
+// startedAfter reports whether process a was created later than process b.
+// False when either creation time cannot be read.
+func startedAfter(a, b windows.Handle) bool {
+	created := func(h windows.Handle) (int64, bool) {
+		var creation, exit, kernel, user windows.Filetime
+		if err := windows.GetProcessTimes(h, &creation, &exit, &kernel, &user); err != nil {
+			return 0, false
+		}
+		return creation.Nanoseconds(), true
+	}
+	ta, okA := created(a)
+	tb, okB := created(b)
+	return okA && okB && ta > tb
 }
 
 func initializeLogging() func() {
