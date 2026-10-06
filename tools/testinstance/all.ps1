@@ -1,6 +1,10 @@
 # Builds the test exe, then runs every check in turn. Exits with the total
 # number of failed checks.
 
+# Taken here, the one-run-at-a-time lock in common.ps1 is held from the build
+# to the last check, not only while each script runs.
+. (Join-Path $PSScriptRoot 'common.ps1')
+
 # The one thing a test build could damage for good is the daily CopyNote's
 # autorun entry: with fresh settings it deletes the value it believes is its
 # own. build.ps1 verifies the name is overridden before anything is launched;
@@ -9,7 +13,7 @@ $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 function Get-DailyAutorun { return (Get-ItemProperty -Path $runKey -ErrorAction SilentlyContinue).CopyNote }
 $autorunBefore = Get-DailyAutorun
 
-if (Get-Process -Name LogonUI -ErrorAction SilentlyContinue) {
+if (-not $Interactive) {
     Write-Host 'The session is locked: checks that need an active window or typed keys are skipped, not failed.'
 }
 

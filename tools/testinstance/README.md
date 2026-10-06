@@ -19,7 +19,9 @@ The frontend goes in as committed in `web/dist`: after changing it, run
 
 **While a check runs** a CopyNote window slides in and out in the corner of the
 screen, a second icon comes and goes in the tray, and `hotkey.ps1` types
-Ctrl+Alt+N and Ctrl+Alt+M. Don't type meanwhile.
+Ctrl+Alt+N and Ctrl+Alt+M. Don't type meanwhile. One run at a time: a second
+one started while the first is going stops at once, because two would start
+instances under the same names and watch each other's windows.
 
 | Script            | Checks                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

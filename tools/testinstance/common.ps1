@@ -35,6 +35,17 @@ if (-not ('CopyNoteProbe' -as [type])) {
     Add-Type -TypeDefinition (Get-Content (Join-Path $PSScriptRoot 'probe.cs') -Raw)
 }
 
+# One run at a time. Two runs start instances under the same names and each
+# then watches the other's window: a launch check has failed that way with
+# nothing wrong in the build under test. Assert-NotRunning cannot see it, since
+# the other run's instance has no tray window yet during its first moments.
+# The mutex is held until the process exits; the scripts all.ps1 runs one
+# after another share its thread and take it again without waiting.
+$script:RunLock = [Threading.Mutex]::new($false, 'Local\dev.copynote.testinstance.run')
+try { $script:RunLockTaken = $script:RunLock.WaitOne(0) }
+catch [Threading.AbandonedMutexException] { $script:RunLockTaken = $true } # the last holder was killed
+if (-not $script:RunLockTaken) { throw 'Another run of the test instance checks is in progress. Wait for it to finish.' }
+
 $script:Failures = 0
 $script:Skipped = 0
 
