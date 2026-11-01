@@ -2,42 +2,27 @@ package main
 
 import (
 	"errors"
-	"fmt"
-	"log"
-	"os"
 	"path/filepath"
 
 	"github.com/jchv/go-webview2"
 
 	"copynote/internal/bridge"
 	"copynote/internal/service"
-	"copynote/internal/storage"
 	"copynote/internal/tray"
-	"copynote/internal/version"
 	"copynote/internal/winutil"
 )
 
-func mustBind(w webview2.WebView, name string, fn any) {
-	if err := w.Bind(name, fn); err != nil {
-		log.Fatalf("bind %s: %v", name, err)
-	}
-}
-
 func bindApplication(w webview2.WebView, hwnd uintptr, svc *service.Service, exePath, dataDir string, tr *tray.Tray) *bridge.Async {
-	// 7. Bind CRUD bridge methods.
-	mustBind(w, "list", svc.List)
-	mustBind(w, "create", svc.Create)
-	mustBind(w, "update", svc.Update)
-	mustBind(w, "remove", svc.Delete) // "delete" is a JS operator, use "remove"
-	mustBind(w, "reorder", svc.Reorder)
-	mustBind(w, "copy", svc.Copy)
+	// 7. Entries, settings, version, export and import.
+	const fileFilter = "CopyNote Backup (*.json)|*.json|All Files|*.*"
+	bindData(w, svc,
+		func() (string, bool) { return winutil.SaveFileDialog(hwnd, fileFilter, backupFileName) },
+		func() (string, bool) { return winutil.OpenFileDialog(hwnd, fileFilter) })
 	mustBind(w, "hide", func() {
 		w.Dispatch(func() {
 			moveOffScreen(hwnd)
 		})
 	})
-	mustBind(w, "getSettings", svc.GetSettings)
-	mustBind(w, "saveSettings", svc.SaveSettings)
 	mustBind(w, "resizeWindow", func(contentHeight int) {
 		w.Dispatch(func() {
 			resizeToContent(hwnd, contentHeight)
@@ -55,10 +40,6 @@ func bindApplication(w webview2.WebView, hwnd uintptr, svc *service.Service, exe
 			return errors.New("executable path is unavailable")
 		}
 		return winutil.OpenFolder(filepath.Dir(exePath))
-	})
-
-	mustBind(w, "getVersion", func() string {
-		return version.Version
 	})
 
 	// Update checks and the self-update flow run on background workers;
@@ -97,39 +78,6 @@ func bindApplication(w webview2.WebView, hwnd uintptr, svc *service.Service, exe
 			winutil.SetWindowPos(hwnd, zOrder, 0, 0, 0, 0,
 				winutil.SWP_NOMOVE|winutil.SWP_NOSIZE|winutil.SWP_NOACTIVATE)
 		})
-	})
-
-	const fileFilter = "CopyNote Backup (*.json)|*.json|All Files|*.*"
-
-	mustBind(w, "exportData", func() (bool, error) {
-		data, err := svc.ExportData()
-		if err != nil {
-			return false, err
-		}
-		path, ok := winutil.SaveFileDialog(hwnd, fileFilter, "copynote-backup.json")
-		if !ok {
-			return false, nil // user cancelled
-		}
-		err = storage.WriteAtomic(path, data)
-		return err == nil, err
-	})
-
-	// Resolves to null when the dialog is cancelled, which the page tells apart
-	// from an import that added nothing.
-	mustBind(w, "importData", func() (*service.ImportResult, error) {
-		path, ok := winutil.OpenFileDialog(hwnd, fileFilter)
-		if !ok {
-			return nil, nil // user cancelled
-		}
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			return nil, fmt.Errorf("read file: %w", err)
-		}
-		result, err := svc.ImportData(raw)
-		if err != nil {
-			return nil, err
-		}
-		return &result, nil
 	})
 
 	return updates

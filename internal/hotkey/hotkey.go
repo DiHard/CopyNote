@@ -1,5 +1,7 @@
 // Package hotkey parses the global-hotkey preference into the modifier and
-// virtual-key codes RegisterHotKey wants.
+// virtual-key codes RegisterHotKey wants. Spec stays in those Windows codes on
+// every platform, so both accept exactly the same stored preferences; macOS
+// translates them with Spec.Carbon.
 //
 // The stored form is what the user sees — "Ctrl+Alt+N" — because the settings
 // UI builds it straight from a captured KeyboardEvent. Parsing therefore has

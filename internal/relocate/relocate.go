@@ -1,3 +1,5 @@
+//go:build windows
+
 // Package relocate moves the running executable out of a transient
 // download folder into a permanent per-user program folder.
 //

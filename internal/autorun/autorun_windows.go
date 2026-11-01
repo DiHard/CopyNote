@@ -1,4 +1,3 @@
-// Package autorun manages this installation's Windows sign-in command.
 package autorun
 
 import (
@@ -9,9 +8,6 @@ import (
 )
 
 const keyPath = `Software\Microsoft\Windows\CurrentVersion\Run`
-
-// AutostartFlag distinguishes sign-in from an explicit user launch.
-const AutostartFlag = "--autostart"
 
 func SetEnabled(valueName string, enabled bool) error {
 	k, _, err := registry.CreateKey(registry.CURRENT_USER, keyPath, registry.SET_VALUE|registry.QUERY_VALUE)

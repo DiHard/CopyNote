@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"math"
 	"sync"
@@ -22,14 +21,9 @@ import (
 // painted), used to suppress an immediate auto-hide if a focus race
 // fires WM_ACTIVATEAPP=false within ~300 ms of the show.
 var (
-	origWndProc    uintptr
-	wndProcCB      uintptr
-	quitting       atomic.Bool
-	lastShownNS    atomic.Int64
-	topmostEnabled atomic.Bool // user preference for always-on-top
-	// autoHideDisabled keeps the window on screen when another program takes
-	// focus. Stored inverted so the zero value is the default behaviour.
-	autoHideDisabled atomic.Bool
+	origWndProc uintptr
+	wndProcCB   uintptr
+	lastShownNS atomic.Int64
 )
 
 // windowPhase is where the window is in its show/hide cycle. The window is
@@ -96,62 +90,6 @@ var (
 // the page uses the same number to match the end of a transition to its
 // start.
 var windowGeneration atomic.Uint64
-
-// preparationTimeout bounds how long a show waits for the page's answer,
-// which normally takes a few frames. Without the bound one lost answer — a
-// script error in the page, a reload, frames that stopped coming — left the
-// window impossible to open until the program was restarted.
-const preparationTimeout = 500 * time.Millisecond
-
-// pageHost is what the window code needs from WebView2: run a function on the
-// UI thread, and evaluate a script in the page. main attaches the WebView;
-// the tests attach a recorder.
-type pageHost interface {
-	Dispatch(f func())
-	Eval(js string)
-}
-
-var host pageHost
-
-// Calls into the page. Each does nothing until the page has installed its
-// handler.
-const (
-	// The window has started to come on screen. The argument is the view it
-	// was parked with, "main" or "settings", or null when it was on screen
-	// already. The page puts the caret in the search box and, for a window
-	// that was parked, drops whatever was typed into it in the meantime.
-	scriptShown = `window.__onShow && window.__onShow(%s)`
-	// The window is parked: reset the view (to Settings when true), measure,
-	// and answer through the windowPrepared(id, height) binding.
-	scriptPrepare = `window.__onHide && window.__onHide(%d, %t)`
-	// A slide started (true) or ended (false). The page keeps pointer input
-	// away while the window moves under the cursor; the generation lets it
-	// ignore the end of a slide a newer one replaced.
-	scriptTransition   = `window.__onWindowTransition && window.__onWindowTransition(%t, %d)`
-	scriptOpenSettings = `window.__openSettings && window.__openSettings()`
-)
-
-func evalPage(format string, args ...any) {
-	if host != nil {
-		host.Eval(fmt.Sprintf(format, args...))
-	}
-}
-
-// onUIThread runs f on the UI thread, unless the program is on its way out.
-func onUIThread(f func()) {
-	if host == nil || quitting.Load() {
-		return
-	}
-	host.Dispatch(func() {
-		if !quitting.Load() {
-			f()
-		}
-	})
-}
-
-// hideGuardWindow is the minimum time after a show during which we
-// will NOT auto-hide on focus loss.
-const hideGuardWindow = 300 * time.Millisecond
 
 // toggleDebounce is how soon after auto-hide put the window away a click on
 // the tray icon is still the click that caused it: reaching for the icon

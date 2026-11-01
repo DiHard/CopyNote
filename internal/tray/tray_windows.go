@@ -962,46 +962,21 @@ func applyTip(t *Tray, text string) {
 	_, _, _ = procShellNotifyIconW.Call(uintptr(nimModify), uintptr(unsafe.Pointer(&nid)))
 }
 
-// trayText is everything the shell renders on our behalf: the popup menu
-// and the icon's hover text.
-type trayText struct {
-	open, settings, quit string
-	// tipLoading covers the WebView2 cold start, where a click cannot open
-	// anything yet; tipReady doubles as the only place the app ever tells
-	// the user what the icon is for.
-	tipLoading, tipReady string
-}
-
-// Tray strings by locale. Falls back to English.
-var trayTexts = map[string]trayText{
-	"en": {
-		open: "Open CopyNote", settings: "Settings", quit: "Quit",
-		tipLoading: "CopyNote — loading…", tipReady: "CopyNote — click to open",
-	},
-	"ru": {
-		open: "Открыть CopyNote", settings: "Настройки", quit: "Выход",
-		tipLoading: "CopyNote — загрузка…", tipReady: "CopyNote — нажмите, чтобы открыть",
-	},
-}
-
 // text resolves the strings for the current UI locale.
-func (t *Tray) text() trayText {
+func (t *Tray) text() Texts {
 	locale := "en"
 	if t != nil && t.GetLocale != nil {
 		locale = t.GetLocale()
 	}
-	if s, ok := trayTexts[locale]; ok {
-		return s
-	}
-	return trayTexts["en"]
+	return TextsFor(locale)
 }
 
 // tip is the hover text matching the current loading state.
 func (t *Tray) tip() string {
 	if t.ready.Load() {
-		return t.text().tipReady
+		return t.text().TipReady
 	}
-	return t.text().tipLoading
+	return t.text().TipLoading
 }
 
 func showTrayPopup(t *Tray) {
@@ -1011,9 +986,9 @@ func showTrayPopup(t *Tray) {
 	labels := t.text()
 
 	items := []popupmenu.Item{
-		{ID: menuIDOpen, Label: labels.open},
-		{ID: menuIDSettings, Label: labels.settings},
-		{ID: menuIDQuit, Label: labels.quit},
+		{ID: menuIDOpen, Label: labels.Open},
+		{ID: menuIDSettings, Label: labels.Settings},
+		{ID: menuIDQuit, Label: labels.Quit},
 	}
 	t.menu.Show(items, pt.x, pt.y, popupmenu.Options{}, func(id uint32, picked bool) {
 		if !picked {

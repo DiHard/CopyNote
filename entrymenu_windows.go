@@ -1,8 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
 	"math"
 
 	"github.com/jchv/go-webview2"
@@ -25,34 +23,10 @@ import (
 // entryMenu is the main window's only context menu. UI thread only.
 var entryMenu popupmenu.Menu
 
-// maxEntryMenuItems bounds what the page may ask for; the menu has six rows.
-const maxEntryMenuItems = 16
-
-// entryMenuItem matches the page's MenuItem.
-type entryMenuItem struct {
-	ID        string `json:"id"`
-	Label     string `json:"label"`
-	Shortcut  string `json:"shortcut"`
-	Disabled  bool   `json:"disabled"`
-	Separator bool   `json:"separator"`
-}
-
-// entryMenuRequest matches the page's EntryMenuRequest. X and Y are CSS pixels
-// in the client area. Token goes back with the answer, so the page can tell
-// the answer for a menu a newer one replaced from the current one.
-type entryMenuRequest struct {
-	Token    int             `json:"token"`
-	X        float64         `json:"x"`
-	Y        float64         `json:"y"`
-	Dark     bool            `json:"dark"`
-	Keyboard bool            `json:"keyboard"`
-	Items    []entryMenuItem `json:"items"`
-}
-
 func bindEntryMenu(w webview2.WebView, hwnd uintptr) {
 	mustBind(w, "showEntryMenu", func(req entryMenuRequest) error {
-		if len(req.Items) == 0 || len(req.Items) > maxEntryMenuItems {
-			return fmt.Errorf("a menu takes 1 to %d items, got %d", maxEntryMenuItems, len(req.Items))
+		if err := req.validate(); err != nil {
+			return err
 		}
 		// Bindings run inside WebView2's message callback; a window that
 		// takes activation is opened from the message loop instead.
@@ -63,8 +37,7 @@ func bindEntryMenu(w webview2.WebView, hwnd uintptr) {
 
 func openEntryMenu(w webview2.WebView, hwnd uintptr, req entryMenuRequest) {
 	answer := func(id string) {
-		raw, _ := json.Marshal(id)
-		w.Eval(fmt.Sprintf("window.__entryMenuClosed && window.__entryMenuClosed(%d, %s)", req.Token, raw))
+		w.Eval(entryMenuAnswer(req.Token, id))
 	}
 	// Put away between the click and this dispatch: nothing to open it over.
 	if windowIsHidden() {

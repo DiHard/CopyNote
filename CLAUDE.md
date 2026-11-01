@@ -28,7 +28,16 @@ Single portable `.exe` (~7 MB), no installer, no external runtime besides WebVie
 
 ```
 CopyNote/
-├── main.go                         # Application startup and lifecycle
+├── app.go                          # Startup shared by every platform: embedded frontend, log, data recovery
+├── bindings.go                     # Bindings shared by every platform: entries, settings, export/import
+├── page.go                         # The Go ↔ page contract both window implementations follow
+├── main_windows.go                 # Windows startup and lifecycle
+├── main_darwin.go                  # macOS startup, cold-start queue, menu bar icon menu
+├── window_darwin.go                # macOS show/hide cycle and toggle rules
+├── bindings_darwin.go              # macOS bindings, entry context menu, hotkey registration
+├── update_darwin.go                # Update bindings that report "no update" on macOS
+├── startup_darwin.go               # macOS log folder, locale and dialogs
+├── devtools_darwin.go              # Control socket of the `devtools` build only
 ├── bindings_windows.go             # Go/JS bindings
 ├── window_windows.go               # Show/hide cycle, positioning, animation, toggle rules
 ├── entrymenu_windows.go            # Native context menu of an entry
@@ -43,13 +52,14 @@ CopyNote/
 │   ├── storage/      # Atomic JSON Load/Save (%APPDATA%\CopyNote\data.json)
 │   ├── service/      # CRUD and settings transactions, injected dependencies
 │   ├── bridge/       # Slow bindings run off the WebView2 message thread
-│   ├── hotkey/       # The global shortcut preference: parsing and validation
-│   ├── autorun/      # Windows sign-in registry adapter
-│   ├── clipboard/    # Win32 clipboard (CF_UNICODETEXT, no cgo)
+│   ├── hotkey/       # The global shortcut preference: parsing, validation, Carbon codes for macOS
+│   ├── autorun/      # Sign-in autorun: Run registry value (Windows), LaunchAgent (macOS)
+│   ├── clipboard/    # Win32 clipboard (CF_UNICODETEXT, no cgo); pbcopy on macOS
 │   ├── singleton/    # Named mutex for single-instance enforcement
-│   ├── tray/         # System tray icon and its right-click menu
+│   ├── macui/        # macOS host (cgo + Objective-C): WKWebView window, menu bar icon, menus, hotkey, panels
+│   ├── tray/         # System tray icon and its right-click menu; texts.go is shared with macOS
 │   ├── popupmenu/    # Owner-drawn GDI popup menu: the tray's and the entry list's
-│   ├── relocate/     # Move the exe out of Downloads into a program folder
+│   ├── relocate/     # Move the exe out of Downloads into a program folder (Windows only)
 │   ├── updater/      # GitHub Releases check + signed in-place self-update
 │   ├── version/      # The application version, written in this one place
 │   ├── testutil/     # Test helpers
@@ -99,6 +109,7 @@ CopyNote/
 ├── tools/uxharness/    # Built frontend in a browser against a fake Go bridge
 ├── tools/testinstance/ # Real exe beside the daily CopyNote: launch, hotkey, cold start, autorun, context menu, toggle, slides, preparation
 ├── tools/quality/      # Pinned linters and the one check script that CI runs too
+├── tools/macbundle/    # build.sh: build/CopyNote.app, ad hoc signed
 ├── assets/             # Generated .ico files
 └── bin/rsrc.exe        # Resource linker binary
 ```
@@ -215,7 +226,7 @@ The Updates section in Settings installs a release in place. The user always sta
 
 1. `checkForUpdates` parses the release assets. `selfUpdate` is true only when the release ships `copynote.exe` **and** `copynote.exe.sig`, a public key is embedded, and the exe directory is writable (`updater.CanSelfUpdate` creates a probe file there; a probe it then cannot delete — an antivirus holding the new file — does not count against it). Otherwise the UI keeps the "Download" button that opens the release page.
 2. `installUpdate` (`internal/updater/install.go`) fetches the signature first, streams the binary to `<exe>.new` next to the running file (never `%TEMP%`), verifies the ed25519 signature over `"copynote release <version>\n" + file` with the key in `internal/updater/signature.go`, then swaps: running exe → `<exe>.old`, `<exe>.new` → exe. Windows allows renaming a running image but not overwriting it; if the second rename fails the old file is moved back.
-3. `restartApp` terminates the WebView. After the tray has stopped, `main.go` closes the loopback listener, releases the single-instance mutex and starts the new exe (`relaunch` in `update_windows.go`) with `--wait-for-pid`. That is all the old process does: the new one waits for it to exit and then starts like any launch by hand, so `ShowOnStart` brings its window up. The old process used to post the SHOW request of a second launch as well, and waited up to 15 s for a tray window that could not exist before it had exited itself.
+3. `restartApp` terminates the WebView. After the tray has stopped, `main_windows.go` closes the loopback listener, releases the single-instance mutex and starts the new exe (`relaunch` in `update_windows.go`) with `--wait-for-pid`. That is all the old process does: the new one waits for it to exit and then starts like any launch by hand, so `ShowOnStart` brings its window up. The old process used to post the SHOW request of a second launch as well, and waited up to 15 s for a tray window that could not exist before it had exited itself.
 4. On the next start `RemoveStaging` drops an interrupted `.new` and any writability probe left behind; `notifyReady` removes `.old` with retries once the UI is up (the previous process may still be exiting). Until then `.old` is the manual fallback if the new build does not start. Updates only go forward: an older exe must not be used after a data migration.
 
 Signing: `go run ./tools/signrelease -generate` creates the key pair once (private key in `%USERPROFILE%\.copynote-release\signing.key`, never committed; `COPYNOTE_SIGNING_KEY` holds the base64 seed in CI). `go run ./tools/signrelease copynote.exe` writes the `.sig` asset and refuses a key that does not match the embedded public key. The version is part of the signed message, so a signed older binary cannot be replayed under a newer tag. Rotating the key needs one release that carries the new public key but is still signed with the old one.
@@ -266,6 +277,22 @@ Start it with `APPDATA` and `LOCALAPPDATA` pointing at scratch folders (data, lo
 - **Quit it by ending the tray's message loop**: post `WM_QUIT` to its tray window, `FindWindowEx(HWND_MESSAGE, 0, "<trayClassName>", NULL)`. The app itself asks the tray thread to call `PostQuitMessage` (`msgStop`), since that call has to come from the thread that owns the loop; a `WM_QUIT` posted from outside ends the same loop, and the rest of the shutdown is the ordinary one. Killing the process leaves a dead icon in the tray until the pointer passes over it, and the next launch has to wait for the old `msedgewebview2.exe` processes to release the debugging port.
 - **Cold start**: launch with `--autostart` (so `ShowOnStart` stays out of it) and post the request the moment `FindWindowEx` first finds the tray window — it arrives well before the page's `DOMContentLoaded`, so it reliably exercises the `pending` slot. An `--autostart` launch with no request must stay parked (`GetWindowRect` left edge at −30000).
 - **Real keystrokes**: `SendInput` of the combination produces a genuine `WM_HOTKEY`. Probe first with a `RegisterHotKey` of your own — error 1409 means someone holds it — so the keys never land in whatever window has focus.
+
+## macOS version
+
+Built on a Mac with Xcode or its command line tools (cgo): `sh tools/macbundle/build.sh` writes `build/CopyNote.app`. A bundle built on the same machine carries no quarantine flag, so Gatekeeper opens it as is. Requires macOS 13.
+
+The shared code — `internal/model`, `storage`, `service`, `hotkey`, `bridge`, the frontend, `app.go`, `bindings.go`, `page.go` — is the same; `*_darwin.go` files replace the Win32 layer:
+
+- **`internal/macui`** is the host: a borderless `NSWindow` with a `WKWebView`, an `NSStatusItem` in the menu bar, `NSMenu` for both menus, Carbon `RegisterEventHotKey`, `NSSavePanel`/`NSOpenPanel`. Everything runs on the main thread: `main_darwin.go` locks the main goroutine to it in `init`, and the bindings, `Dispatch` and the Cocoa callbacks all run there. The page's bindings follow go-webview2's rules (`rpc.go`), so a binding behaves alike on both platforms. `Dispatch` runs blocks in the run loop's common modes: the main dispatch queue stalls while a context menu is open, and a hide or a timer would stall with it.
+- **The page** is loaded with `loadHTMLString` and the made-up origin `https://copynote.invalid/` — no loopback server. Every other navigation, a reload included, is cancelled.
+- **The window** follows `page.go`'s contract with a shorter cycle (parked → visible → preparing → parked): it is ordered out rather than parked off-screen, sized in points (= CSS px), and anchored under the menu bar icon. Hiding calls `[NSApp hide:]` to hand the keyboard back to the previous app; auto-hide is `applicationDidResignActive`. Accessory activation policy plus `LSUIElement`: no Dock icon.
+- **Single instance**: an `flock` on `~/Library/Caches/<singletonName>.lock` and a Unix socket beside it for a second launch's show request. Opening the `.app` again does not start a second process; LaunchServices sends `applicationShouldHandleReopen`, which shows the window.
+- **Autorun** is `~/Library/LaunchAgents/dev.copynote.<autorunValueName>.plist` with `--autostart`; **clipboard** is `pbcopy` with an explicit UTF-8 locale; data lives in `~/Library/Application Support/CopyNote/data.json`, the log in `~/Library/Logs/CopyNote/`.
+- **Hotkey**: the stored preference and its validation are shared; `hotkey.Spec.Carbon` translates it (Win → Cmd, Alt → Option). F21–F24 do not exist on a Mac and are refused.
+- **Updates** are not available yet: releases ship only the Windows exe, so the bindings report no update.
+
+**Testing a running build** without touching the real data, clipboard or autorun entry: build with `-tags devtools` and the overrides `-X main.singletonName=dev.copynote.test -X copynote/internal/clipboard.pasteboard=find -X copynote/internal/service.autorunValueName=CopyNoteTest`, start the binary with `HOME` pointing at a scratch folder and `COPYNOTE_DEVTOOLS=/tmp/cn-dt.sock`, then send commands with `printf 'eval document.title\n' | nc -U /tmp/cn-dt.sock`: `eval <js>`, `snap <png path>`, `show`, `hide`, `toggle`, `settings`, `state`, `quit` (`devtools_darwin.go`). `COPYNOTE_INSPECT=1` makes the page inspectable from Safari's Develop menu. The `pbpaste -pboard find` then shows what a copy wrote.
 
 ## Data Persistence
 

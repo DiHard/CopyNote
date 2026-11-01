@@ -1,16 +1,10 @@
 package main
 
 import (
-	"embed"
-	"fmt"
-	"io/fs"
 	"log"
-	"net"
-	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -24,14 +18,6 @@ import (
 	"copynote/internal/updater"
 	"copynote/internal/winutil"
 )
-
-// Single-file frontend produced by Vite and web/singlefile.ts.
-// Served over loopback HTTP — NavigateToString gives an about:blank
-// origin that breaks ES modules, so we use http://127.0.0.1:PORT/
-// instead. Only one request is made (HTML+CSS+JS are all inlined).
-//
-//go:embed all:web/dist
-var distFS embed.FS
 
 // singletonName is the single-instance mutex. A var so a test build can run
 // beside the real application (-X main.singletonName=...). The tray class and
@@ -75,15 +61,6 @@ func webViewArguments(inherited string) string {
 		return own
 	}
 	return own + " " + extra
-}
-
-// startedByAutorun reports whether Windows started this process from the
-// autorun registry entry rather than the user starting it. autorun.SetEnabled
-// appends the flag to the registered command line; anything without it —
-// a double click, a relaunch after an update or a move — is the user
-// asking for the app, and the window should come up on its own.
-func startedByAutorun() bool {
-	return slices.Contains(os.Args[1:], service.AutostartFlag)
 }
 
 func main() {
@@ -168,20 +145,10 @@ func main() {
 	}
 
 	// 5. Loopback HTTP server serving the embedded frontend.
-	staticFS, err := fs.Sub(distFS, "web/dist")
+	ln, url, err := serveFrontend()
 	if err != nil {
-		log.Fatalf("embed sub: %v", err)
+		log.Fatalf("serve frontend: %v", err)
 	}
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		log.Fatalf("listen: %v", err)
-	}
-	go func() {
-		mux := http.NewServeMux()
-		mux.Handle("/", http.FileServer(http.FS(staticFS)))
-		_ = http.Serve(ln, mux)
-	}()
-	url := fmt.Sprintf("http://%s/", ln.Addr().String())
 
 	// 6. Create the webview window.
 	w := webview2.NewWithOptions(webview2.WebViewOptions{

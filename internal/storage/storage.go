@@ -10,8 +10,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"golang.org/x/sys/windows"
-
 	"copynote/internal/model"
 )
 
@@ -44,7 +42,7 @@ func Load(path string) (model.Store, error) {
 	return s, nil
 }
 
-// WriteAtomic flushes a temporary file before replacing the destination on Windows.
+// WriteAtomic flushes a temporary file before replacing the destination with it.
 // Callers serialize writes to the same path.
 func WriteAtomic(path string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -62,15 +60,7 @@ func WriteAtomic(path string, data []byte) error {
 	if err := errors.Join(writeErr, syncErr, closeErr); err != nil {
 		return err
 	}
-	from, err := windows.UTF16PtrFromString(tmp)
-	if err != nil {
-		return err
-	}
-	to, err := windows.UTF16PtrFromString(path)
-	if err != nil {
-		return err
-	}
-	return windows.MoveFileEx(from, to, windows.MOVEFILE_REPLACE_EXISTING|windows.MOVEFILE_WRITE_THROUGH)
+	return replaceFile(tmp, path)
 }
 
 func Save(path string, store model.Store) error {

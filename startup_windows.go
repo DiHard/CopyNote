@@ -2,7 +2,10 @@ package main
 
 import (
 	"fmt"
+	"io/fs"
 	"log"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -10,8 +13,6 @@ import (
 
 	"golang.org/x/sys/windows"
 
-	"copynote/internal/service"
-	"copynote/internal/storage"
 	"copynote/internal/winutil"
 )
 
@@ -80,61 +81,36 @@ func startedAfter(a, b windows.Handle) bool {
 	return okA && okB && ta > tb
 }
 
-func initializeLogging() func() {
-	dir := filepath.Join(os.Getenv("LOCALAPPDATA"), "CopyNote")
-	if os.Getenv("LOCALAPPDATA") == "" {
-		dir = filepath.Join(os.TempDir(), "CopyNote")
+// logDir is %LOCALAPPDATA%\CopyNote, beside the WebView2 profile.
+func logDir() string {
+	if local := os.Getenv("LOCALAPPDATA"); local != "" {
+		return filepath.Join(local, "CopyNote")
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return func() {}
-	}
-	path := filepath.Join(dir, "copynote.log")
-	if info, err := os.Stat(path); err == nil && info.Size() > 1<<20 {
-		// Keep one previous log; rotation failure must not block startup.
-		_ = os.Rename(path, path+".old")
-	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	return filepath.Join(os.TempDir(), "CopyNote")
+}
+
+func systemLocale() string { return winutil.SystemLocale() }
+
+func messageBox(text string, ask bool) bool { return winutil.MessageBox(text, ask) }
+
+// serveFrontend serves the embedded frontend on a loopback port. WebView2's
+// NavigateToString gives an about:blank origin that breaks ES modules, hence
+// http://127.0.0.1:PORT/; only one request is made, everything is inlined.
+// It returns the listener, so the caller can close it before a relaunch, and
+// the URL.
+func serveFrontend() (net.Listener, string, error) {
+	staticFS, err := fs.Sub(distFS, "web/dist")
 	if err != nil {
-		return func() {}
+		return nil, "", err
 	}
-	log.SetOutput(f)
-	return func() { _ = f.Close() }
-}
-
-func fatalStartup(format string, args ...any) {
-	message := fmt.Sprintf(format, args...)
-	log.Print(message)
-	prefix := "CopyNote could not start. Your data has not been reset.\n\n"
-	if winutil.SystemLocale() == "ru" {
-		prefix = "Не удалось запустить CopyNote. Ваши данные не были сброшены.\n\n"
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return nil, "", err
 	}
-	winutil.MessageBox(prefix+message, false)
-	os.Exit(1)
-}
-
-func openService(path string, deps service.Dependencies) (*service.Service, error) {
-	svc, err := service.NewWithDependencies(path, deps)
-	if err == nil {
-		return svc, nil
-	}
-	log.Printf("load data: %v", err)
-	// Load treats a missing file as a new store, so check backup existence first.
-	if _, statErr := os.Stat(path + ".bak"); statErr != nil {
-		return nil, err
-	}
-	if _, backupErr := storage.Load(path + ".bak"); backupErr != nil {
-		return nil, err
-	}
-	prompt := "CopyNote could not read its data file. Restore the previous saved version? The original file will be preserved.\n\n"
-	if winutil.SystemLocale() == "ru" {
-		prompt = "Не удалось прочитать данные CopyNote. Восстановить предыдущую сохранённую версию? Исходный файл будет сохранён отдельно.\n\n"
-	}
-	if !winutil.MessageBox(prompt+path, true) {
-		return nil, err
-	}
-	if restoreErr := storage.RestoreBackup(path); restoreErr != nil {
-		return nil, restoreErr
-	}
-	log.Print("restored previous data snapshot")
-	return service.NewWithDependencies(path, deps)
+	go func() {
+		mux := http.NewServeMux()
+		mux.Handle("/", http.FileServer(http.FS(staticFS)))
+		_ = http.Serve(ln, mux)
+	}()
+	return ln, fmt.Sprintf("http://%s/", ln.Addr().String()), nil
 }
