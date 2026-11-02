@@ -17,8 +17,16 @@ version=$(sed -n 's/^var Version = "\(.*\)"$/\1/p' "$root/internal/version/versi
 [ -n "$version" ] || { echo "version not found in internal/version/version.go" >&2; exit 1; }
 
 rm -rf "$app"
-mkdir -p "$app/Contents/MacOS"
+mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 (cd "$root" && go build -ldflags "-s -w ${EXTRA_LDFLAGS:-}" -o "$app/Contents/MacOS/CopyNote" .)
+
+# The icon is drawn by the same generator as the Windows .ico, so the glyph
+# lives in one place; only the .icns is kept, beside the binary.
+iconset="$out/CopyNote.iconset"
+rm -rf "$iconset"
+(cd "$root" && go run tools/genicon/main.go -macos "$iconset")
+iconutil -c icns "$iconset" -o "$app/Contents/Resources/CopyNote.icns"
+rm -rf "$iconset"
 
 cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -32,6 +40,8 @@ cat > "$app/Contents/Info.plist" <<PLIST
 	<key>CFBundleDisplayName</key>
 	<string>CopyNote</string>
 	<key>CFBundleExecutable</key>
+	<string>CopyNote</string>
+	<key>CFBundleIconFile</key>
 	<string>CopyNote</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>

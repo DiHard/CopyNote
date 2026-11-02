@@ -56,7 +56,7 @@ func openEntryMenu(view *macui.WebView, req entryMenuRequest) {
 	}
 	items := make([]macui.MenuItem, len(req.Items))
 	for i, it := range req.Items {
-		items[i] = macui.MenuItem{Label: it.Label, Disabled: it.Disabled, Separator: it.Separator}
+		items[i] = macui.MenuItem{Label: it.Label, Shortcut: it.Shortcut, Disabled: it.Disabled, Separator: it.Separator}
 	}
 	// The page knows its theme; the system's may differ.
 	appearance := macui.AppearanceLight

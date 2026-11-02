@@ -20,6 +20,7 @@
     installFolderName,
   } from "../state.svelte";
   import { t, availableLocales } from "../i18n";
+  import { displayHotkey, isMac, keyNames } from "../platform";
   import type { UserSettings } from "../types";
   import { api } from "../api";
 
@@ -82,12 +83,12 @@
 
   // Key names are the same in every locale; only what they do is translated.
   const shortcuts = () => [
-    { keys: "Enter", what: t("settings.keys.enter") },
+    { keys: keyNames.enter, what: t("settings.keys.enter") },
     { keys: "↑ ↓", what: t("settings.keys.arrows") },
-    { keys: "Ctrl + ↑ ↓", what: t("settings.keys.move") },
-    { keys: "F2", what: t("settings.keys.edit") },
-    { keys: "Delete", what: t("settings.keys.delete") },
-    { keys: "Esc", what: t("settings.keys.escape") },
+    { keys: keyNames.move, what: t("settings.keys.move") },
+    { keys: keyNames.edit, what: t("settings.keys.edit") },
+    { keys: keyNames.delete, what: t("settings.keys.delete") },
+    { keys: keyNames.escape, what: t("settings.keys.escape") },
   ];
 
   const themeOptions = () => [
@@ -413,7 +414,7 @@
                 ? t("settings.hotkey.press")
                 : appState.settings.hotkey === HOTKEY_OFF
                   ? t("settings.hotkey.off")
-                  : hotkeyLabel()}
+                  : displayHotkey(hotkeyLabel())}
             </button>
           </div>
           <div class="mt-1 flex items-baseline gap-3">
@@ -433,7 +434,9 @@
                 disabled={appState.settingsPending > 0 || dataBusy}
                 class="text-[11px] text-accent transition hover:underline disabled:opacity-60"
               >
-                {t("settings.hotkey.enable", { keys: DEFAULT_HOTKEY })}
+                {t("settings.hotkey.enable", {
+                  keys: displayHotkey(DEFAULT_HOTKEY),
+                })}
               </button>
             {/if}
           </div>
@@ -443,10 +446,10 @@
             <p role="alert" class="mt-1 text-[11px] leading-snug text-danger">
               {appState.hotkeyError.taken
                 ? t("settings.hotkey.taken", {
-                    combo: appState.hotkeyError.combo,
+                    combo: displayHotkey(appState.hotkeyError.combo),
                   })
                 : t("settings.hotkey.failed", {
-                    combo: appState.hotkeyError.combo,
+                    combo: displayHotkey(appState.hotkeyError.combo),
                     error: appState.hotkeyError.detail,
                   })}
             </p>
@@ -569,116 +572,119 @@
         {/if}
       </section>
 
-      <!-- Updates -->
-      <section>
-        <h2 class="mb-1.5 text-sm font-semibold text-on-surface">
-          {t("settings.updates.title")}
-        </h2>
-        <div class="space-y-1.5">
-          {#if appState.updateInfo}
-            <div class="rounded-lg border border-outline bg-card px-2.5 py-2">
-              <div class="flex items-center justify-between gap-1.5">
-                <span class="text-sm">
-                  {t("settings.updates.available", {
-                    version: appState.updateInfo.version,
-                  })}
-                </span>
-                {#if appState.updateInfo.selfUpdate}
-                  <!-- One click downloads, verifies and swaps the binary, then
+      <!-- Updates. Releases ship only the Windows exe so far, so a Mac has
+         nothing to check against yet. -->
+      {#if !isMac}
+        <section>
+          <h2 class="mb-1.5 text-sm font-semibold text-on-surface">
+            {t("settings.updates.title")}
+          </h2>
+          <div class="space-y-1.5">
+            {#if appState.updateInfo}
+              <div class="rounded-lg border border-outline bg-card px-2.5 py-2">
+                <div class="flex items-center justify-between gap-1.5">
+                  <span class="text-sm">
+                    {t("settings.updates.available", {
+                      version: appState.updateInfo.version,
+                    })}
+                  </span>
+                  {#if appState.updateInfo.selfUpdate}
+                    <!-- One click downloads, verifies and swaps the binary, then
                      restarts. The label doubles as the status line. -->
-                  <button
-                    type="button"
-                    onclick={onInstallUpdate}
-                    disabled={isUpdateInstalling() || dataBusy}
-                    class="shrink-0 rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-accent-text transition hover:bg-accent-hover disabled:opacity-60"
-                  >
-                    {installLabel()}
-                  </button>
-                {:else}
-                  <!-- No signed binary in the release, or the exe folder is not
+                    <button
+                      type="button"
+                      onclick={onInstallUpdate}
+                      disabled={isUpdateInstalling() || dataBusy}
+                      class="shrink-0 rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-accent-text transition hover:bg-accent-hover disabled:opacity-60"
+                    >
+                      {installLabel()}
+                    </button>
+                  {:else}
+                    <!-- No signed binary in the release, or the exe folder is not
                      writable: fall back to the release page. -->
+                    <button
+                      type="button"
+                      onclick={openReleasePage}
+                      class="shrink-0 rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-accent-text transition hover:bg-accent-hover"
+                    >
+                      {t("settings.updates.download")}
+                    </button>
+                  {/if}
+                </div>
+                {#if downloadPercent() !== null}
+                  <div
+                    class="mt-1.5 h-1 overflow-hidden rounded-full bg-surface-hover"
+                    role="progressbar"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                    aria-valuenow={downloadPercent()}
+                  >
+                    <div
+                      class="h-full rounded-full bg-accent transition-[width] duration-200"
+                      style:width="{downloadPercent()}%"
+                    ></div>
+                  </div>
+                {/if}
+                {#if appState.updateInstall.kind === "failed"}
+                  <p role="alert" class="mt-1 text-[11px] text-danger">
+                    {t("settings.updates.installFailed", {
+                      error: appState.updateInstall.error,
+                    })}
+                  </p>
                   <button
                     type="button"
                     onclick={openReleasePage}
-                    class="shrink-0 rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-accent-text transition hover:bg-accent-hover"
+                    class="mt-0.5 text-[11px] text-accent hover:underline"
                   >
-                    {t("settings.updates.download")}
+                    {t("settings.updates.manualDownload")}
                   </button>
                 {/if}
               </div>
-              {#if downloadPercent() !== null}
-                <div
-                  class="mt-1.5 h-1 overflow-hidden rounded-full bg-surface-hover"
-                  role="progressbar"
-                  aria-valuemin="0"
-                  aria-valuemax="100"
-                  aria-valuenow={downloadPercent()}
-                >
-                  <div
-                    class="h-full rounded-full bg-accent transition-[width] duration-200"
-                    style:width="{downloadPercent()}%"
-                  ></div>
-                </div>
-              {/if}
-              {#if appState.updateInstall.kind === "failed"}
-                <p role="alert" class="mt-1 text-[11px] text-danger">
-                  {t("settings.updates.installFailed", {
-                    error: appState.updateInstall.error,
-                  })}
-                </p>
-                <button
-                  type="button"
-                  onclick={openReleasePage}
-                  class="mt-0.5 text-[11px] text-accent hover:underline"
-                >
-                  {t("settings.updates.manualDownload")}
-                </button>
-              {/if}
-            </div>
-          {/if}
+            {/if}
 
-          <!-- The button doubles as the status line. Text changes with
+            <!-- The button doubles as the status line. Text changes with
              updateCheckStatus to avoid layout shift from a separate
              status card. Clicking always triggers a fresh check. -->
-          <button
-            type="button"
-            onclick={onCheckUpdates}
-            disabled={appState.updateCheckStatus.kind === "checking"}
-            class="w-full rounded-lg border border-outline bg-card px-2.5 py-1.5 text-sm text-on-surface-dim transition hover:bg-card-hover hover:text-on-surface disabled:opacity-60"
-          >
-            {#if appState.updateCheckStatus.kind === "checking"}
-              {t("settings.updates.checking")}
-            {:else if appState.updateCheckStatus.kind === "upToDate"}
-              {t("settings.updates.upToDate")}
-            {:else if appState.updateCheckStatus.kind === "failed"}
-              {t("settings.updates.checkFailed")}
-            {:else}
-              {t("settings.updates.check")}
-            {/if}
-          </button>
+            <button
+              type="button"
+              onclick={onCheckUpdates}
+              disabled={appState.updateCheckStatus.kind === "checking"}
+              class="w-full rounded-lg border border-outline bg-card px-2.5 py-1.5 text-sm text-on-surface-dim transition hover:bg-card-hover hover:text-on-surface disabled:opacity-60"
+            >
+              {#if appState.updateCheckStatus.kind === "checking"}
+                {t("settings.updates.checking")}
+              {:else if appState.updateCheckStatus.kind === "upToDate"}
+                {t("settings.updates.upToDate")}
+              {:else if appState.updateCheckStatus.kind === "failed"}
+                {t("settings.updates.checkFailed")}
+              {:else}
+                {t("settings.updates.check")}
+              {/if}
+            </button>
 
-          <label
-            class="flex cursor-pointer items-start justify-between gap-3 rounded-lg border border-outline bg-card px-2.5 py-2"
-          >
-            <span class="min-w-0">
-              <span class="block text-sm"
-                >{t("settings.updates.autoCheck")}</span
-              >
-              <span
-                class="mt-0.5 block text-[11px] leading-snug text-on-surface-dim"
-                >{t("settings.updates.autoCheck.hint")}</span
-              >
-            </span>
-            <input
-              type="checkbox"
-              disabled={appState.settingsPending > 0 || dataBusy}
-              checked={!appState.settings.disableUpdateCheck}
-              onchange={onAutoCheckChange}
-              class="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-input-border bg-input text-accent"
-            />
-          </label>
-        </div>
-      </section>
+            <label
+              class="flex cursor-pointer items-start justify-between gap-3 rounded-lg border border-outline bg-card px-2.5 py-2"
+            >
+              <span class="min-w-0">
+                <span class="block text-sm"
+                  >{t("settings.updates.autoCheck")}</span
+                >
+                <span
+                  class="mt-0.5 block text-[11px] leading-snug text-on-surface-dim"
+                  >{t("settings.updates.autoCheck.hint")}</span
+                >
+              </span>
+              <input
+                type="checkbox"
+                disabled={appState.settingsPending > 0 || dataBusy}
+                checked={!appState.settings.disableUpdateCheck}
+                onchange={onAutoCheckChange}
+                class="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded border-input-border bg-input text-accent"
+              />
+            </label>
+          </div>
+        </section>
+      {/if}
 
       <!-- Keyboard. The row actions left the Tab order, so their keys have to
          be written down somewhere the user can find them. -->

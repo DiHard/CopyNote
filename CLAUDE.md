@@ -81,10 +81,12 @@ CopyNote/
 │   │       ├── focus.ts            # Focus between search and cards, the Tab order
 │   │       ├── modalFocus.ts       # Focus trap and return for dialogs
 │   │       ├── entryMenu.ts        # Bridge to the native entry context menu
+│   │       ├── platform.ts         # Windows or Mac: key names, card keys, hotkey display
 │   │       ├── i18n/
 │   │       │   ├── index.ts        # t() function, setLocale, systemLocale
 │   │       │   ├── en.ts           # English dictionary (~120 keys)
-│   │       │   └── ru.ts           # Russian dictionary
+│   │       │   ├── ru.ts           # Russian dictionary
+│   │       │   └── mac.ts          # Mac wording laid over both: menu bar, macOS, Finder
 │   │       └── components/
 │   │           ├── Header.svelte       # Title bar (draggable), search, +, ⚙, ×
 │   │           ├── EntryList.svelte    # Filtered card list or empty state
@@ -104,7 +106,7 @@ CopyNote/
 │   ├── sys/            # golang.org/x/sys (includes windows/registry)
 │   └── rsrc/           # Windows resource compiler source
 │
-├── tools/genicon/      # Generates icon-dark.ico + icon-light.ico
+├── tools/genicon/      # Generates icon-dark.ico + icon-light.ico; -macos writes the .app's iconset
 ├── tools/signrelease/  # ed25519 release signing; private key lives outside the repo
 ├── tools/uxharness/    # Built frontend in a browser against a fake Go bridge
 ├── tools/testinstance/ # Real exe beside the daily CopyNote: launch, hotkey, cold start, autorun, context menu, toggle, slides, preparation
@@ -290,7 +292,10 @@ The shared code — `internal/model`, `storage`, `service`, `hotkey`, `bridge`, 
 - **Single instance**: an `flock` on `~/Library/Caches/<singletonName>.lock` and a Unix socket beside it for a second launch's show request. Opening the `.app` again does not start a second process; LaunchServices sends `applicationShouldHandleReopen`, which shows the window.
 - **Autorun** is `~/Library/LaunchAgents/dev.copynote.<autorunValueName>.plist` with `--autostart`; **clipboard** is `pbcopy` with an explicit UTF-8 locale; data lives in `~/Library/Application Support/CopyNote/data.json`, the log in `~/Library/Logs/CopyNote/`.
 - **Hotkey**: the stored preference and its validation are shared; `hotkey.Spec.Carbon` translates it (Win → Cmd, Alt → Option). F21–F24 do not exist on a Mac and are refused.
-- **Updates** are not available yet: releases ship only the Windows exe, so the bindings report no update.
+- **Updates** are not available yet: releases ship only the Windows exe, so the bindings report no update and Settings leaves its Updates section out.
+- **The page knows it is on a Mac** from the user agent (`lib/platform.ts`), synchronously, so the first render is already right. `lib/i18n/mac.ts` replaces the sentences that name the tray, Windows or Explorer. Card keys: ⌘E edits and ⌘⌫ deletes beside F2 and Delete, and ⌘↑↓ moves an entry — Ctrl+arrows switch Spaces before the page sees them. Key names are printed the Mac way (⌘E, ⎋), and so is the global shortcut (`displayHotkey`: ⌃⌥N), whose stored text stays `"Ctrl+Alt+N"`/`"Win+…"` so a backup moves between the platforms unchanged. The entry menu shows the same keys as `NSMenuItem` key equivalents (`macui/keys.go`); a key with no modifier gets none, because an open menu would answer it before its own Return.
+- **Show** fades in over 0.12 s (none with Reduce Motion); **hide** is instant, since the page resets itself right after. The window cannot be dragged: WKWebView has no `-webkit-app-region`.
+- **Icon**: `build.sh` draws the `.icns` with `tools/genicon -macos` — the tray glyph in white on an accent-blue tile.
 
 **Testing a running build** without touching the real data, clipboard or autorun entry: build with `-tags devtools` and the overrides `-X main.singletonName=dev.copynote.test -X copynote/internal/clipboard.pasteboard=find -X copynote/internal/service.autorunValueName=CopyNoteTest`, start the binary with `HOME` pointing at a scratch folder and `COPYNOTE_DEVTOOLS=/tmp/cn-dt.sock`, then send commands with `printf 'eval document.title\n' | nc -U /tmp/cn-dt.sock`: `eval <js>`, `snap <png path>`, `show`, `hide`, `toggle`, `settings`, `state`, `quit` (`devtools_darwin.go`). `COPYNOTE_INSPECT=1` makes the page inspectable from Safari's Develop menu. The `pbpaste -pboard find` then shows what a copy wrote.
 

@@ -9,7 +9,7 @@ package macui
 
 /*
 #cgo CFLAGS: -x objective-c -fobjc-arc -Wall
-#cgo LDFLAGS: -framework Cocoa -framework WebKit -framework Carbon -framework UniformTypeIdentifiers
+#cgo LDFLAGS: -framework Cocoa -framework QuartzCore -framework WebKit -framework Carbon -framework UniformTypeIdentifiers
 #include <stdlib.h>
 #include "macui.h"
 */
@@ -146,6 +146,7 @@ func SetStatusTooltip(text string) {
 // MenuItem is one row of a popup menu.
 type MenuItem struct {
 	Label     string
+	Shortcut  string // shown beside the label, written the Mac way: "⌘E"
 	Disabled  bool
 	Separator bool
 }
@@ -167,9 +168,14 @@ func ShowMenu(items []MenuItem, x, y float64, atStatusItem bool, appearance Appe
 	id := menusNext
 	menus[id] = done
 	labels := make([]*C.char, len(items))
+	keys := make([]*C.char, len(items))
 	flags := make([]C.int, len(items))
+	keyMods := make([]C.ulong, len(items))
 	for i, it := range items {
 		labels[i] = C.CString(it.Label)
+		key, mods, _ := keyEquivalent(it.Shortcut)
+		keys[i] = C.CString(key)
+		keyMods[i] = C.ulong(mods)
 		if it.Disabled {
 			flags[i] |= 1
 		}
@@ -178,8 +184,9 @@ func ShowMenu(items []MenuItem, x, y float64, atStatusItem bool, appearance Appe
 		}
 	}
 	defer func() {
-		for _, p := range labels {
-			C.free(unsafe.Pointer(p))
+		for i := range labels {
+			C.free(unsafe.Pointer(labels[i]))
+			C.free(unsafe.Pointer(keys[i]))
 		}
 	}()
 	// The C arrays are copied into an NSMenu before ShowMenu returns. cgo
@@ -188,7 +195,10 @@ func ShowMenu(items []MenuItem, x, y float64, atStatusItem bool, appearance Appe
 	cLabels := (**C.char)(C.malloc(C.size_t(n) * C.size_t(unsafe.Sizeof(labels[0]))))
 	defer C.free(unsafe.Pointer(cLabels))
 	copy(unsafe.Slice(cLabels, n), labels)
-	C.macuiShowMenu(C.int(id), cLabels, &flags[0], C.int(n), C.double(x), C.double(y), cbool(atStatusItem), C.int(appearance))
+	cKeys := (**C.char)(C.malloc(C.size_t(n) * C.size_t(unsafe.Sizeof(keys[0]))))
+	defer C.free(unsafe.Pointer(cKeys))
+	copy(unsafe.Slice(cKeys, n), keys)
+	C.macuiShowMenu(C.int(id), cLabels, cKeys, &keyMods[0], &flags[0], C.int(n), C.double(x), C.double(y), cbool(atStatusItem), C.int(appearance))
 }
 
 // CancelMenu closes an open popup menu; it reports -1.

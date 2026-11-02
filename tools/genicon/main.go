@@ -1,7 +1,9 @@
 //go:build ignore
 
 // Command genicon produces assets/icon.ico — a multi-size Windows
-// icon file used as both the exe icon and the tray icon.
+// icon file used as both the exe icon and the tray icon. With -macos
+// <dir> it also writes the PNGs of a macOS .iconset there: the same
+// glyph on the rounded tile a Mac app icon stands on.
 //
 // The glyph is Lucide's "copy" icon: two overlapping rounded squares
 // drawn as outlines over a transparent background. We render it by
@@ -11,6 +13,7 @@
 // Run manually:
 //
 //	go run tools/genicon/main.go
+//	go run tools/genicon/main.go -macos build/CopyNote.iconset
 //
 // The output file is committed to version control so normal builds
 // don't need to regenerate it.
@@ -19,6 +22,8 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"flag"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -337,7 +342,85 @@ func writeVariant(path string, stroke color.RGBA, sizes []int) {
 	log.Printf("wrote %s (%d bytes, %d sizes)", path, icoBuf.Len(), len(sizes))
 }
 
+// macTile is the app's accent, the colour of the glyph on the macOS tile.
+var macTile = color.RGBA{R: 0x00, G: 0x5F, B: 0xB8, A: 0xFF}
+
+// renderMacIcon draws a macOS app icon: a rounded tile with Apple's grid
+// margins (824 of 1024, radius 185) and the white glyph centred on it.
+func renderMacIcon(size int) *image.RGBA {
+	img := image.NewRGBA(image.Rect(0, 0, size, size))
+	unit := float64(size) / 1024
+	inset, side, radius := 100*unit, 824*unit, 185*unit
+	for py := 0; py < size; py++ {
+		for px := 0; px < size; px++ {
+			// Signed distance from the pixel centre to the tile's edge.
+			x := math.Abs(float64(px)+0.5-inset-side/2) - (side/2 - radius)
+			y := math.Abs(float64(py)+0.5-inset-side/2) - (side/2 - radius)
+			d := math.Hypot(math.Max(x, 0), math.Max(y, 0)) + math.Min(math.Max(x, y), 0) - radius
+			cov := math.Max(0, math.Min(1, 0.5-d))
+			if cov == 0 {
+				continue
+			}
+			// A slight top-to-bottom shade, as the system icons have.
+			shade := 1.08 - 0.16*float64(py)/float64(size)
+			c := color.RGBA{
+				R: uint8(math.Min(255, float64(macTile.R)*shade)),
+				G: uint8(math.Min(255, float64(macTile.G)*shade)),
+				B: uint8(math.Min(255, float64(macTile.B)*shade)),
+				A: 0xFF,
+			}
+			blendPixel(img, px, py, c, cov)
+		}
+	}
+	glyphSize := int(math.Round(520 * unit))
+	if glyphSize < 8 {
+		glyphSize = 8
+	}
+	white := color.RGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF}
+	glyph := renderIcon(glyphSize, white)
+	at := (size - glyphSize) / 2
+	for y := 0; y < glyphSize; y++ {
+		for x := 0; x < glyphSize; x++ {
+			if a := glyph.RGBAAt(x, y).A; a > 0 {
+				blendPixel(img, at+x, at+y, white, float64(a)/255)
+			}
+		}
+	}
+	return img
+}
+
+// writeMacIconset writes the PNGs iconutil turns into an .icns.
+func writeMacIconset(dir string) {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		log.Fatalf("mkdir %s: %v", dir, err)
+	}
+	for _, base := range []int{16, 32, 128, 256, 512} {
+		for scale := 1; scale <= 2; scale++ {
+			name := fmt.Sprintf("icon_%dx%d.png", base, base)
+			if scale == 2 {
+				name = fmt.Sprintf("icon_%dx%d@2x.png", base, base)
+			}
+			var buf bytes.Buffer
+			// blendPixel keeps straight alpha, so the pixels are NRGBA's.
+			img := renderMacIcon(base * scale)
+			straight := &image.NRGBA{Pix: img.Pix, Stride: img.Stride, Rect: img.Rect}
+			if err := png.Encode(&buf, straight); err != nil {
+				log.Fatalf("encode %s: %v", name, err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, name), buf.Bytes(), 0o644); err != nil {
+				log.Fatalf("write %s: %v", name, err)
+			}
+		}
+	}
+}
+
 func main() {
+	macos := flag.String("macos", "", "write a macOS .iconset into this directory instead of the .ico files")
+	flag.Parse()
+	if *macos != "" {
+		writeMacIconset(*macos)
+		return
+	}
 	sizes := []int{16, 24, 32, 48, 64, 128, 256}
 	if err := os.MkdirAll("assets", 0o755); err != nil {
 		log.Fatalf("mkdir assets: %v", err)

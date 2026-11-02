@@ -234,11 +234,9 @@ body,
   height: 100%;
   overflow: hidden;
   margin: 0;
-  font-family:
-    "Segoe UI",
-    system-ui,
-    -apple-system,
-    sans-serif;
+  /* -apple-system first: only Safari's engine knows it, so a Mac gets San
+     Francisco even where Office has installed Segoe UI, and Windows skips it. */
+  font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
 }
 
 /* Ensure the entire window area has a solid background so

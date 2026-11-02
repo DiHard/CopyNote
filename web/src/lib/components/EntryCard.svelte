@@ -4,6 +4,13 @@
   import { moveCardFocus, focusCardAt, focusLastCard } from "../focus";
   import { showEntryMenu } from "../entryMenu";
   import { t } from "../i18n";
+  import {
+    ariaKeys,
+    isDeleteKey,
+    isEditKey,
+    isMoveModifier,
+    keyNames,
+  } from "../platform";
   import { onDestroy } from "svelte";
 
   let {
@@ -60,13 +67,13 @@
 
   function onKeyDown(e: KeyboardEvent) {
     // The row's own actions are out of the Tab order, so they get the keys a
-    // Windows user already expects. Announced via aria-keyshortcuts below.
-    if (e.key === "F2") {
+    // user already expects (lib/platform.ts). Announced via aria-keyshortcuts.
+    if (isEditKey(e)) {
       e.preventDefault();
       openEdit(entry);
       return;
     }
-    if (e.key === "Delete") {
+    if (isDeleteKey(e)) {
       e.preventDefault();
       openDelete(entry);
       return;
@@ -83,8 +90,8 @@
     }
     if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
     const dir = e.key === "ArrowDown" ? 1 : -1;
-    // Ctrl moves the entry, a plain arrow moves the focus.
-    if (e.ctrlKey) {
+    // Ctrl (⌘ on a Mac) moves the entry, a plain arrow moves the focus.
+    if (isMoveModifier(e)) {
       if (dragDisabled) return;
       e.preventDefault();
       onMoveByKey?.(dir);
@@ -113,20 +120,20 @@
     const keyboard = e.timeStamp - lastPointerDown > 1500;
     const card = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const items: MenuItem[] = [
-      { id: "copy", label: t("card.menu.copy"), shortcut: "Enter" },
-      { id: "edit", label: t("card.menu.edit"), shortcut: "F2" },
-      { id: "delete", label: t("card.menu.delete"), shortcut: "Delete" },
+      { id: "copy", label: t("card.menu.copy"), shortcut: keyNames.enter },
+      { id: "edit", label: t("card.menu.edit"), shortcut: keyNames.edit },
+      { id: "delete", label: t("card.menu.delete"), shortcut: keyNames.delete },
       { id: "", label: "", separator: true },
       {
         id: "up",
         label: t("card.menu.up"),
-        shortcut: "Ctrl+↑",
+        shortcut: keyNames.moveUp,
         disabled: !canMoveUp,
       },
       {
         id: "down",
         label: t("card.menu.down"),
-        shortcut: "Ctrl+↓",
+        shortcut: keyNames.moveDown,
         disabled: !canMoveDown,
       },
     ];
@@ -202,7 +209,7 @@
     <button
       type="button"
       tabindex="-1"
-      aria-keyshortcuts="F2"
+      aria-keyshortcuts={ariaKeys.edit}
       data-tooltip={t("card.edit")}
       aria-label={t("card.edit")}
       onclick={() => openEdit(entry)}
@@ -228,7 +235,7 @@
     <button
       type="button"
       tabindex="-1"
-      aria-keyshortcuts="Delete"
+      aria-keyshortcuts={ariaKeys.delete}
       data-tooltip={t("card.delete")}
       aria-label={t("card.delete")}
       onclick={() => openDelete(entry)}

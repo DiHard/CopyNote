@@ -1,4 +1,5 @@
 #import <Cocoa/Cocoa.h>
+#import <QuartzCore/QuartzCore.h>
 #import <WebKit/WebKit.h>
 #import <Carbon/Carbon.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
@@ -299,14 +300,36 @@ static void placeWindow(void) {
 	[controller.window invalidateShadow];
 }
 
+// setWindowAlpha sets the window's opacity over duration seconds; 0 also
+// stops a fade that is still running.
+static void setWindowAlpha(CGFloat alpha, NSTimeInterval duration) {
+	[NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+		context.duration = duration;
+		context.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
+		controller.window.animator.alphaValue = alpha;
+	} completionHandler:nil];
+}
+
 void macuiShowWindow(void) {
+	NSWindow *window = controller.window;
 	placeWindow();
 	activateApp();
-	[controller.window makeKeyAndOrderFront:nil];
-	[controller.window makeFirstResponder:controller.webView];
+	if (!window.visible) {
+		// Fades in the way the menu bar's own panels do. The page is already
+		// prepared for this show, so nothing changes underneath the fade.
+		window.alphaValue = 0;
+		[window makeKeyAndOrderFront:nil];
+		setWindowAlpha(1, NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceMotion ? 0 : 0.12);
+	} else {
+		[window makeKeyAndOrderFront:nil];
+	}
+	[window makeFirstResponder:controller.webView];
 }
 
 void macuiHideWindow(int giveBackFocus) {
+	// Gone at once, like a menu: the page resets itself right after, and a
+	// fade-out would show that happening.
+	setWindowAlpha(1, 0);
 	[controller.window orderOut:nil];
 	if (giveBackFocus && NSApp.active) {
 		// Hands the keyboard back to the app the user came from, as Cmd+H
@@ -339,8 +362,8 @@ void macuiSetStatusTooltip(const char *text) {
 	controller.statusItem.button.toolTip = [NSString stringWithUTF8String:text];
 }
 
-void macuiShowMenu(int menuID, const char **labels, const int *flags, int count,
-                   double x, double y, int atStatusItem, int appearance) {
+void macuiShowMenu(int menuID, const char **labels, const char **keys, const unsigned long *keyMods,
+                   const int *flags, int count, double x, double y, int atStatusItem, int appearance) {
 	NSMenu *menu = [[NSMenu alloc] init];
 	menu.autoenablesItems = NO;
 	menu.identifier = [NSString stringWithFormat:@"%d", menuID];
@@ -355,7 +378,8 @@ void macuiShowMenu(int menuID, const char **labels, const int *flags, int count,
 			continue;
 		}
 		NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:[NSString stringWithUTF8String:labels[i]]
-			action:@selector(menuPicked:) keyEquivalent:@""];
+			action:@selector(menuPicked:) keyEquivalent:[NSString stringWithUTF8String:keys[i]]];
+		item.keyEquivalentModifierMask = keyMods[i];
 		item.target = controller;
 		item.tag = i;
 		item.enabled = !(flags[i] & 1);

@@ -22,8 +22,8 @@ void macuiSetStatusTooltip(const char *text);
 // flags: 1 = disabled, 2 = separator. appearance: 0 system, 1 light, 2 dark.
 // x and y are points in the web view, from its top-left corner; atStatusItem
 // opens the menu under the menu bar icon instead.
-void macuiShowMenu(int menuID, const char **labels, const int *flags, int count,
-                   double x, double y, int atStatusItem, int appearance);
+void macuiShowMenu(int menuID, const char **labels, const char **keys, const unsigned long *keyMods,
+                   const int *flags, int count, double x, double y, int atStatusItem, int appearance);
 void macuiCancelMenu(void);
 
 int macuiRegisterHotkey(uint32_t keyCode, uint32_t modifiers);

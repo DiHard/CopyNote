@@ -1,7 +1,12 @@
 import { en } from "./en";
 import { ru } from "./ru";
+import { mac } from "./mac";
+import { isMac } from "../platform";
 
 const dictionaries: Record<string, Record<string, string>> = { en, ru };
+
+/** Platform wording laid over the dictionaries; see mac.ts. */
+const overrides: Record<string, Record<string, string>> = isMac ? mac : {};
 
 // Default to system language immediately so the first render is
 // already in the correct locale — before loadSettings() resolves.
@@ -42,7 +47,12 @@ export function systemLocale(): string {
  * keys obvious during development).
  */
 export function t(key: string, params?: Record<string, string>): string {
-  let str = dictionaries[currentLocale]?.[key] ?? dictionaries.en[key] ?? key;
+  let str =
+    overrides[currentLocale]?.[key] ??
+    dictionaries[currentLocale]?.[key] ??
+    overrides.en?.[key] ??
+    dictionaries.en[key] ??
+    key;
   if (params) {
     for (const [k, v] of Object.entries(params)) {
       str = str.replace(`{${k}}`, v);
