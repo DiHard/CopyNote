@@ -1,3 +1,5 @@
+//go:build darwin
+
 // Package macui is the macOS host: a borderless window with a WKWebView, the
 // menu bar icon, context menus, the global hotkey and the file dialogs.
 //
