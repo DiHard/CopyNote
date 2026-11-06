@@ -6,7 +6,7 @@
 [![WebView2](https://img.shields.io/badge/WebView2-Runtime-0078D4?logo=microsoftedge&logoColor=white)](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A lightweight Windows tray utility for storing and instantly copying frequently used text snippets &mdash; emails, addresses, IDs, templates, and anything you paste often.
+A lightweight tray utility for Windows and macOS that stores and instantly copies frequently used text snippets &mdash; emails, addresses, IDs, templates, and anything you paste often.
 
 [Русская версия / Russian version](README.ru.md)
 
@@ -27,7 +27,7 @@ A lightweight Windows tray utility for storing and instantly copying frequently 
 - **Light & dark theme** &mdash; follows system or manual override (Win11-inspired palette)
 - **Localization** &mdash; English and Russian, auto-detected from system language
 - **Import / Export** &mdash; backup all entries and settings to a single JSON file, restore with merge (deduplication by label+value)
-- **Autorun** &mdash; optional start at Windows login (via Registry)
+- **Autorun** &mdash; optional start at login (a Registry value on Windows, a LaunchAgent on macOS)
 - **Single instance** &mdash; launching again brings the existing window to front
 - **Global hotkey** &mdash; configurable shortcut (Ctrl+Alt+N by default) toggles the window from any app; it can be turned off
 - **Keyboard workflow** &mdash; Enter copies the top search match, arrows move through the list, and F2/Delete manage the focused entry
@@ -37,19 +37,31 @@ A lightweight Windows tray utility for storing and instantly copying frequently 
 - **Silent startup** &mdash; no visible window or taskbar icon during WebView2 initialization
 - **Portable** &mdash; single `.exe`, no installation required
 - **Lightweight** &mdash; ~7 MB binary, ~40 MB RAM in idle
+- **macOS version** &mdash; the same app in the menu bar of Apple silicon and Intel Macs, with Mac key names and the same data format, so a backup moves between the two
 
 ## Requirements
 
 - **Windows 10 (1809+) or Windows 11**
 - **WebView2 Runtime** &mdash; pre-installed on Windows 11 and most up-to-date Windows 10 machines. If missing, download the [Evergreen Bootstrapper](https://developer.microsoft.com/en-us/microsoft-edge/webview2/#download).
+- **macOS version:** macOS 13 Ventura or later, on Apple silicon or Intel. Nothing else to install.
 
 ## Quick start
+
+### Windows
 
 Download the latest `copynote.exe` from [Releases](https://github.com/DiHard/CopyNote/releases) and run it. That's it &mdash; no installer, no dependencies beyond WebView2.
 
 Later releases install from _Settings → Updates_ with one click: the app checks GitHub Releases at startup (this can be turned off), downloads the new `copynote.exe` next to the running one, verifies its ed25519 signature and restarts itself.
 
 When launched manually, the app opens its window as soon as WebView2 is ready. A Windows sign-in through Autorun starts it quietly in the system tray. Left-click the tray icon to toggle the window.
+
+### macOS
+
+1. Download `CopyNote-macos.zip` from [Releases](https://github.com/DiHard/CopyNote/releases) and double-click it to unzip.
+2. Drag `CopyNote` into **Applications**, then open it from there.
+3. The app is not notarized by Apple, so the first launch says macOS cannot verify the developer. Click **Done**, open **System Settings → Privacy & Security**, and click **Open Anyway** next to the CopyNote message. This is needed once.
+
+CopyNote lives in the menu bar, top right: click its icon or press `⌃⌥N` (Control-Option-N) to open the window, right-click the icon for its menu. Updates install from _Settings → Updates_ just as on Windows and never ask for that permission again. Started from Downloads, the app asks to be moved to Applications first: from there it cannot update itself, and starting at login would break.
 
 ## Building from source
 
@@ -79,6 +91,16 @@ go build -ldflags="-H=windowsgui -s -w" -o copynote.exe .
 
 The resulting `copynote.exe` is fully self-contained (the frontend is embedded via `//go:embed`).
 
+### macOS
+
+Needs Xcode or its command line tools (`xcode-select --install`), because the macOS host uses Cocoa through cgo:
+
+```bash
+sh tools/macbundle/build.sh
+```
+
+It writes `build/CopyNote.app` — one universal binary for Apple silicon and Intel, ad hoc signed — and `build/CopyNote-macos.zip`, the release asset. The committed `web/dist` is embedded as on Windows, so Node.js is only needed when the frontend changes.
+
 ### Regenerating the app icon
 
 The tray/exe icon is generated from code (Lucide "copy" outline):
@@ -99,15 +121,23 @@ go run tools/genicon/main.go          # writes assets/icon-dark.ico + icon-light
 
 No data is stored next to the executable &mdash; safe to put it anywhere.
 
+On macOS:
+
+| What                 | Where                                                |
+| -------------------- | ---------------------------------------------------- |
+| Entries and settings | `~/Library/Application Support/CopyNote/data.json`   |
+| Diagnostic log       | `~/Library/Logs/CopyNote/copynote.log`               |
+| Autorun              | `~/Library/LaunchAgents/dev.copynote.CopyNote.plist` |
+
 ## Tech stack
 
-| Layer              | Technology                                                       |
-| ------------------ | ---------------------------------------------------------------- |
-| Backend            | Go (stdlib + [go-webview2](https://github.com/jchv/go-webview2)) |
-| Frontend           | Svelte 5, TypeScript, Tailwind CSS 4                             |
-| Bundler            | Vite 8 + web/singlefile.ts                                       |
-| UI host            | Microsoft Edge WebView2                                          |
-| System integration | Win32 API via `golang.org/x/sys/windows` (no cgo)                |
+| Layer              | Technology                                                                |
+| ------------------ | ------------------------------------------------------------------------- |
+| Backend            | Go (stdlib + [go-webview2](https://github.com/jchv/go-webview2))          |
+| Frontend           | Svelte 5, TypeScript, Tailwind CSS 4                                      |
+| Bundler            | Vite 8 + web/singlefile.ts                                                |
+| UI host            | Microsoft Edge WebView2; WKWebView on macOS                               |
+| System integration | Win32 API via `golang.org/x/sys/windows` (no cgo); Cocoa via cgo on macOS |
 
 ## Keyboard shortcuts
 
@@ -127,6 +157,8 @@ No data is stored next to the executable &mdash; safe to put it anywhere.
 | `Ctrl+↑` / `Ctrl+↓`    | Focused entry        | Move the entry up or down                                                           |
 | `Tab`                  | Main view            | Move between search, the entry list and header controls; the list uses one Tab stop |
 | Menu key / `Shift+F10` | Focused entry        | Open the entry context menu                                                         |
+
+On a Mac the window toggles with `⌃⌥N`, `⌘↑` / `⌘↓` move an entry (Control-arrows switch Spaces there), and `⌘E` and `⌘⌫` edit and delete the focused entry besides `F2` and `Delete`. Settings → Keyboard lists them with Mac key names.
 
 ## License
 
@@ -165,7 +197,8 @@ go vet ./...
 Run npm ci, npm run check, npm test and npm run build in web/. Frontend tests
 exercise the real Svelte state module with a fake Go bridge. They do not touch
 application data, the registry, or the clipboard. Windows CI runs these checks,
-checks the committed web/dist, and builds the executable.
+checks the committed web/dist, and builds the executable. A macOS job lints, vets
+and tests the macOS build and makes the app bundle with `tools/macbundle/build.sh`.
 
 See [local dependency provenance](third_party/DEPENDENCIES.md) before updating
 vendored Go sources.

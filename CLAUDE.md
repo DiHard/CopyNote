@@ -13,6 +13,7 @@ KISS and SOLID pragmatically, with compatibility and observable behavior first.
 
 Windows 11 tray utility for storing and quickly copying text snippets.
 Single portable `.exe` (~7 MB), no installer, no external runtime besides WebView2.
+The same app runs on macOS from the menu bar — see "macOS version"; most of this guide describes Windows.
 
 ## Tech Stack
 
@@ -350,8 +351,8 @@ CSS variables in `app.css` define a Windows 11–inspired palette:
 
 ## Important Constraints
 
-- **Windows only** (Win10 1809+ / Win11), WebView2 Runtime required
-- **No C++ toolchain** needed — pure Go + pure JS build
+- **Windows** (Win10 1809+ / Win11), WebView2 Runtime required; **macOS 13+** for the Mac version
+- **No C++ toolchain** needed for Windows — pure Go + pure JS build, which also cross-compiles on a Mac; the macOS build needs Xcode's clang (cgo)
 - **Portable** — single `.exe`, no installer, no registry writes (except optional autorun)
 - **Kaspersky false positive** — COM calls + tray + HTTP loopback may trigger heuristics; add to exclusions or code-sign for release
 - **Svelte store_rune_conflict** — NEVER name a local `$state()` variable in a component that imports `state` from state.svelte.ts. Use `import { state as appState }` if `$state()` rune is needed in the same file

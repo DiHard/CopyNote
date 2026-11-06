@@ -1,11 +1,13 @@
 ---
 name: release
-description: Use this skill whenever the user wants to ship a new CopyNote version — phrases like "release v1.2.0", "выложи релиз", "выпусти новую версию", "make a release", "ship a new build", "cut vX.Y.Z". Performs the full release flow: pre-flight checks, version bump, release notes, build, commit, tag, push, and GitHub Release with the binary attached. Do NOT trigger for plain "build the binary" or "run tests" — those are part of, but not equal to, a release.
+description: Use this skill whenever the user wants to ship a new CopyNote version — phrases like "release v1.2.0", "выложи релиз", "выпусти новую версию", "make a release", "ship a new build", "cut vX.Y.Z". Performs the full release flow: pre-flight checks, version bump, release notes, build, commit, tag, push, and GitHub Release with the Windows exe and the macOS app attached. Do NOT trigger for plain "build the binary" or "run tests" — those are part of, but not equal to, a release.
 ---
 
 # CopyNote release process
 
-Goal: produce a tagged GitHub Release with the binary attached, and leave the local repo in a state where the source matches what was published.
+Goal: produce a tagged GitHub Release with both builds attached — `copynote.exe` for Windows and `CopyNote-macos.zip` for macOS, each with its signature — and leave the local repo in a state where the source matches what was published.
+
+**Run it on a Mac.** The macOS build needs cgo and Xcode's command line tools, so it can only be made on a Mac; the Windows exe is pure Go and cross-compiles there with no extra tools (its icon resource, `resource_windows_amd64.syso`, is committed). One machine, one checkout, one signing key.
 
 Communicate with the user in **Russian** (per `CLAUDE.md` Language Rule). Code and commit messages — see per-step rules below.
 
@@ -31,8 +33,10 @@ Run these in parallel where possible. Stop and ask the user if any check fails �
 - `git tag -l vX.Y.Z` — must be empty (no local tag yet).
 - `gh release view vX.Y.Z` — must error with "release not found" (no published release yet). If a tag/release already exists for this version, halt and ask whether to bump again.
 - `go test ./...` — must pass. No failure is expected or known: any one halts the release.
+- `gh run list --branch main --limit 1` — the latest CI run of the commit being released must be green, both the `windows` and the `macos` job. The Windows tests and linters run only there.
+- `xcrun --version` — Xcode's command line tools are installed (the macOS build uses clang, `lipo`, `iconutil`, `codesign`, `ditto`).
 - `gh auth status` — must be authenticated.
-- Signing key present: `Test-Path "$env:USERPROFILE\.copynote-release\signing.key"` is `True` (or `COPYNOTE_SIGNING_KEY` is set). Without it the binary cannot be signed and the in-app updater will only offer a manual download for this version.
+- Signing key present: `test -f ~/.copynote-release/signing.key` succeeds (or `COPYNOTE_SIGNING_KEY` is set). Without it neither build can be signed and the in-app updater, on both platforms, will only offer a manual download for this version. Never copy the key through the repository or a cloud folder.
 
 ## Step 2 — Bump version
 
@@ -75,22 +79,29 @@ For the first release of a major or minor (e.g. `v2.0.0`, `v1.5.0`), consider a 
 ## Step 4 — Build
 
 ```bash
-cd web && npm install && npm run build && cd ..
-go build -ldflags="-H=windowsgui -s -w" -o copynote.exe .
+cd web && npm ci && npm run build && cd ..
+GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-H=windowsgui -s -w" -o copynote.exe .
+sh tools/macbundle/build.sh
 go run ./tools/signrelease copynote.exe
+go run ./tools/signrelease build/CopyNote-macos.zip
 go run ./tools/signrelease -verify copynote.exe
+go run ./tools/signrelease -verify build/CopyNote-macos.zip
 ```
 
-Sign **after** the final build — any rebuild changes the bytes and invalidates `copynote.exe.sig`. The signature covers the version from `version.go`, so Step 2 must already be done.
+`build.sh` writes `build/CopyNote.app` (one universal binary for Apple silicon and Intel, ad hoc signed) and zips it as `build/CopyNote-macos.zip` with `ditto`. Never re-zip it with `zip` or Finder's Compress: a bundle whose signature files lose their attributes is one macOS calls damaged.
+
+Sign **after** the final build — any rebuild changes the bytes and invalidates the `.sig`. The signature covers the version from `version.go`, so Step 2 must already be done.
 
 Verify:
 
 - `web/dist/index.html` updated (it's committed because `//go:embed` bakes it in).
-- `copynote.exe` exists at repo root (~7 MB).
-- `ls -la copynote.exe` shows recent timestamp.
-- `copynote.exe.sig` exists next to the binary and `-verify` printed `is valid`.
+- `file copynote.exe` says `PE32+ executable (GUI) x86-64, for MS Windows`, about 8 MB.
+- `lipo -archs build/CopyNote.app/Contents/MacOS/CopyNote` prints `x86_64 arm64`.
+- The zip unpacks into a valid bundle: `ditto -x -k build/CopyNote-macos.zip <scratch>` then `codesign --verify --strict <scratch>/CopyNote.app`.
+- `Info.plist` carries the new version: `plutil -extract CFBundleShortVersionString raw build/CopyNote.app/Contents/Info.plist`.
+- Both `-verify` runs printed `is valid`.
 
-If icons changed since the last release, also rebuild them per `CLAUDE.md` §Build Commands. Skip otherwise — they almost never change.
+If icons changed since the last release, also rebuild the Windows ones per `CLAUDE.md` §Build Commands (`build.sh` redraws the macOS icon itself). Skip otherwise — they almost never change.
 
 ## Step 5 — Commit (Russian)
 
@@ -100,7 +111,7 @@ Stage exactly these files:
 - `release-notes-vX.Y.Z.md`
 - `web/dist/index.html`
 
-Do NOT stage `copynote.exe` or `copynote.exe.sig` (both are gitignored and are attached to the GitHub Release in Step 7, not tracked in git).
+Do NOT stage `copynote.exe`, `copynote.exe.sig` or anything under `build/` (all gitignored; they are attached to the GitHub Release in Step 7, not tracked in git).
 
 Commit message (Russian, per project rules):
 
@@ -128,26 +139,28 @@ Annotated tag (`-a`), not lightweight — GitHub Releases need annotated tags fo
 ## Step 7 — Create GitHub Release with the binary
 
 ```bash
-gh release create vX.Y.Z copynote.exe copynote.exe.sig \
+gh release create vX.Y.Z copynote.exe copynote.exe.sig build/CopyNote-macos.zip build/CopyNote-macos.zip.sig \
   --title "vX.Y.Z" \
   --notes-file release-notes-vX.Y.Z.md
 ```
 
-Both asset names are fixed: the in-app updater looks up `copynote.exe` and `copynote.exe.sig` by exact name (`updater.AssetName`, `updater.SignatureAssetName`). Renaming or omitting either makes existing installations fall back to a manual download.
+All four asset names are fixed: the in-app updater looks them up by exact name (`updater.AssetName`, `updater.SignatureAssetName` in `internal/updater/platform_windows.go` and `platform_darwin.go`). Renaming or omitting a pair makes that platform's installations fall back to a manual download.
+
+The release notes carry a short **macOS** paragraph for people installing for the first time: drag CopyNote to Applications, open it, and when macOS says it cannot verify the developer, allow it once in System Settings → Privacy & Security → Open Anyway. The app is not notarized (no Developer ID), so this step is expected; updates installed from inside the app never ask again.
 
 For an "initial-of-major-minor" with a tagline, use `--title "vX.Y.Z — <tagline>"` instead.
 
 ## Step 8 — Verify and report
 
-- `gh release view vX.Y.Z` — confirm page exists, `copynote.exe` **and** `copynote.exe.sig` are attached, notes render correctly.
+- `gh release view vX.Y.Z` — confirm page exists, all four assets are attached (`copynote.exe`, `copynote.exe.sig`, `CopyNote-macos.zip`, `CopyNote-macos.zip.sig`), notes render correctly.
 - Output the release URL to the user: `https://github.com/DiHard/CopyNote/releases/tag/vX.Y.Z`.
 - One-sentence end-of-turn summary (Russian): что выпустили и куда выложено.
 
 ## Recovery — if something went wrong
 
 - **Wrong content shipped in `vX.Y.Z`**: do NOT delete the published GitHub Release (users may already have downloaded). Bump to `vX.Y.Z+1` and ship a corrected one. Add an `### Internal` line in the new notes pointing back at the issue.
-- **`.sig` missing or invalid on a published release**: run `go run ./tools/signrelease copynote.exe` on the _same_ binary that was uploaded (do not rebuild), then `gh release upload vX.Y.Z copynote.exe.sig --clobber`. Until then the in-app updater offers only the manual download.
-- **Tag pushed but `gh release create` failed**: rerun `gh release create vX.Y.Z copynote.exe copynote.exe.sig --title ... --notes-file ...` against the existing tag.
+- **`.sig` missing or invalid on a published release**: run `go run ./tools/signrelease <file>` on the _same_ file that was uploaded (do not rebuild), then `gh release upload vX.Y.Z <file>.sig --clobber`. Until then the in-app updater offers only the manual download on that platform.
+- **Tag pushed but `gh release create` failed**: rerun `gh release create vX.Y.Z copynote.exe copynote.exe.sig build/CopyNote-macos.zip build/CopyNote-macos.zip.sig --title ... --notes-file ...` against the existing tag.
 - **Tag wrong locally only (not pushed)**: `git tag -d vX.Y.Z` and redo from Step 6. Pushed tag — see next.
 - **Tag pushed but release not yet created and you want to redo**: ask the user before `git push --delete origin vX.Y.Z`. Force-deleting a tag is a shared-state action; explicit confirmation required.
 

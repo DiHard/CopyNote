@@ -45,3 +45,29 @@ jobs:
           name: fuzz-failures
           path: internal/*/testdata/fuzz/
           if-no-files-found: ignore
+
+  # The Windows job's linters only see the Windows build, so the macOS files
+  # are checked here, on the platform that compiles them (cgo, Cocoa).
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.mod
+      - name: Install the pinned golangci-lint
+        run: go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v$(jq -r '."golangci-lint"' tools/quality/versions.json)"
+      - name: Check formatting and linters
+        run: |
+          golangci-lint config verify
+          git ls-files -z '*.go' ':!:third_party' | xargs -0 golangci-lint fmt --diff
+          golangci-lint run ./...
+          golangci-lint run --build-tags devtools ./...
+      - name: Vet and test
+        run: |
+          go vet ./...
+          go vet -tags devtools .
+          go test ./...
+      - name: Build the app bundle and the release zip
+        run: sh tools/macbundle/build.sh

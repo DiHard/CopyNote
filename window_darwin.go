@@ -49,8 +49,7 @@ var (
 	lastShown        time.Time
 )
 
-func showWindow()   { requestWindow(requestShow) }
-func showSettings() { requestWindow(requestSettings) }
+func showWindow() { requestWindow(requestShow) }
 
 func requestWindow(want showRequest) {
 	switch phase {
