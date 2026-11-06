@@ -1,29 +1,38 @@
 package main
 
 import (
-	"context"
-	"errors"
-
-	"copynote/internal/bridge"
-	"copynote/internal/macui"
+	"log"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"syscall"
 )
 
-// Releases carry only the Windows executable so far, so the macOS build
-// reports no update rather than offer one it cannot install. The bindings
-// still exist: the Settings view calls them on every platform.
-func bindUpdates(view *macui.WebView, updates *bridge.Async) {
-	none := func(context.Context) (any, error) { return nil, nil }
-	for _, name := range []string{"checkForUpdates", "forceCheckForUpdates"} {
-		if err := updates.Bind(name, none); err != nil {
-			panic(err)
-		}
+// appBundle is the .app bundle holding exePath — what an update replaces —
+// or "" for a binary started outside one, which then never updates itself.
+func appBundle(exePath string) string {
+	if bundle, _, found := strings.Cut(exePath, ".app/Contents/MacOS/"); found {
+		return bundle + ".app"
 	}
-	errNoUpdates := errors.New("updates are not available for macOS yet")
-	if err := updates.Bind("installUpdate", func(context.Context) (any, error) { return nil, errNoUpdates }); err != nil {
-		panic(err)
+	return ""
+}
+
+// relaunch starts the executable of the replaced bundle, as on Windows,
+// in a session of its own so it outlives this process. It inherits this
+// process's environment, which `open` would not pass on. The new copy waits
+// for this one to exit before it takes the single-instance lock, then shows
+// its window like any launch by hand.
+func relaunch(bundle string) {
+	exe := filepath.Join(bundle, "Contents", "MacOS", "CopyNote")
+	cmd := exec.Command(exe, waitForPIDFlag, strconv.Itoa(os.Getpid()))
+	cmd.Dir = "/"
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if err := cmd.Start(); err != nil {
+		log.Printf("relaunch after update: %v", err)
+		return
 	}
-	mustBind(view, "updateProgress", func() map[string]any {
-		return map[string]any{"stage": "", "done": 0, "total": 0}
-	})
-	mustBind(view, "restartApp", func() error { return errNoUpdates })
+	log.Printf("relaunched %s as pid %d", exe, cmd.Process.Pid)
+	_ = cmd.Process.Release()
 }

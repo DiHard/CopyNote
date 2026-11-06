@@ -362,6 +362,16 @@ void macuiSetStatusTooltip(const char *text) {
 	controller.statusItem.button.toolTip = [NSString stringWithUTF8String:text];
 }
 
+int macuiAlert(const char *title, const char *text, const char *first, const char *second) {
+	activateApp();
+	NSAlert *alert = [[NSAlert alloc] init];
+	alert.messageText = [NSString stringWithUTF8String:title];
+	alert.informativeText = [NSString stringWithUTF8String:text];
+	[alert addButtonWithTitle:[NSString stringWithUTF8String:first]];
+	[alert addButtonWithTitle:[NSString stringWithUTF8String:second]];
+	return [alert runModal] == NSAlertFirstButtonReturn ? 0 : 1;
+}
+
 void macuiShowMenu(int menuID, const char **labels, const char **keys, const unsigned long *keyMods,
                    const int *flags, int count, double x, double y, int atStatusItem, int appearance) {
 	NSMenu *menu = [[NSMenu alloc] init];

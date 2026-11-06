@@ -14,8 +14,9 @@ import (
 // in %USERPROFILE%\.copynote-release\signing.key (or COPYNOTE_SIGNING_KEY in
 // CI). Rotating the key means shipping a release that carries the new public
 // key while still being signed with the old one — otherwise installations
-// in the field cannot verify anything signed afterwards.
-const publicKeyBase64 = "mCwLtxtUTs9NsSxBhXNokwqg1H0L+2wHCH1KcskVvAk="
+// in the field cannot verify anything signed afterwards. A var only so an
+// end-to-end test build can trust a throwaway key (-X ...publicKeyBase64=).
+var publicKeyBase64 = "mCwLtxtUTs9NsSxBhXNokwqg1H0L+2wHCH1KcskVvAk="
 
 // PublicKey is the decoded release signing key. Empty when the constant
 // above is not a valid key, which disables self-update (checks still run).

@@ -1,7 +1,8 @@
 #!/bin/sh
-# Builds build/CopyNote.app for this Mac and signs it ad hoc.
+# Builds build/CopyNote.app for Apple silicon and Intel Macs in one
+# universal binary, signs it ad hoc, and zips it as the release asset.
 #
-#   sh tools/macbundle/build.sh            # build/CopyNote.app
+#   sh tools/macbundle/build.sh            # build/CopyNote.app + CopyNote-macos.zip
 #   OUT=/tmp/x sh tools/macbundle/build.sh # somewhere else
 #
 # EXTRA_LDFLAGS is appended to the linker flags, for the -X overrides of a
@@ -18,7 +19,13 @@ version=$(sed -n 's/^var Version = "\(.*\)"$/\1/p' "$root/internal/version/versi
 
 rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
-(cd "$root" && go build -ldflags "-s -w ${EXTRA_LDFLAGS:-}" -o "$app/Contents/MacOS/CopyNote" .)
+# One binary per architecture, glued into one with lipo. cgo builds for the
+# other architecture with the same Xcode clang; nothing else is needed.
+for arch in arm64 amd64; do
+	(cd "$root" && CGO_ENABLED=1 GOARCH=$arch go build -ldflags "-s -w ${EXTRA_LDFLAGS:-}" -o "$out/CopyNote-$arch" .)
+done
+lipo -create -output "$app/Contents/MacOS/CopyNote" "$out/CopyNote-arm64" "$out/CopyNote-amd64"
+rm -f "$out/CopyNote-arm64" "$out/CopyNote-amd64"
 
 # The icon is drawn by the same generator as the Windows .ico, so the glyph
 # lives in one place; only the .icns is kept, beside the binary.
@@ -68,4 +75,12 @@ cat > "$app/Contents/Info.plist" <<PLIST
 PLIST
 
 codesign --force --sign - "$app"
+
+# The release asset. ditto, not zip: it keeps the signature's files and the
+# executable bit exactly as they are, and a bundle whose signature breaks on
+# the way is one macOS calls damaged rather than unverified.
+zip="$out/CopyNote-macos.zip"
+rm -f "$zip"
+ditto -c -k --keepParent "$app" "$zip"
 echo "$app ($version)"
+echo "$zip"

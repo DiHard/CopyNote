@@ -31,11 +31,26 @@ const installTimeout = 5 * time.Minute
 // the file at exePath is the new version and the caller should restart the
 // process. On any error the running version stays in place and the
 // download is removed.
+//
+// exePath is what gets replaced: the executable on Windows, the .app
+// bundle on macOS (see the package's platform files).
 func Install(ctx context.Context, info *ReleaseInfo, exePath, currentVersion string, progress InstallProgress) error {
-	return install(ctx, http.DefaultClient, PublicKey, info, exePath, currentVersion, progress)
+	return install(ctx, http.DefaultClient, PublicKey, info, exePath, currentVersion, progress, platformPackaging)
 }
 
-func install(ctx context.Context, client *http.Client, pub ed25519.PublicKey, info *ReleaseInfo, exePath, currentVersion string, progress InstallProgress) (err error) {
+// packaging says how a release asset turns into what replaces the
+// installation. The asset is saved at download(target); unpack, when set,
+// turns it into StagingPath(target). Without unpack the asset is saved at
+// the staging path directly and is the new version as it stands.
+type packaging struct {
+	download func(target string) string
+	unpack   func(download, staging string) error
+}
+
+// plainFile is a release asset that is the program itself.
+var plainFile = packaging{download: StagingPath}
+
+func install(ctx context.Context, client *http.Client, pub ed25519.PublicKey, info *ReleaseInfo, exePath, currentVersion string, progress InstallProgress, pkg packaging) (err error) {
 	if !info.Installable() {
 		return errors.New("release has no signed binary")
 	}
@@ -51,7 +66,9 @@ func install(ctx context.Context, client *http.Client, pub ed25519.PublicKey, in
 
 	ctx, cancel := context.WithTimeout(ctx, installTimeout)
 	defer cancel()
+	downloaded := pkg.download(exePath)
 	defer func() {
+		_ = removeIfExists(downloaded) // unpacked by now, or failed
 		if err != nil {
 			RemoveStaging(exePath)
 		}
@@ -65,15 +82,20 @@ func install(ctx context.Context, client *http.Client, pub ed25519.PublicKey, in
 	if err != nil {
 		return fmt.Errorf("download signature: %w", err)
 	}
-	if err := download(ctx, client, info.DownloadURL, StagingPath(exePath), info.Size, ua, func(done, total int64) {
+	if err := download(ctx, client, info.DownloadURL, downloaded, info.Size, ua, func(done, total int64) {
 		progress(StageDownload, done, total)
 	}); err != nil {
 		return err
 	}
 	progress(StageVerify, 0, 0)
-	if err := verifyFile(pub, StagingPath(exePath), info.Version, sig); err != nil {
+	if err := verifyFile(pub, downloaded, info.Version, sig); err != nil {
 		return err
 	}
 	progress(StageApply, 0, 0)
+	if pkg.unpack != nil {
+		if err := pkg.unpack(downloaded, StagingPath(exePath)); err != nil {
+			return fmt.Errorf("unpack: %w", err)
+		}
+	}
 	return Apply(exePath)
 }

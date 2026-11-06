@@ -45,7 +45,7 @@ func bindApplication(w webview2.WebView, hwnd uintptr, svc *service.Service, exe
 	// Update checks and the self-update flow run on background workers;
 	// see update_windows.go.
 	updates := bridge.NewAsync(w)
-	bindUpdates(w, updates, svc, exePath)
+	bindUpdates(w, updates, svc, exePath, func() { w.Dispatch(func() { w.Terminate() }) })
 
 	// Moving the executable out of a download folder; see relocate_windows.go,
 	// which also holds the switch.

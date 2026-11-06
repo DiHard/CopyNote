@@ -175,7 +175,7 @@ func TestCanSelfUpdateSurvivesAProbeThatCannotBeRemoved(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "notes.txt"), "not ours")
 
 	removeFile = func(string) error { return errors.New("file is in use") }
-	t.Cleanup(func() { removeFile = os.Remove })
+	t.Cleanup(func() { removeFile = os.RemoveAll })
 	if !CanSelfUpdate(exe) {
 		t.Fatal("a probe that could not be removed reported the folder as read-only")
 	}
@@ -184,7 +184,7 @@ func TestCanSelfUpdateSurvivesAProbeThatCannotBeRemoved(t *testing.T) {
 		t.Fatalf("expected the probe to be left behind, got %v (%v)", probes, err)
 	}
 
-	removeFile = os.Remove
+	removeFile = os.RemoveAll
 	RemoveStaging(exe)
 	left, err := os.ReadDir(dir)
 	if err != nil {

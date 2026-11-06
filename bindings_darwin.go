@@ -43,7 +43,9 @@ func bindApplication(view *macui.WebView, svc *service.Service, exePath string) 
 	})
 
 	updates := bridge.NewAsync(view)
-	bindUpdates(view, updates)
+	// What an update replaces is the bundle; restartApp quits, and main
+	// starts the new bundle once the run loop has ended.
+	bindUpdates(view, updates, svc, appBundle(exePath), func() { view.Dispatch(goQuit) })
 	return updates
 }
 
@@ -92,8 +94,8 @@ func revealApp(exePath string) error {
 	if exePath == "" {
 		return errors.New("executable path is unavailable")
 	}
-	if bundle, _, found := strings.Cut(exePath, ".app/Contents/MacOS/"); found {
-		return exec.Command("/usr/bin/open", "-R", bundle+".app").Run()
+	if bundle := appBundle(exePath); bundle != "" {
+		return exec.Command("/usr/bin/open", "-R", bundle).Run()
 	}
 	return exec.Command("/usr/bin/open", filepath.Dir(exePath)).Run()
 }

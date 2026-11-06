@@ -5,8 +5,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
+
+// assetNames rewrites the Windows asset names in a fixture to this
+// platform's, so the same release payloads test both.
+var assetNames = strings.NewReplacer("copynote.exe.sig", SignatureAssetName, "copynote.exe", AssetName).Replace
 
 func TestCheckLatestResponses(t *testing.T) {
 	for _, tc := range []struct {
@@ -29,7 +34,7 @@ func TestCheckLatestResponses(t *testing.T) {
 					t.Error("missing user agent")
 				}
 				w.WriteHeader(tc.status)
-				if _, err := fmt.Fprint(w, tc.body); err != nil {
+				if _, err := fmt.Fprint(w, assetNames(tc.body)); err != nil {
 					t.Error(err)
 				}
 			}))
@@ -74,7 +79,7 @@ func TestVersionComparison(t *testing.T) {
 func TestCheckLatestReleaseAssets(t *testing.T) {
 	serve := func(body string) (*httptest.Server, func()) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if _, err := fmt.Fprint(w, body); err != nil {
+			if _, err := fmt.Fprint(w, assetNames(body)); err != nil {
 				t.Error(err)
 			}
 		}))
@@ -90,7 +95,7 @@ func TestCheckLatestReleaseAssets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !info.Installable() || info.DownloadURL != "https://dl.example/copynote.exe" || info.SignatureURL != "https://dl.example/copynote.exe.sig" || info.Size != 7627776 {
+	if !info.Installable() || info.DownloadURL != assetNames("https://dl.example/copynote.exe") || info.SignatureURL != assetNames("https://dl.example/copynote.exe.sig") || info.Size != 7627776 {
 		t.Fatalf("assets: %#v", info)
 	}
 

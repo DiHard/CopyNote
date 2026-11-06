@@ -36,13 +36,6 @@ var releasesURL = "https://api.github.com/repos/DiHard/CopyNote/releases/latest"
 // but a tight cap keeps resource usage predictable.
 const requestTimeout = 5 * time.Second
 
-// Release asset names. Assets are looked up by exact name, so the release
-// process must upload the binary and its detached signature under these.
-const (
-	AssetName          = "copynote.exe"
-	SignatureAssetName = "copynote.exe.sig"
-)
-
 // ReleaseInfo is the subset of the GitHub release payload we surface
 // to the UI. Fields marshal across the Go ↔ JS bridge; the asset URLs
 // stay on the Go side.

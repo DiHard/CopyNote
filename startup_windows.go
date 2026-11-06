@@ -8,34 +8,12 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	"golang.org/x/sys/windows"
 
 	"copynote/internal/winutil"
 )
-
-const waitForPIDFlag = "--wait-for-pid"
-
-// relaunchParentWait bounds how long a relaunched copy waits for the copy
-// that started it. That copy has only its deferred cleanup left to do, so
-// one still there after this long is stuck — and waiting for it without a
-// limit left the user with no CopyNote at all and nothing on screen to say
-// why.
-const relaunchParentWait = 30 * time.Second
-
-// relaunchParentPID finds the process a relaunched copy was told to wait for.
-func relaunchParentPID(args []string) (uint32, bool) {
-	for i := 0; i+1 < len(args); i++ {
-		if args[i] != waitForPIDFlag {
-			continue
-		}
-		pid, err := strconv.ParseUint(args[i+1], 10, 32)
-		return uint32(pid), err == nil && pid != 0
-	}
-	return 0, false
-}
 
 // waitForRelaunchParent is used by a relaunched copy before it creates
 // WebView2. The old process should be gone first: until it is, its WebView2

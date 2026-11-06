@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
+	"time"
 
 	"copynote/internal/service"
 	"copynote/internal/storage"
@@ -85,4 +87,27 @@ func openService(path string, deps service.Dependencies) (*service.Service, erro
 	}
 	log.Print("restored previous data snapshot")
 	return service.NewWithDependencies(path, deps)
+}
+
+// waitForPIDFlag carries the PID of the copy that relaunched this one after
+// an update; the new copy waits for it to exit before it starts.
+const waitForPIDFlag = "--wait-for-pid"
+
+// relaunchParentWait bounds how long a relaunched copy waits for the copy
+// that started it. That copy has only its deferred cleanup left to do, so
+// one still there after this long is stuck — and waiting for it without a
+// limit left the user with no CopyNote at all and nothing on screen to say
+// why.
+const relaunchParentWait = 30 * time.Second
+
+// relaunchParentPID finds the process a relaunched copy was told to wait for.
+func relaunchParentPID(args []string) (uint32, bool) {
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] != waitForPIDFlag {
+			continue
+		}
+		pid, err := strconv.ParseUint(args[i+1], 10, 32)
+		return uint32(pid), err == nil && pid != 0
+	}
+	return 0, false
 }

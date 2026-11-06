@@ -11,6 +11,7 @@ import (
 	"copynote/internal/service"
 	"copynote/internal/singleton"
 	"copynote/internal/tray"
+	"copynote/internal/updater"
 )
 
 // Cocoa runs on the main thread only, and the main goroutine starts there.
@@ -65,6 +66,9 @@ func main() {
 	closeLog := initializeLogging()
 	defer closeLog()
 
+	// A copy started by an update waits for the one it replaces.
+	waitForRelaunchParent()
+
 	release, already, err := singleton.Acquire(singletonName)
 	if err != nil {
 		fatalStartup("singleton: %v", err)
@@ -80,6 +84,12 @@ func main() {
 	if err != nil {
 		log.Printf("executable path: %v", err)
 		exePath = ""
+	}
+	// An update replaces the whole bundle; a download interrupted last time
+	// is discarded.
+	bundle := appBundle(exePath)
+	if bundle != "" {
+		updater.RemoveStaging(bundle)
 	}
 
 	// ~/Library/Application Support/CopyNote/data.json, the same format as
@@ -161,6 +171,15 @@ func main() {
 		}
 		uiReady = true
 		refreshTooltip()
+		if bundle != "" {
+			// The version an update replaced; its process may still be
+			// exiting.
+			go func() {
+				if err := updater.RemovePrevious(bundle, time.Minute); err != nil {
+					log.Printf("remove previous version: %v", err)
+				}
+			}()
+		}
 		if want := startupRequest; want != requestNone {
 			startupRequest = requestNone
 			requestWindow(want)
@@ -178,14 +197,23 @@ func main() {
 	})
 	if err != nil {
 		log.Printf("listen for second launches: %v", err)
-	} else {
-		defer stopListening()
+		stopListening = func() {}
 	}
+	defer stopListening()
 
 	// Started by hand, the window comes up as soon as the page is ready; at
 	// sign-in the app stays in the menu bar.
+	// Started from Downloads, it first asks to be moved, and the window waits
+	// for the answer.
 	if !startedByAutorun() {
-		startupRequest = requestShow
+		home, _ := os.UserHomeDir()
+		if needsMove(bundle, home) {
+			view.Dispatch(func() {
+				offerMove(bundle, locale(), func() { userRequest(requestShow) })
+			})
+		} else {
+			startupRequest = requestShow
+		}
 	}
 
 	if devtoolsStart != nil {
@@ -199,4 +227,12 @@ func main() {
 	view.LoadHTML(html, pageOrigin)
 	macui.Run()
 	updates.Close()
+
+	// An update was installed: let go of the lock and the socket before the
+	// new copy looks for them, then start it.
+	if restartRequested.Load() && bundle != "" {
+		stopListening()
+		release()
+		relaunch(bundle)
+	}
 }

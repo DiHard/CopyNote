@@ -57,7 +57,8 @@ func CanSelfUpdate(exePath string) bool {
 }
 
 // Apply swaps the verified binary at StagingPath(exePath) in for the
-// running executable. Windows refuses to overwrite or delete a running
+// running executable, or the .app bundle on macOS, which renames a folder
+// in use just as readily. Windows refuses to overwrite or delete a running
 // image but allows renaming it, so the current file is moved to
 // PreviousPath first. If the second rename fails the running version is
 // moved back so the install path is never left empty.
@@ -86,6 +87,7 @@ func Apply(exePath string) error {
 // RemoveStaging deletes an unfinished or unverified download, if any, and
 // any probe file CanSelfUpdate could not clear away at the time.
 func RemoveStaging(exePath string) {
+	_ = removeIfExists(platformPackaging.download(exePath))
 	_ = removeIfExists(StagingPath(exePath))
 	dir := filepath.Dir(exePath)
 	entries, err := os.ReadDir(dir)
@@ -113,8 +115,9 @@ func RemovePrevious(exePath string, wait time.Duration) error {
 	}
 }
 
-// removeFile is os.Remove, replaced by tests that need a deletion to fail.
-var removeFile = os.Remove
+// removeFile is os.RemoveAll — on macOS the staged and previous versions
+// are .app folders — replaced by tests that need a deletion to fail.
+var removeFile = os.RemoveAll
 
 func removeIfExists(path string) error {
 	err := removeFile(path)

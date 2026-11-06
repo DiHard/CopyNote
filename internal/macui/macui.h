@@ -18,6 +18,7 @@ int macuiWindowKey(void);
 void macuiSetTopmost(int topmost);
 
 void macuiSetStatusTooltip(const char *text);
+int macuiAlert(const char *title, const char *text, const char *first, const char *second);
 
 // flags: 1 = disabled, 2 = separator. appearance: 0 system, 1 light, 2 dark.
 // x and y are points in the web view, from its top-left corner; atStatusItem

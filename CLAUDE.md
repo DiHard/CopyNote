@@ -35,13 +35,15 @@ CopyNote/
 ├── main_darwin.go                  # macOS startup, cold-start queue, menu bar icon menu
 ├── window_darwin.go                # macOS show/hide cycle and toggle rules
 ├── bindings_darwin.go              # macOS bindings, entry context menu, hotkey registration
-├── update_darwin.go                # Update bindings that report "no update" on macOS
+├── update.go                       # Update bindings shared by every platform: check, install, restart
+├── update_darwin.go                # macOS: the bundle an update replaces, and the relaunch
+├── movehint_darwin.go              # macOS: asks to be dragged to Applications when run from Downloads
 ├── startup_darwin.go               # macOS log folder, locale and dialogs
 ├── devtools_darwin.go              # Control socket of the `devtools` build only
 ├── bindings_windows.go             # Go/JS bindings
 ├── window_windows.go               # Show/hide cycle, positioning, animation, toggle rules
 ├── entrymenu_windows.go            # Native context menu of an entry
-├── update_windows.go               # Self-update bindings and the relaunch
+├── update_windows.go               # Windows: the relaunch after an update
 ├── relocate_windows.go             # Moving the exe (switched off: relocationEnabled)
 ├── startup_windows.go              # Logs, recovery dialogs, waiting for the copy that relaunched us
 ├── go.mod                          # Go module (replace directives → third_party/)
@@ -60,7 +62,7 @@ CopyNote/
 │   ├── tray/         # System tray icon and its right-click menu; texts.go is shared with macOS
 │   ├── popupmenu/    # Owner-drawn GDI popup menu: the tray's and the entry list's
 │   ├── relocate/     # Move the exe out of Downloads into a program folder (Windows only)
-│   ├── updater/      # GitHub Releases check + signed in-place self-update
+│   ├── updater/      # GitHub Releases check + signed in-place self-update (exe on Windows, .app on macOS)
 │   ├── version/      # The application version, written in this one place
 │   ├── testutil/     # Test helpers
 │   └── winutil/      # Shared Win32 wrappers (ShowWindow, DWM, registry…)
@@ -111,7 +113,7 @@ CopyNote/
 ├── tools/uxharness/    # Built frontend in a browser against a fake Go bridge
 ├── tools/testinstance/ # Real exe beside the daily CopyNote: launch, hotkey, cold start, autorun, context menu, toggle, slides, preparation
 ├── tools/quality/      # Pinned linters and the one check script that CI runs too
-├── tools/macbundle/    # build.sh: build/CopyNote.app, ad hoc signed
+├── tools/macbundle/    # build.sh: universal build/CopyNote.app, ad hoc signed, and the CopyNote-macos.zip release asset
 ├── assets/             # Generated .ico files
 └── bin/rsrc.exe        # Resource linker binary
 ```
@@ -282,7 +284,9 @@ Start it with `APPDATA` and `LOCALAPPDATA` pointing at scratch folders (data, lo
 
 ## macOS version
 
-Built on a Mac with Xcode or its command line tools (cgo): `sh tools/macbundle/build.sh` writes `build/CopyNote.app`. A bundle built on the same machine carries no quarantine flag, so Gatekeeper opens it as is. Requires macOS 13.
+Built on a Mac with Xcode or its command line tools (cgo): `sh tools/macbundle/build.sh` writes `build/CopyNote.app` — one universal binary for Apple silicon and Intel (two cgo builds glued with `lipo`), ad hoc signed — and `build/CopyNote-macos.zip`, the release asset. The zip is made with `ditto -c -k --keepParent`, never `zip`: a bundle whose signature files lose their attributes on the way is one macOS calls damaged, which no setting gets past. A bundle built on the same machine carries no quarantine flag, so Gatekeeper opens it as is. Requires macOS 13.
+
+There is no Developer ID certificate. A downloaded copy is opened once through System Settings → Privacy & Security → Open Anyway; after that it runs like any other app, and its updates never ask again (see Updates below).
 
 The shared code — `internal/model`, `storage`, `service`, `hotkey`, `bridge`, the frontend, `app.go`, `bindings.go`, `page.go` — is the same; `*_darwin.go` files replace the Win32 layer:
 
@@ -292,10 +296,13 @@ The shared code — `internal/model`, `storage`, `service`, `hotkey`, `bridge`, 
 - **Single instance**: an `flock` on `~/Library/Caches/<singletonName>.lock` and a Unix socket beside it for a second launch's show request. Opening the `.app` again does not start a second process; LaunchServices sends `applicationShouldHandleReopen`, which shows the window.
 - **Autorun** is `~/Library/LaunchAgents/dev.copynote.<autorunValueName>.plist` with `--autostart`; **clipboard** is `pbcopy` with an explicit UTF-8 locale; data lives in `~/Library/Application Support/CopyNote/data.json`, the log in `~/Library/Logs/CopyNote/`.
 - **Hotkey**: the stored preference and its validation are shared; `hotkey.Spec.Carbon` translates it (Win → Cmd, Alt → Option). F21–F24 do not exist on a Mac and are refused.
-- **Updates** are not available yet: releases ship only the Windows exe, so the bindings report no update and Settings leaves its Updates section out.
+- **Updates** use the Windows flow (`update.go`, `internal/updater`) with the bundle as the thing replaced. The release carries `CopyNote-macos.zip` and `CopyNote-macos.zip.sig`, signed with the same key and message as the exe (`updater/platform_darwin.go`; old Windows builds only look for `copynote.exe` and ignore them). The zip is saved beside the bundle as `CopyNote.app.zip.new`, verified, unpacked with `ditto` into `CopyNote.app.new`, which must hold `Contents/MacOS/CopyNote`, and swapped in with the same two renames — macOS renames a bundle in use as readily as Windows renames a running exe. `restartApp` quits; after the run loop `main_darwin.go` drops the lock and the socket and starts the new executable directly with `--wait-for-pid` in a session of its own, so it inherits the environment (`open` would not pass it on), and the new copy waits for the old one before taking the lock. `notifyReady` removes `CopyNote.app.old`. Nothing our process downloads gets the quarantine flag, so an update never meets Gatekeeper. `CanSelfUpdate` probes the folder holding the bundle, so `/Applications` qualifies for an admin user, and a read-only location falls back to the Download button.
+- **Run from Downloads** (`movehint_darwin.go`): opened straight from its download, macOS runs the app from a read-only, randomly named copy (App Translocation), where an update cannot replace it and the autorun entry points at a path that disappears. A launch by hand from there or from `~/Downloads` first shows a system alert asking the user to drag CopyNote to Applications: «Показать в Finder» reveals it and quits, «Не сейчас» opens the window as usual. The app never moves itself — copying and deleting its own files is what antivirus heuristics flagged on Windows, while a drag in Finder is the user's own act and also lifts the translocation.
 - **The page knows it is on a Mac** from the user agent (`lib/platform.ts`), synchronously, so the first render is already right. `lib/i18n/mac.ts` replaces the sentences that name the tray, Windows or Explorer. Card keys: ⌘E edits and ⌘⌫ deletes beside F2 and Delete, and ⌘↑↓ moves an entry — Ctrl+arrows switch Spaces before the page sees them. Key names are printed the Mac way (⌘E, ⎋), and so is the global shortcut (`displayHotkey`: ⌃⌥N), whose stored text stays `"Ctrl+Alt+N"`/`"Win+…"` so a backup moves between the platforms unchanged. The entry menu shows the same keys as `NSMenuItem` key equivalents (`macui/keys.go`); a key with no modifier gets none, because an open menu would answer it before its own Return.
 - **Show** fades in over 0.12 s (none with Reduce Motion); **hide** is instant, since the page resets itself right after. The window cannot be dragged: WKWebView has no `-webkit-app-region`.
 - **Icon**: `build.sh` draws the `.icns` with `tools/genicon -macos` — the tray glyph in white on an accent-blue tile.
+
+**End-to-end update check** without a real release: create a throwaway key (`go run ./tools/signrelease -generate -key <scratch>/test.key`), build an old and a new bundle with `GOFLAGS=-tags=devtools OUT=<dir> EXTRA_LDFLAGS="<test overrides below> -X copynote/internal/updater.publicKeyBase64=<test public key> -X copynote/internal/updater.releasesURL=http://127.0.0.1:18080/latest -X copynote/internal/version.Version=<2.3.9 | 2.4.0>" sh tools/macbundle/build.sh`, sign the new zip with `go run -ldflags "-X copynote/internal/updater.publicKeyBase64=<test public key>" ./tools/signrelease -key <scratch>/test.key -version 2.4.0 <zip>`, and serve `latest` (GitHub-shaped JSON naming both assets) with the two files from `python3 -m http.server 18080`. Start the old bundle as below, turn auto-hide off with `eval window.applyAutoHide(false)`, then press «Обновить» in Settings: the new copy reports 2.4.0 from `getVersion` and `CopyNote.app.old` is gone.
 
 **Testing a running build** without touching the real data, clipboard or autorun entry: build with `-tags devtools` and the overrides `-X main.singletonName=dev.copynote.test -X copynote/internal/clipboard.pasteboard=find -X copynote/internal/service.autorunValueName=CopyNoteTest`, start the binary with `HOME` pointing at a scratch folder and `COPYNOTE_DEVTOOLS=/tmp/cn-dt.sock`, then send commands with `printf 'eval document.title\n' | nc -U /tmp/cn-dt.sock`: `eval <js>`, `snap <png path>`, `show`, `hide`, `toggle`, `settings`, `state`, `quit` (`devtools_darwin.go`). `COPYNOTE_INSPECT=1` makes the page inspectable from Safari's Develop menu. The `pbpaste -pboard find` then shows what a copy wrote.
 

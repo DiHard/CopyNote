@@ -54,7 +54,7 @@ func TestInstallDownloadsVerifiesAndSwaps(t *testing.T) {
 		if len(stages) == 0 || stages[len(stages)-1] != stage {
 			stages = append(stages, stage)
 		}
-	})
+	}, plainFile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestInstallRejectsUnverifiableBinary(t *testing.T) {
 			exe := filepath.Join(testutil.TempDir(t), "copynote.exe")
 			writeFile(t, exe, "old version")
 
-			err := install(context.Background(), srv.Client(), pub, releaseInfo(srv, tc.claimed, len(binary)), exe, "2.0.0", nil)
+			err := install(context.Background(), srv.Client(), pub, releaseInfo(srv, tc.claimed, len(binary)), exe, "2.0.0", nil, plainFile)
 			if err == nil {
 				t.Fatal("unverifiable binary installed")
 			}
@@ -121,13 +121,13 @@ func TestInstallRequiresSignedReleaseAndKey(t *testing.T) {
 
 	unsigned := releaseInfo(srv, "2.1.0", len(binary))
 	unsigned.SignatureURL = ""
-	if err := install(context.Background(), srv.Client(), pub, unsigned, exe, "2.0.0", nil); err == nil {
+	if err := install(context.Background(), srv.Client(), pub, unsigned, exe, "2.0.0", nil, plainFile); err == nil {
 		t.Fatal("release without signature installed")
 	}
-	if err := install(context.Background(), srv.Client(), nil, releaseInfo(srv, "2.1.0", len(binary)), exe, "2.0.0", nil); err == nil {
+	if err := install(context.Background(), srv.Client(), nil, releaseInfo(srv, "2.1.0", len(binary)), exe, "2.0.0", nil, plainFile); err == nil {
 		t.Fatal("install without an embedded key succeeded")
 	}
-	if err := install(context.Background(), srv.Client(), pub, releaseInfo(srv, "2.1.0", len(binary)), "", "2.0.0", nil); err == nil {
+	if err := install(context.Background(), srv.Client(), pub, releaseInfo(srv, "2.1.0", len(binary)), "", "2.0.0", nil, plainFile); err == nil {
 		t.Fatal("install without an executable path succeeded")
 	}
 	if *requests != 0 {

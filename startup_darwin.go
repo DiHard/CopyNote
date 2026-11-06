@@ -1,10 +1,13 @@
 package main
 
 import (
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"time"
 )
 
 // logDir is ~/Library/Logs/CopyNote, where Console.app looks for app logs.
@@ -45,4 +48,22 @@ func messageBox(text string, ask bool) bool {
 func frontendHTML() (string, error) {
 	raw, err := distFS.ReadFile("web/dist/index.html")
 	return string(raw), err
+}
+
+// waitForRelaunchParent holds a copy relaunched after an update until the
+// copy that started it has exited: until then that one still holds the
+// single-instance lock, and this one would only ask it to show its window.
+func waitForRelaunchParent() {
+	pid, ok := relaunchParentPID(os.Args[1:])
+	if !ok {
+		return
+	}
+	deadline := time.Now().Add(relaunchParentWait)
+	for syscall.Kill(int(pid), 0) == nil {
+		if time.Now().After(deadline) {
+			log.Printf("relaunch: process %d is still running after %v; starting anyway", pid, relaunchParentWait)
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }

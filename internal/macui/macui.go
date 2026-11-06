@@ -143,6 +143,20 @@ func SetStatusTooltip(text string) {
 	withCString(text, func(p *C.char) { C.macuiSetStatusTooltip(p) })
 }
 
+// Alert asks a question in a modal system alert with two buttons and
+// returns which was pressed: 0 for first (the default), 1 for second.
+func Alert(title, text, first, second string) int {
+	var answer C.int
+	withCString(title, func(t *C.char) {
+		withCString(text, func(x *C.char) {
+			withCString(first, func(f *C.char) {
+				withCString(second, func(s *C.char) { answer = C.macuiAlert(t, x, f, s) })
+			})
+		})
+	})
+	return int(answer)
+}
+
 // MenuItem is one row of a popup menu.
 type MenuItem struct {
 	Label     string
