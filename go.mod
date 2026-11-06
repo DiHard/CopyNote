@@ -2,7 +2,7 @@ module copynote
 
 go 1.25.0
 
-toolchain go1.26.8
+toolchain go1.26.10
 
 require (
 	github.com/jchv/go-webview2 v0.0.0-20260205173254-56598839c808

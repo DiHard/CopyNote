@@ -17,13 +17,13 @@ The same app runs on macOS from the menu bar — see "macOS version"; most of th
 
 ## Tech Stack
 
-| Layer    | Technology                                                          |
-| -------- | ------------------------------------------------------------------- |
-| Backend  | Go 1.25 language, Go 1.26.8 toolchain, pure Win32 syscalls (no cgo) |
-| Frontend | Svelte 5 (Runes) + TypeScript + Tailwind CSS 4                      |
-| UI Host  | WebView2 via `jchv/go-webview2` (vendored in `third_party/`)        |
-| Bundler  | Vite 8 + `web/singlefile.ts` → one `index.html`                     |
-| Embed    | `//go:embed all:web/dist` bakes frontend into the Go binary         |
+| Layer    | Technology                                                           |
+| -------- | -------------------------------------------------------------------- |
+| Backend  | Go 1.25 language, Go 1.26.10 toolchain, pure Win32 syscalls (no cgo) |
+| Frontend | Svelte 5 (Runes) + TypeScript + Tailwind CSS 4                       |
+| UI Host  | WebView2 via `jchv/go-webview2` (vendored in `third_party/`)         |
+| Bundler  | Vite 8 + `web/singlefile.ts` → one `index.html`                      |
+| Embed    | `//go:embed all:web/dist` bakes frontend into the Go binary          |
 
 ## Project Structure
 
