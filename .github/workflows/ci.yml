@@ -36,8 +36,6 @@ jobs:
         run: pwsh -NoProfile -File tools/quality/setup.ps1
       - name: Check formatting, linters, dependencies, tests and build
         run: pwsh -NoProfile -File tools/quality/check.ps1 -Fuzz
-      - name: Verify committed frontend is current
-        run: git diff --exit-code --ignore-space-at-eol -- web/dist
       - name: Keep the inputs that failed a fuzz test
         if: failure()
         uses: actions/upload-artifact@v4
@@ -56,6 +54,20 @@ jobs:
         with:
           go-version-file: go.mod
           cache-dependency-path: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      # The committed bundle is built on a Mac, where releases are made, and
+      # compared here on the same kind of processor: lightningcss rounds the
+      # lab() colour fallbacks it writes differently on x64 and arm64, in the
+      # last digit, so a Windows build never matches byte for byte.
+      - name: Verify committed frontend is current
+        run: |
+          npm ci --prefix web
+          npm run build --prefix web
+          git diff --exit-code -- web/dist
       - name: Install the pinned golangci-lint
         run: go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v$(jq -r '."golangci-lint"' tools/quality/versions.json)"
       - name: Check formatting and linters

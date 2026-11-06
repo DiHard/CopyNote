@@ -464,7 +464,7 @@ For local development / manual releases, just edit the `var` directly — the ld
 переписываются. О файлах с CRLF, оставшихся в старой рабочей копии, проверка
 сообщает сама, `-Fix` переводит их в LF.
 
-Go: `go test ./...`, `go vet ./...`. Frontend: `npm ci`, `npm run check`, `npm test`, `npm run build`. Windows CI also checks the committed bundle and builds the exe.
+Go: `go test ./...`, `go vet ./...`. Frontend: `npm ci`, `npm run check`, `npm test`, `npm run build`. Windows CI builds the exe; the macOS job lints, vets and tests the macOS build, builds the bundle, and checks that the committed `web/dist` matches a fresh build. That check runs on the Mac (arm64) because lightningcss rounds the `lab()` colour fallbacks differently on x64 in the last digit — commit `web/dist` built on an Apple silicon Mac, as the release does.
 
 Update checks use `internal/bridge.Async` workers and dispatch completion to WebView2. The vendored RPC bridge itself is synchronous. Close workers before destroying the window. Settings writes, update acknowledgments, import and export share a frontend queue.
 
